@@ -1,0 +1,30 @@
+# Normalize text files to LF in the repository, regardless of local checkout
+# settings such as core.autocrlf on Windows.
+* text=auto eol=lf
+
+# Windows command scripts are intentionally CRLF on checkout.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary assets and compiled fixtures must not be normalized.
+*.7z binary
+*.bin binary
+*.class binary
+*.dat binary
+*.dll binary
+*.exe binary
+*.gif binary
+*.gz binary
+*.ico binary
+*.jar binary
+*.jpeg binary
+*.jpg binary
+*.lib binary
+*.obj binary
+*.pdb binary
+*.pdf binary
+*.png binary
+*.ttf binary
+*.woff binary
+*.woff2 binary
+*.zip binary

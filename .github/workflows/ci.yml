@@ -1,0 +1,37 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+        mode: [release]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: setup xmake
+        uses: xmake-io/setup-xmake@v1
+        with:
+          xmake-version: latest
+
+      - name: setup jdk (corpus self-production)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: configure
+        run: xmake f -y --with_tests=y
+
+      - name: build unittest
+        run: xmake build -r libjbc_unittest
+
+      - name: run unittest
+        run: xmake run libjbc_unittest --gtest_brief=1
