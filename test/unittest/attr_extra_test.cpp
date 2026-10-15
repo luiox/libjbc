@@ -449,7 +449,7 @@ TEST(AttrExtraRealClassTest, DecodeAllMutateAllRewriteIdentical)
         GTEST_SKIP() << jbc::test::corpus::skipReason(src);
     }
 
-    ca::usize seen[16] = {};  // 按 AttrKind 值计数（容量随新建模属性增长；B3 四件后最大 kind=13）
+    ca::usize seen[20] = {};  // 按 AttrKind 值计数（容量随新建模属性增长；Record 立模后最大 kind=17）
     auto dirtyAll = [&](std::vector<AttrSlot>& slots) {
         for (AttrSlot& s : slots) {
             if (s.decoded()) {

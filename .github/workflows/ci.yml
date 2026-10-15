@@ -2,7 +2,7 @@
 #
 # 范围：libjbc + libjbc_unittest（语料自产门需要 javac，setup-java 提供）。
 # 依赖：luiox-repo git 直连包（libca/libjdk_finder）由 CI 显式注册（与根
-# xmake.lua 的声明幂等同源）；gtest 走 xrepo。模式对齐 luiox/mjt 仓 CI。
+# xmake.lua 的声明幂等同源）；gtest 走 xrepo。模式对齐同账号既有仓 CI。
 
 name: CI
 

@@ -104,7 +104,7 @@ std::string build_arch()
 }
 
 /// 目标产物文件名：Windows 下补 .exe；已带 .exe/.dll 后缀（shared 目标伴生产物，
-/// 如 mjt-obf-runtime-native.dll）的名字原样采信，避免拼出 ".dll.exe"。
+/// 如 demo-runtime-native.dll）的名字原样采信，避免拼出 ".dll.exe"。
 /// POSIX 下 .dll 后缀按 xmake shared 目标的平台产物名映射为 lib<base>.so /
 /// lib<base>.dylib，保持「.dll 名 = shared 伴生」调用约定跨平台可用。
 std::string exe_name(const std::string& targetName)

@@ -697,6 +697,60 @@ private:
                 }
                 return Ok();
             }
+            case AttrKind::NestHost: {
+                // 单 u2 Class 槽直接标记；trailing 不含 CP 引用。
+                auto& b = static_cast<core::NestHostAttr&>(body);
+                const Result<void, CompactFailure> r = markCp(b.hostClassCp);
+                if (r.is_err()) {
+                    return Err(r.unwrap_err());
+                }
+                return Ok();
+            }
+            case AttrKind::NestMembers: {
+                // 全槽是 CP Class 索引。
+                auto& b = static_cast<core::NestMembersAttr&>(body);
+                for (const ca::u32 cp : b.memberCps) {
+                    const Result<void, CompactFailure> r = markCp(cp);
+                    if (r.is_err()) {
+                        return Err(r.unwrap_err());
+                    }
+                }
+                return Ok();
+            }
+            case AttrKind::PermittedSubclasses: {
+                // 体与 NestMembers 同构，全槽是 CP Class 索引（类型各归各）。
+                auto& b = static_cast<core::PermittedSubclassesAttr&>(body);
+                for (const ca::u32 cp : b.permittedCps) {
+                    const Result<void, CompactFailure> r = markCp(cp);
+                    if (r.is_err()) {
+                        return Err(r.unwrap_err());
+                    }
+                }
+                return Ok();
+            }
+            case AttrKind::Record: {
+                // 组件 name/descriptor 两槽是 CP Utf8；组件嵌套属性表走
+                // planAttr 递归（与 Code 嵌套同一通道——解码、闭包标记、
+                // 重映射计划在嵌套槽上原样生效）。
+                auto& b = static_cast<core::RecordAttr&>(body);
+                for (core::RecordAttr::Component& c : b.components) {
+                    const Result<void, CompactFailure> r1 = markCp(c.nameCp);
+                    if (r1.is_err()) {
+                        return Err(r1.unwrap_err());
+                    }
+                    const Result<void, CompactFailure> r2 = markCp(c.descriptorCp);
+                    if (r2.is_err()) {
+                        return Err(r2.unwrap_err());
+                    }
+                    for (AttrSlot& nested : c.attrs) {
+                        const Result<void, CompactFailure> r3 = planAttr(nested);
+                        if (r3.is_err()) {
+                            return Err(r3.unwrap_err());
+                        }
+                    }
+                }
+                return Ok();
+            }
             case AttrKind::TypeAnnotations: {
                 auto& b = static_cast<core::TypeAnnotationsAttr&>(body);
                 for (core::TypeAnnotationsAttr::Annotation& a : b.annotations) {
@@ -1111,6 +1165,61 @@ private:
                     if (n != cp) {
                         cp      = n;
                         touched = true;
+                    }
+                }
+                break;
+            }
+            case AttrKind::NestHost: {
+                // 单 u2 Class 槽重映射。
+                auto& b = static_cast<core::NestHostAttr&>(body);
+                const ca::u32 n = remap(b.hostClassCp);
+                if (n != b.hostClassCp) {
+                    b.hostClassCp = n;
+                    touched       = true;
+                }
+                break;
+            }
+            case AttrKind::NestMembers: {
+                // 全槽 CP Class 重映射。
+                auto& b = static_cast<core::NestMembersAttr&>(body);
+                for (ca::u32& cp : b.memberCps) {
+                    const ca::u32 n = remap(cp);
+                    if (n != cp) {
+                        cp      = n;
+                        touched = true;
+                    }
+                }
+                break;
+            }
+            case AttrKind::PermittedSubclasses: {
+                // 体与 NestMembers 同构，全槽 CP Class 重映射（类型各归各）。
+                auto& b = static_cast<core::PermittedSubclassesAttr&>(body);
+                for (ca::u32& cp : b.permittedCps) {
+                    const ca::u32 n = remap(cp);
+                    if (n != cp) {
+                        cp      = n;
+                        touched = true;
+                    }
+                }
+                break;
+            }
+            case AttrKind::Record: {
+                // 组件两槽 Utf8 重映射；组件嵌套属性递归 applyAttr（嵌套槽
+                // 置脏后由编码侧 attrNeedsReencode 递归闸驱动父体重编码）。
+                auto& b = static_cast<core::RecordAttr&>(body);
+                for (core::RecordAttr::Component& c : b.components) {
+                    const ca::u32 n1 = remap(c.nameCp);
+                    if (n1 != c.nameCp) {
+                        c.nameCp = n1;
+                        touched  = true;
+                    }
+                    const ca::u32 n2 = remap(c.descriptorCp);
+                    if (n2 != c.descriptorCp) {
+                        c.descriptorCp = n2;
+                        touched        = true;
+                    }
+                    for (AttrSlot& nested : c.attrs) {
+                        applyAttr(nested);
                     }
                 }
                 break;

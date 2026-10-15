@@ -46,7 +46,7 @@ bool                  hasAsmTestResource(const std::string& filename);
 std::filesystem::path getAsmTestResourcePath(const std::string& filename);
 std::vector<uint8_t>  getAsmTestResource(const std::string& filename);
 
-/// 跨项目定位：按 .project_root_file 名字（如 "mtest_set" / "product repo"）取项目根 / 资源。
+/// 跨项目定位：按 .project_root_file 名字（如 "test_helper" 等子项目名）取项目根 / 资源。
 /// 统一样本供给的底层原语——任何子项目按名字拿另一子项目的 test_resource 文件，
 /// 无需硬编码相对路径。未注册名字回落 <top>/<name>。
 inline std::filesystem::path getProjectPath(const std::string& projectName)
@@ -87,7 +87,7 @@ std::string           getBuildModeName();
 /// 推导活动 buildir——xmake binary 目标同树同目录输出，自定义 `-o <dir>` 配置下
 /// 依然正确；目标未随测试同树构建（文件不存在）时回退默认 buildir 布局
 /// <top>/build/<plat>/<arch>/<mode>/。@p targetName 可带 .dll 后缀定位 shared
-/// 目标产物（如 "mjt-obf-runtime-native.dll"）。
+/// 目标产物（如 "demo-runtime-native.dll"）。
 std::filesystem::path getBuildTargetPath(const std::string& targetName);
 /// 定位同 buildir 的 artifacts 层伴生产物
 /// <buildir>/artifacts/<plat>/<arch>/<mode>/<line>/<name>。活动 buildir 优先

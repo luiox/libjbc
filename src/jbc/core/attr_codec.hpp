@@ -66,6 +66,26 @@ Result<std::unique_ptr<AttrBody>, ReadError> decodeEnclosingMethodBody(ClassFile
 Result<std::unique_ptr<AttrBody>, ReadError> decodeExceptionsBody(ClassFile& cf,
                                                                   const AttrSlot& slot);
 
+/// @brief NestHost 属性体的 typed 解码（契约同 @ref decodeInnerClassesBody）。
+Result<std::unique_ptr<AttrBody>, ReadError> decodeNestHostBody(ClassFile& cf,
+                                                                const AttrSlot& slot);
+
+/// @brief NestMembers 属性体的 typed 解码（契约同 @ref decodeInnerClassesBody）。
+Result<std::unique_ptr<AttrBody>, ReadError> decodeNestMembersBody(ClassFile& cf,
+                                                                   const AttrSlot& slot);
+
+/// @brief PermittedSubclasses 属性体的 typed 解码（契约同
+///        @ref decodeInnerClassesBody）。
+Result<std::unique_ptr<AttrBody>, ReadError> decodePermittedSubclassesBody(
+    ClassFile& cf, const AttrSlot& slot);
+
+/// @brief Record 属性体的 typed 解码（契约同 @ref decodeInnerClassesBody）。
+///
+/// 组件嵌套属性表只读目录不解内容（与 Code 嵌套同款 lazy）；嵌套属性表的
+/// 长度声明越界（malformed）同样显式 Err——半截组件/越界嵌套表不猜测容忍。
+Result<std::unique_ptr<AttrBody>, ReadError> decodeRecordBody(ClassFile& cf,
+                                                              const AttrSlot& slot);
+
 /// @brief 编码一个属性槽（含 name_index 与 length）。
 ///
 /// - `state ∈ {Untouched, Decoded}` → 原样 copy 源 span（保真路径）

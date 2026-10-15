@@ -9,7 +9,7 @@
 // JDK/MSVC 探测本身（JAVA_HOME 解析、vcvarsall 定位等）已在 libjdk_finder，
 // 产品代码（product repo-cli --compile）与测试代码共用同一份探测，本文件不再重复。
 //
-// 供 mtest_set / legacy-stack / product repo 等所有需要 "javac 编译 + java 运行" 的测试复用。
+// 供语料仓 / legacy-stack / product repo 等所有需要 "javac 编译 + java 运行" 的测试复用。
 
 #pragma once
 
@@ -423,8 +423,8 @@ inline ExecResult runJavaMain(const JdkToolchain& tc, const fs::path& classpath,
 // ---------------------------------------------------------------------------
 // 共享 JVM 行为等价 harness：写 class(es)+Runner.java → javac → java → 抓 stdout。
 //
-// 收敛此前散在 4 处的同一份逻辑（legacy-stack runJvmMainClasses、mjt-obf obf_jvm_fixture::runJvm、
-// mtest_set semantic_jvm、product repo）。层级放 test::jdk（只依赖 jdk_finder+filesystem，不碰
+// 收敛此前散在 4 处的同一份逻辑（legacy-stack runJvmMainClasses、混淆线 obf_jvm_fixture::runJvm、
+// 样本仓 semantic_jvm、product repo）。层级放 test::jdk（只依赖 jdk_finder+filesystem，不碰
 // libjbytecode/libjzip），供全线复用。JDK 不可用返回 nullopt，调用方 GTEST_SKIP。
 // ---------------------------------------------------------------------------
 

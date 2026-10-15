@@ -26,6 +26,10 @@ constexpr std::string_view kSourceFileName = "SourceFile";
 constexpr std::string_view kInnerClassesName = "InnerClasses";
 constexpr std::string_view kEnclosingMethodName = "EnclosingMethod";
 constexpr std::string_view kExceptionsName = "Exceptions";
+constexpr std::string_view kNestHostName           = "NestHost";
+constexpr std::string_view kNestMembersName        = "NestMembers";
+constexpr std::string_view kPermittedSubclassesName = "PermittedSubclasses";
+constexpr std::string_view kRecordName              = "Record";
 
 /// @brief u16 域宽检查：编码闸门的基础谓词（design.md §27.2——超界显式
 ///        Err，禁止 static_cast 静默截断）。
@@ -39,13 +43,28 @@ bool attrNeedsReencode(const AttrSlot& slot)
     if (slot.needsReencode()) {
         return true;
     }
-    if (slot.body == nullptr || slot.body->getType() != static_cast<int>(AttrKind::Code)) {
+    if (slot.body == nullptr) {
         return false;
     }
-    const auto& code = static_cast<const CodeAttr&>(*slot.body);
-    for (const AttrSlot& nested : code.attrs) {
-        if (attrNeedsReencode(nested)) {
-            return true;
+    if (slot.body->getType() == static_cast<int>(AttrKind::Code)) {
+        const auto& code = static_cast<const CodeAttr&>(*slot.body);
+        for (const AttrSlot& nested : code.attrs) {
+            if (attrNeedsReencode(nested)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    if (slot.body->getType() == static_cast<int>(AttrKind::Record)) {
+        // 组件嵌套属性被改（嵌套槽置脏）时父 Record 体必须重编码，否则
+        // copy-through 会把嵌套修改静默吞掉（与 Code 嵌套同一闸门）。
+        const auto& rec = static_cast<const RecordAttr&>(*slot.body);
+        for (const RecordAttr::Component& c : rec.components) {
+            for (const AttrSlot& nested : c.attrs) {
+                if (attrNeedsReencode(nested)) {
+                    return true;
+                }
+            }
         }
     }
     return false;
@@ -179,6 +198,38 @@ Result<void, WriteError> encodeCodeBody(const ClassFile& cf, const CodeAttr& c, 
     }
     if (!c.trailing.empty()) {
         out.raw(ByteView{c.trailing});
+    }
+    return Ok();
+}
+
+/// @brief 编码 Record 属性体（不含 name_index 与 length）。组件嵌套属性
+///        经 @ref encodeAttr 落槽（未触碰 copy-through、触碰重编码），失败
+///        向上传播——与 Code 嵌套同一通道。
+Result<void, WriteError> encodeRecordBody(const ClassFile& cf, const RecordAttr& r,
+                                          ByteSink& out, ByteView source)
+{
+    if (r.components.size() > std::numeric_limits<ca::u16>::max()) {
+        return Err(WriteError::Unencodable);
+    }
+    out.u16(static_cast<ca::u16>(r.components.size()));
+    for (const RecordAttr::Component& c : r.components) {
+        if (!fitsU16(c.nameCp) || !fitsU16(c.descriptorCp) ||
+            c.attrs.size() > std::numeric_limits<ca::u16>::max()) {
+            return Err(WriteError::Unencodable);
+        }
+        out.u16(static_cast<ca::u16>(c.nameCp));
+        out.u16(static_cast<ca::u16>(c.descriptorCp));
+        out.u16(static_cast<ca::u16>(c.attrs.size()));
+        for (const AttrSlot& s : c.attrs) {
+            // 嵌套属性编码失败会破坏组件表与父属性长度前缀，必须向上传播。
+            const Result<void, WriteError> rs = encodeAttr(cf, s, out, source);
+            if (rs.is_err()) {
+                return Err(rs.unwrap_err());
+            }
+        }
+    }
+    if (!r.trailing.empty()) {
+        out.raw(ByteView{r.trailing});
     }
     return Ok();
 }
@@ -704,6 +755,130 @@ Result<std::unique_ptr<AttrBody>, ReadError> decodeExceptionsBody(ClassFile& cf,
     return Ok(std::unique_ptr<AttrBody>(std::move(b)));
 }
 
+/// @brief Nest 族三件（NestHost/NestMembers/PermittedSubclasses）typed 解码
+///        族，形状与既有 typed 解码同铁律（半截体 Err、trailing 保留）。
+///        只挂类级属性表、载荷全为 CP Class 索引、无 pc 载荷，relocation
+///        契约（§33 封闭集）不涉及。三件均已接 decodeAttrBody 分派；公开
+///        入口保留为直接解码面（不触碰槽状态）。
+Result<std::unique_ptr<AttrBody>, ReadError> decodeNestHostBody(ClassFile& cf,
+                                                                const AttrSlot& slot)
+{
+    bool spanOk = false;
+    Ard r = makeReader(cf, slot, spanOk);
+    if (!spanOk) {
+        return Err(ReadError::Truncated);
+    }
+    auto b = std::make_unique<NestHostAttr>();
+    b->hostClassCp = r.u2();
+    if (!r.ok()) {
+        return Err(r.err());
+    }
+    keepBodyTrailing(cf, slot, b->trailing, r);
+    return Ok(std::unique_ptr<AttrBody>(std::move(b)));
+}
+
+Result<std::unique_ptr<AttrBody>, ReadError> decodeNestMembersBody(ClassFile& cf,
+                                                                   const AttrSlot& slot)
+{
+    bool spanOk = false;
+    Ard r = makeReader(cf, slot, spanOk);
+    if (!spanOk) {
+        return Err(ReadError::Truncated);
+    }
+    auto b = std::make_unique<NestMembersAttr>();
+    const ca::u32 n = r.u2();
+    b->memberCps.reserve(n > 100 ? 100 : n);
+    for (ca::u32 i = 0; i < n; ++i) {
+        b->memberCps.push_back(r.u2());
+    }
+    if (!r.ok()) {
+        return Err(r.err());
+    }
+    keepBodyTrailing(cf, slot, b->trailing, r);
+    return Ok(std::unique_ptr<AttrBody>(std::move(b)));
+}
+
+Result<std::unique_ptr<AttrBody>, ReadError> decodePermittedSubclassesBody(
+    ClassFile& cf, const AttrSlot& slot)
+{
+    bool spanOk = false;
+    Ard r = makeReader(cf, slot, spanOk);
+    if (!spanOk) {
+        return Err(ReadError::Truncated);
+    }
+    auto b = std::make_unique<PermittedSubclassesAttr>();
+    const ca::u32 n = r.u2();
+    b->permittedCps.reserve(n > 100 ? 100 : n);
+    for (ca::u32 i = 0; i < n; ++i) {
+        b->permittedCps.push_back(r.u2());
+    }
+    if (!r.ok()) {
+        return Err(r.err());
+    }
+    keepBodyTrailing(cf, slot, b->trailing, r);
+    return Ok(std::unique_ptr<AttrBody>(std::move(b)));
+}
+
+/// @brief Record typed 解码（公开直读入口，不触碰槽状态；分派面走
+///        decodeAttrBody）。形状：u2 组件数 + 组件（name/desc 两 u2 +
+///        嵌套属性表）逐个落槽。组件嵌套属性只读目录（与 Code 嵌套同款
+///        lazy）；半截组件 Err，嵌套表长度越界（malformed）同样显式 Err
+///        ——继续解析只会得到错误的组件边界，不猜。
+Result<std::unique_ptr<AttrBody>, ReadError> decodeRecordBody(ClassFile& cf,
+                                                              const AttrSlot& slot)
+{
+    const ByteView data = cf.source().spanOrEmpty(slot.data);
+    if (data.size() != slot.data.length) {
+        return Err(ReadError::Truncated);
+    }
+
+    Cursor cur{data};
+    auto b = std::make_unique<RecordAttr>();
+
+    const Result<ca::u16, ReadError> rn = cur.u16();
+    if (rn.is_err()) {
+        return Err(rn.unwrap_err());
+    }
+    const ca::u16 count = rn.unwrap();
+    b->components.reserve(count > 64 ? 64 : count);
+    for (ca::u16 i = 0; i < count; ++i) {
+        RecordAttr::Component c;
+        const Result<ca::u16, ReadError> rnm = cur.u16();
+        if (rnm.is_err()) {
+            return Err(rnm.unwrap_err());
+        }
+        c.nameCp = rnm.unwrap();
+        const Result<ca::u16, ReadError> rd = cur.u16();
+        if (rd.is_err()) {
+            return Err(rd.unwrap_err());
+        }
+        c.descriptorCp = rd.unwrap();
+        // 嵌套属性表（Signature/注解族挂载面）：同样只读目录。游标基于
+        // Record 内容子视图，须把 Record 内容在源流中的偏移加进去，span
+        // 才是绝对的。表越界（BadAttributeLength）显式失败。
+        const Result<void, ReadError> ra =
+            readAttrSlots(cur, c.attrs, cf.diagnostics(), slot.data.offset);
+        if (ra.is_err()) {
+            return Err(ra.unwrap_err());
+        }
+        b->components.push_back(std::move(c));
+    }
+
+    // 合法 Record 属性在组件表之后必须正好结束。畸形输入仍可被低层 DOM
+    // 表达：尾部作为 opaque bytes 保留，避免后续修改时静默丢数据。
+    if (cur.remaining() != 0) {
+        const Result<ByteView, ReadError> rt = cur.take(cur.remaining());
+        if (rt.is_err()) {
+            return Err(rt.unwrap_err());
+        }
+        const ByteView tail = rt.unwrap();
+        b->trailing.assign(tail.data(), tail.data() + tail.size());
+        cf.diagnostics().warn(ReadError::UnsupportedFeature, slot.data.offset);
+    }
+
+    return Ok(std::unique_ptr<AttrBody>(std::move(b)));
+}
+
 /// @brief type_path 读取（JVMS 4.7.20.2）：path_length + 若干 (kind,
 ///        type_argument_index) 对；kind > 3 属非法，显式拒绝。
 Result<std::vector<TypeAnnotationsAttr::TypePathEntry>, ReadError>
@@ -1145,6 +1320,26 @@ Result<AttrBody*, ReadError> decodeAttrBody(ClassFile& cf, AttrSlot& slot)
         if (r.is_err()) return Err(r.unwrap_err());
         return attach(std::move(r).unwrap());
     }
+    if (name == kNestHostName) {
+        auto r = decodeNestHostBody(cf, slot);
+        if (r.is_err()) return Err(r.unwrap_err());
+        return attach(std::move(r).unwrap());
+    }
+    if (name == kNestMembersName) {
+        auto r = decodeNestMembersBody(cf, slot);
+        if (r.is_err()) return Err(r.unwrap_err());
+        return attach(std::move(r).unwrap());
+    }
+    if (name == kPermittedSubclassesName) {
+        auto r = decodePermittedSubclassesBody(cf, slot);
+        if (r.is_err()) return Err(r.unwrap_err());
+        return attach(std::move(r).unwrap());
+    }
+    if (name == kRecordName) {
+        auto r = decodeRecordBody(cf, slot);
+        if (r.is_err()) return Err(r.unwrap_err());
+        return attach(std::move(r).unwrap());
+    }
 
     // 未建模属性：原样保留字节（保真的兜底形态）。
     const ByteView data = cf.source().spanOrEmpty(slot.data);
@@ -1186,6 +1381,18 @@ Result<void, ReadError> decodeAllAttrs(ClassFile& cf)
                     const Result<AttrBody*, ReadError> rn = cf.decodeAttr(nested);
                     if (rn.is_err()) {
                         return Err(rn.unwrap_err());
+                    }
+                }
+            }
+            if (s.body != nullptr && s.body->getType() == static_cast<int>(AttrKind::Record)) {
+                // Record 组件上的嵌套属性同样递归解开。
+                auto& rec = static_cast<RecordAttr&>(*s.body);
+                for (RecordAttr::Component& c : rec.components) {
+                    for (AttrSlot& nested : c.attrs) {
+                        const Result<AttrBody*, ReadError> rn = cf.decodeAttr(nested);
+                        if (rn.is_err()) {
+                            return Err(rn.unwrap_err());
+                        }
                     }
                 }
             }
@@ -1478,6 +1685,62 @@ Result<void, WriteError> encodeAttr(const ClassFile& cf,
                 body.u16(static_cast<ca::u16>(cp));
             }
             body.raw(ByteView{b.trailing});
+            break;
+        }
+        case AttrKind::NestHost: {
+            // u2 域宽闸门（§27.2）：host_class_index 超 u16 显式 Err。
+            const auto& b = static_cast<const NestHostAttr&>(*slot.body);
+            if (!fitsU16(b.hostClassCp)) {
+                return Err(WriteError::Unencodable);
+            }
+            body.u16(static_cast<ca::u16>(b.hostClassCp));
+            body.raw(ByteView{b.trailing});
+            break;
+        }
+        case AttrKind::NestMembers: {
+            // u2 域宽闸门（§27.2）：条目数与每条目索引超界显式 Err。
+            const auto& b = static_cast<const NestMembersAttr&>(*slot.body);
+            if (b.memberCps.size() > std::numeric_limits<ca::u16>::max()) {
+                return Err(WriteError::Unencodable);
+            }
+            for (const ca::u32 cp : b.memberCps) {
+                if (!fitsU16(cp)) {
+                    return Err(WriteError::Unencodable);
+                }
+            }
+            body.u16(static_cast<ca::u16>(b.memberCps.size()));
+            for (const ca::u32 cp : b.memberCps) {
+                body.u16(static_cast<ca::u16>(cp));
+            }
+            body.raw(ByteView{b.trailing});
+            break;
+        }
+        case AttrKind::PermittedSubclasses: {
+            // u2 域宽闸门（§27.2）：条目数与每条目索引超界显式 Err。
+            const auto& b = static_cast<const PermittedSubclassesAttr&>(*slot.body);
+            if (b.permittedCps.size() > std::numeric_limits<ca::u16>::max()) {
+                return Err(WriteError::Unencodable);
+            }
+            for (const ca::u32 cp : b.permittedCps) {
+                if (!fitsU16(cp)) {
+                    return Err(WriteError::Unencodable);
+                }
+            }
+            body.u16(static_cast<ca::u16>(b.permittedCps.size()));
+            for (const ca::u32 cp : b.permittedCps) {
+                body.u16(static_cast<ca::u16>(cp));
+            }
+            body.raw(ByteView{b.trailing});
+            break;
+        }
+        case AttrKind::Record: {
+            // u2 域宽闸门（§27.2）：组件数、name/desc 索引与嵌套属性表长
+            // 超界显式 Err；嵌套属性逐槽经 encodeAttr（失败向上传播）。
+            const auto& b = static_cast<const RecordAttr&>(*slot.body);
+            const Result<void, WriteError> rb = encodeRecordBody(cf, b, body, source);
+            if (rb.is_err()) {
+                return Err(rb.unwrap_err());
+            }
             break;
         }
         case AttrKind::Raw: {

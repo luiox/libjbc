@@ -44,6 +44,10 @@ enum class AttrKind : int {
     InnerClasses = 11,     ///< InnerClasses（JVMS 4.7.6）
     EnclosingMethod = 12,  ///< EnclosingMethod（JVMS 4.7.7）
     Exceptions = 13,       ///< Exceptions（JVMS 4.7.5）
+    NestHost = 14,             ///< NestHost（JVMS 4.7.29）
+    NestMembers = 15,          ///< NestMembers（JVMS 4.7.28）
+    PermittedSubclasses = 16,  ///< PermittedSubclasses（JVMS 4.7.31）
+    Record = 17,               ///< Record（JVMS 4.7.30，类级，组件带嵌套属性表）
 };
 
 /// @brief 属性体基类：一切已解码属性内容的共同祖先。
@@ -617,6 +621,102 @@ public:
     std::vector<ca::u8> trailing;
 };
 
+/// @brief NestHost 属性（JVMS 4.7.29）：当前类的 nest 宿主（类级挂载）。
+///
+/// 体是单 `u2 host_class_index`（CP Class）。与 NestMembers/PermittedSubclasses
+/// 三件同边界：只挂类级属性表、不 Code 嵌套、载荷全为 CP 索引、无 pc 偏移
+/// ——§33 relocation 封闭集不涉及；codec 同铁律（半截体 Err、trailing 同族、
+/// u16 域宽闸门）。hostClassCp 即类名手术面（nest 宿主重映射 = 单 CP Class
+/// 重指向，与既有 Raw 手术路径语义一一对应）。
+class NestHostAttr : public AttrBody
+{
+public:
+    static constexpr AttrKind kKind = AttrKind::NestHost;
+
+    NestHostAttr() noexcept : AttrBody(kKind) {}
+
+    ca::u32 hostClassCp = 0;   ///< CP Class（nest 宿主）
+
+    /// @brief 声明结构之后的非标准尾部字节（trailing 同族，design.md §27.1）。
+    ///
+    /// 合法 NestHost 体恰为 2 字节；超长输入的尾字节奏此保留，重编码
+    /// 原样写回，不静默丢弃。
+    std::vector<ca::u8> trailing;
+};
+
+/// @brief NestMembers 属性（JVMS 4.7.28）：当前类的 nest 成员表（类级挂载）。
+///
+/// 体是 `u2 number_of_classes + u2 classes[]`，条目全为 CP Class。成员类名
+/// 即手术面（nest 成员重映射 = 逐条目 CP Class 重指向）。宿主自身不出现在
+/// 表中（JVMS 4.7.28），0 不是合法条目值但解码不做语义校验——结构保真层
+/// 原样承载。
+class NestMembersAttr : public AttrBody
+{
+public:
+    static constexpr AttrKind kKind = AttrKind::NestMembers;
+
+    NestMembersAttr() noexcept : AttrBody(kKind) {}
+
+    std::vector<ca::u32> memberCps;  ///< CP Class 索引表（nest 成员）
+
+    /// @brief 声明结构之后的非标准尾部字节（trailing 同族，design.md §27.1）。
+    std::vector<ca::u8> trailing;
+};
+
+/// @brief PermittedSubclasses 属性（JVMS 4.7.31）：sealed 类的允许子类表
+///        （类级挂载）。
+///
+/// 体是 `u2 number_of_classes + u2 classes[]`，形状与 NestMembers 同构，
+/// 条目全为 CP Class（class file v61+）。允许子类名即手术面（重映射 =
+/// 逐条目 CP Class 重指向）。
+class PermittedSubclassesAttr : public AttrBody
+{
+public:
+    static constexpr AttrKind kKind = AttrKind::PermittedSubclasses;
+
+    PermittedSubclassesAttr() noexcept : AttrBody(kKind) {}
+
+    std::vector<ca::u32> permittedCps;  ///< CP Class 索引表（允许子类）
+
+    /// @brief 声明结构之后的非标准尾部字节（trailing 同族，design.md §27.1）。
+    std::vector<ca::u8> trailing;
+};
+
+/// @brief Record 属性（JVMS 4.7.30）：record 类的组件表（类级挂载）。
+///
+/// 体是 `u2 record_component_count + components[]`；每个 component 是
+/// `u2 name_index（Utf8）+ u2 descriptor_index（Utf8 字段描述符）+
+/// u2 attributes_count + attributes[]`——组件上是**嵌套属性表**，javac 会
+/// 在泛型组件上挂 Signature、在带注解组件上挂 Runtime{Visible,Invisible}-
+/// Annotations 等嵌套属性。
+///
+/// 与 @ref CodeAttr 同构的嵌套持有形态：组件嵌套属性也是 @ref AttrSlot，
+/// span 是源字节流中的绝对偏移，解码时只读目录（lazy 照旧），写回按槽状态
+/// copy-through 或重编码。组件名/描述符两槽是改名手术面；嵌套属性面
+/// （Signature/注解）由上层消费方在槽上直接手术。
+class RecordAttr : public AttrBody
+{
+public:
+    static constexpr AttrKind kKind = AttrKind::Record;
+
+    RecordAttr() noexcept : AttrBody(kKind) {}
+
+    struct Component
+    {
+        ca::u32 nameCp = 0;        ///< CP Utf8（组件名）
+        ca::u32 descriptorCp = 0;  ///< CP Utf8（字段描述符）
+
+        /// @brief 组件上的嵌套属性（Signature / Runtime{Visible,Invisible}-
+        ///        Annotations 等），同样 lazy——只读目录不解内容。
+        std::vector<AttrSlot> attrs;
+    };
+
+    std::vector<Component> components;
+
+    /// @brief 声明结构之后的非标准尾部字节（trailing 同族，design.md §27.1）。
+    std::vector<ca::u8> trailing;
+};
+
 }   // namespace jbc::core
 
 // tag_cast 接入：TypeOf 特化值必须等于运行期 getType()（libca 约定）。
@@ -704,6 +804,30 @@ template <>
 struct TypeOf<jbc::core::ExceptionsAttr>
 {
     static constexpr int value = static_cast<int>(jbc::core::AttrKind::Exceptions);
+};
+
+template <>
+struct TypeOf<jbc::core::NestHostAttr>
+{
+    static constexpr int value = static_cast<int>(jbc::core::AttrKind::NestHost);
+};
+
+template <>
+struct TypeOf<jbc::core::NestMembersAttr>
+{
+    static constexpr int value = static_cast<int>(jbc::core::AttrKind::NestMembers);
+};
+
+template <>
+struct TypeOf<jbc::core::PermittedSubclassesAttr>
+{
+    static constexpr int value = static_cast<int>(jbc::core::AttrKind::PermittedSubclasses);
+};
+
+template <>
+struct TypeOf<jbc::core::RecordAttr>
+{
+    static constexpr int value = static_cast<int>(jbc::core::AttrKind::Record);
 };
 
 }   // namespace ca::core::tag_cast

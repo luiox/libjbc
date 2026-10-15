@@ -443,6 +443,9 @@ constexpr std::string_view kNestOldName = "demo/Nest";
 constexpr std::string_view kNestNewName = "demo/NestR";
 
 /// NestProbe 的期望输出：除改名后的外围类名外，两个树完全一致。
+/// nestMembers 计数改名前后一致（宿主的成员表条目指向未改名的内部类二进
+/// 制名：Token/Bad/匿名/局部四成员 + 宿主自身 = 5）；permits 条目未参与
+/// 改名，原样读出。
 std::string expectedNestOutput(std::string_view outer)
 {
     std::string out = "declaring=";
@@ -458,31 +461,43 @@ std::string expectedNestOutput(std::string_view outer)
     out += kEol;
     out += "throws=demo.Fail";
     out += kEol;
+    out += "nestHost=";
+    out += outer;
+    out += kEol;
+    out += "nestMembers=5";
+    out += kEol;
+    out += "permits=demo.Seal$Impl=9";
+    out += kEol;
     out += "eval=45";
     out += kEol;
     return out;
 }
 
-/// B3 三件 typed 面验证统计。
+/// B3 + Nest 族结构元数据 typed 面验证统计。
 struct StructAttrStats
 {
-    ca::u32 innerClasses = 0;     ///< 触达的 InnerClasses 属性数
-    ca::u32 enclosingMethod = 0;  ///< 触达的 EnclosingMethod 属性数
-    ca::u32 exceptions = 0;       ///< 触达的 Exceptions 属性数
-    ca::u32 nestOuterRows = 0;    ///< outer 槽命中新外围名 NestR 的行数
+    ca::u32 innerClasses = 0;         ///< 触达的 InnerClasses 属性数
+    ca::u32 enclosingMethod = 0;      ///< 触达的 EnclosingMethod 属性数
+    ca::u32 exceptions = 0;           ///< 触达的 Exceptions 属性数
+    ca::u32 nestHost = 0;             ///< 触达的 NestHost 属性数
+    ca::u32 nestMembers = 0;          ///< 触达的 NestMembers 属性数
+    ca::u32 permittedSubclasses = 0;  ///< 触达的 PermittedSubclasses 属性数
+    ca::u32 nestOuterRows = 0;        ///< outer 槽命中新外围名 NestR 的行数
 };
 
-/// @brief B3 三件结构元数据的分派面验证 + 强制重编码。
+/// @brief B3 + Nest 族结构元数据的分派面验证 + 强制重编码。
 ///
-/// 逐槽走 decodeAttr 分派（B3 接线后必须给出 typed 体——Raw 形即接线失效），
-/// 槽语义对改名断言：InnerClasses 行 outer 槽与 EnclosingMethod class 槽
-/// **不得残留旧外围名**（demo/Nest、demo/Expr——残留即改名没有触达槽面，
-/// 是本断言钉死的失效形态；lambda 合成面如 MethodHandles$Lookup 等未改名
-/// 外围照常放行），命中新外围名 NestR 的行计数进 nestOuterRows；匿名行
-/// outer==0 原样保 0。再 makeNew 置 New 强制走 typed 编码器重编码——JVM
-/// 反射面消费的即 typed 编码产物。Exceptions 条目不得残留改名掉的旧名
-///（demo/Nest、demo/Expr——残留即异常表没有跟随改名），其余条目（Fail /
-/// 嵌套 Bad / JDK 异常）放行。
+/// 逐槽走 decodeAttr 分派（接线后必须给出 typed 体——Raw 形即接线失效），
+/// 槽语义对改名断言：InnerClasses 行 outer 槽与 EnclosingMethod class 槽、
+/// NestHost 宿主槽**不得残留旧外围名**（demo/Nest、demo/Expr——残留即改名
+/// 没有触达槽面，是本断言钉死的失效形态；lambda 合成面如
+/// MethodHandles$Lookup 等未改名外围照常放行），命中新外围名 NestR 的行
+/// 计数进 nestOuterRows；匿名行 outer==0 原样保 0。NestMembers/
+/// PermittedSubclasses 条目不得精确命中改名掉的旧名（成员表/允许表条目
+/// 指向内部类二进制名，前缀命中不算残留）。再 makeNew 置 New 强制走 typed
+/// 编码器重编码——JVM 反射面消费的即 typed 编码产物。Exceptions 条目不得
+/// 残留改名掉的旧名（demo/Nest、demo/Expr——残留即异常表没有跟随改名），
+/// 其余条目（Fail / 嵌套 Bad / JDK 异常）放行。
 Result<StructAttrStats, std::string>
 verifyStructAttrsTyped(ClassFile& cf)
 {
@@ -552,6 +567,64 @@ verifyStructAttrsTyped(ClassFile& cf)
                 AttrSlot fresh = AttrSlot::makeNew(slot.nameCp, std::move(slot.body));
                 slot = std::move(fresh);
                 ++st.exceptions;
+            }
+            else if (cp.utf8Equals(slot.nameCp, "NestHost")) {
+                auto d = cf.decodeAttr(slot);
+                if (d.is_err()) {
+                    return Err(std::string("decode NestHost failed"));
+                }
+                if (d.unwrap()->kind() != AttrKind::NestHost) {
+                    return Err(std::string("NestHost not typed after wiring"));
+                }
+                const auto& nh = static_cast<const NestHostAttr&>(*slot.body);
+                const std::string_view host = cf.className(nh.hostClassCp);
+                if (host == kNestOldName || host == kOldName) {
+                    return Err(std::string("stale nest host after rename: ")
+                               + std::string(host));
+                }
+                AttrSlot fresh = AttrSlot::makeNew(slot.nameCp, std::move(slot.body));
+                slot = std::move(fresh);
+                ++st.nestHost;
+            }
+            else if (cp.utf8Equals(slot.nameCp, "NestMembers")) {
+                auto d = cf.decodeAttr(slot);
+                if (d.is_err()) {
+                    return Err(std::string("decode NestMembers failed"));
+                }
+                if (d.unwrap()->kind() != AttrKind::NestMembers) {
+                    return Err(std::string("NestMembers not typed after wiring"));
+                }
+                const auto& nm = static_cast<const NestMembersAttr&>(*slot.body);
+                for (const ca::u32 classCp : nm.memberCps) {
+                    const std::string_view name = cf.className(classCp);
+                    if (name == kNestOldName || name == kOldName) {
+                        return Err(std::string("stale nest member after rename: ")
+                                   + std::string(name));
+                    }
+                }
+                AttrSlot fresh = AttrSlot::makeNew(slot.nameCp, std::move(slot.body));
+                slot = std::move(fresh);
+                ++st.nestMembers;
+            }
+            else if (cp.utf8Equals(slot.nameCp, "PermittedSubclasses")) {
+                auto d = cf.decodeAttr(slot);
+                if (d.is_err()) {
+                    return Err(std::string("decode PermittedSubclasses failed"));
+                }
+                if (d.unwrap()->kind() != AttrKind::PermittedSubclasses) {
+                    return Err(std::string("PermittedSubclasses not typed after wiring"));
+                }
+                const auto& ps = static_cast<const PermittedSubclassesAttr&>(*slot.body);
+                for (const ca::u32 classCp : ps.permittedCps) {
+                    const std::string_view name = cf.className(classCp);
+                    if (name == kNestOldName || name == kOldName) {
+                        return Err(std::string("stale permitted subclass after rename: ")
+                                   + std::string(name));
+                    }
+                }
+                AttrSlot fresh = AttrSlot::makeNew(slot.nameCp, std::move(slot.body));
+                slot = std::move(fresh);
+                ++st.permittedSubclasses;
             }
         }
         return Ok();
@@ -747,19 +820,31 @@ TEST(RealClassRenameProbe, NestedReflectionAfterRename)
         total.innerClasses += st.innerClasses;
         total.enclosingMethod += st.enclosingMethod;
         total.exceptions += st.exceptions;
+        total.nestHost += st.nestHost;
+        total.nestMembers += st.nestMembers;
+        total.permittedSubclasses += st.permittedSubclasses;
         total.nestOuterRows += st.nestOuterRows;
     }
-    // 触点护栏：三件 typed 面都必须在真跑样本上被触达，否则样本没练到位
+    // 触点护栏：结构面 typed 面都必须在真跑样本上被触达，否则样本没练到位
     //（Nest/Token/局部/匿名四文件带 InnerClasses；局部+匿名带
-    // EnclosingMethod；Nest.mint 与 Main.drive 带 Exceptions）；外围名重写
-    // 必须真实命中 NestR 行，否则改名没有触达槽面。
+    // EnclosingMethod；Nest.mint 与 Main.drive 带 Exceptions；javac 11+ 在
+    // nestmate 族上产出 NestHost+NestMembers 对，Seal 带
+    // PermittedSubclasses）；外围名重写必须真实命中 NestR 行，否则改名没有
+    // 触达槽面。
     EXPECT_GT(total.innerClasses, 0u);
     EXPECT_GT(total.enclosingMethod, 0u);
     EXPECT_GT(total.exceptions, 0u);
+    EXPECT_GT(total.nestHost, 0u)
+        << "sample must carry NestHost (javac 11+ nestmate) — got zero";
+    EXPECT_GT(total.nestMembers, 0u)
+        << "sample must carry NestMembers (javac 11+ nestmate) — got zero";
+    EXPECT_GT(total.permittedSubclasses, 0u)
+        << "sample must carry PermittedSubclasses (demo.Seal) — got zero";
     EXPECT_GT(total.nestOuterRows, 0u)
         << "rename never reached an InnerClasses outer slot";
 
-    // JVM 真跑：外围类名读新名，匿名/局部语义与 throws 表原样存活。
+    // JVM 真跑：外围类名读新名，匿名/局部语义与 throws 表原样存活；
+    // getNestHost 读改名后的宿主、getNestMembers 计数原样、sealed 允许表原样。
     EXPECT_EQ(runMain(nestDir, "demo.NestProbe"), expectedNestOutput("demo.NestR"));
 }
 

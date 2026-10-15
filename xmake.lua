@@ -7,7 +7,7 @@
 -- （FrameAt / DomainEngine）、type（描述符/签名树）按层叠加。
 
 set_project("libjbc")
-set_version("0.4.12")
+set_version("0.4.14")
 set_license("MIT")
 set_languages("cxx17")
 
@@ -140,6 +140,8 @@ target("libjbc_unittest")
     add_files("test/unittest/cp_compact_jvm_test.cpp")
     add_files("test/unittest/cp_compact_test.cpp")
     add_files("test/unittest/no_visitor_gate_test.cpp")
+    add_files("test/unittest/nest_attrs_test.cpp")
+    add_files("test/unittest/record_attr_test.cpp")
     add_includedirs("src")
     set_rundir("$(projectdir)")
 
