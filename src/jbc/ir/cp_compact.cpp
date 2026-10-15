@@ -75,18 +75,18 @@ public:
     {
         const Result<void, CompactFailure> head = markCp(cf_.thisClass);
         if (head.is_err()) {
-            return head.unwrap_err();
+            return Err(head.unwrap_err());
         }
         if (cf_.superClass != 0) {
             const Result<void, CompactFailure> r = markCp(cf_.superClass);
             if (r.is_err()) {
-                return r.unwrap_err();
+                return Err(r.unwrap_err());
             }
         }
         for (const ca::u16 i : cf_.interfaces) {
             const Result<void, CompactFailure> r = markCp(i);
             if (r.is_err()) {
-                return r.unwrap_err();
+                return Err(r.unwrap_err());
             }
         }
         const auto planMember = [&](std::vector<core::MemberInfo>& ms, const bool isMethod)
@@ -96,18 +96,18 @@ public:
                 ctx_ = std::string_view{};
                 const Result<void, CompactFailure> rn = markCp(m.nameCp);
                 if (rn.is_err()) {
-                    return rn.unwrap_err();
+                    return Err(rn.unwrap_err());
                 }
                 const Result<void, CompactFailure> rd = markCp(m.descCp);
                 if (rd.is_err()) {
-                    return rd.unwrap_err();
+                    return Err(rd.unwrap_err());
                 }
                 // 升格方法的 backing 指令面是陈旧面（DOM 为准，lower 整体重建）。
                 const bool staleCode = isMethod && backingMethodPromoted(backingIdx);
                 for (AttrSlot& a : m.attrs) {
                     const Result<void, CompactFailure> r = planAttr(a, staleCode);
                     if (r.is_err()) {
-                        return r.unwrap_err();
+                        return Err(r.unwrap_err());
                     }
                 }
                 backingIdx += 1;
@@ -115,15 +115,15 @@ public:
             return Ok();
         };
         if (const Result<void, CompactFailure> r = planMember(cf_.fields, false); r.is_err()) {
-            return r.unwrap_err();
+            return Err(r.unwrap_err());
         }
         if (const Result<void, CompactFailure> r = planMember(cf_.methods, true); r.is_err()) {
-            return r.unwrap_err();
+            return Err(r.unwrap_err());
         }
         for (AttrSlot& a : cf_.attrs) {
             const Result<void, CompactFailure> r = planAttr(a);
             if (r.is_err()) {
-                return r.unwrap_err();
+                return Err(r.unwrap_err());
             }
         }
 
@@ -147,13 +147,13 @@ public:
                 }
                 const Result<void, CompactFailure> r = markCp(in.cp);
                 if (r.is_err()) {
-                    return r.unwrap_err();
+                    return Err(r.unwrap_err());
                 }
             }
             for (const CodeUnit::Exc& e : cu.exc) {
                 const Result<void, CompactFailure> r = markCp(e.catchCp);
                 if (r.is_err()) {
-                    return r.unwrap_err();
+                    return Err(r.unwrap_err());
                 }
             }
         }
@@ -170,7 +170,7 @@ public:
         assignRanks();
         const Result<void, CompactFailure> f = fillPool();
         if (f.is_err()) {
-            return f.unwrap_err();
+            return Err(f.unwrap_err());
         }
         fillCodeBodies();
         core::Diagnostics diag;
@@ -208,21 +208,21 @@ public:
                 // a 列分别是 reference_kind / bootstrap 下标——非 CP 索引。
                 const Result<void, CompactFailure> rb = markCp(e.b);
                 if (rb.is_err()) {
-                    return rb.unwrap_err();
+                    return Err(rb.unwrap_err());
                 }
                 return Ok();
             }
             default: {
                 const Result<void, CompactFailure> ra = markCp(e.a);
                 if (ra.is_err()) {
-                    return ra.unwrap_err();
+                    return Err(ra.unwrap_err());
                 }
                 if (e.tag != core::CpTag::Class && e.tag != core::CpTag::String
                     && e.tag != core::CpTag::MethodType && e.tag != core::CpTag::Module
                     && e.tag != core::CpTag::Package) {
                     const Result<void, CompactFailure> rb = markCp(e.b);
                     if (rb.is_err()) {
-                        return rb.unwrap_err();
+                        return Err(rb.unwrap_err());
                     }
                 }
                 return Ok();
@@ -566,7 +566,7 @@ private:
         ctx_ = attrNameOf(slot);
         const Result<void, CompactFailure> rn = markCp(slot.nameCp);
         if (rn.is_err()) {
-            return rn.unwrap_err();
+            return Err(rn.unwrap_err());
         }
         core::AttrBody& body = *slot.body;
         switch (body.kind()) {
@@ -577,12 +577,12 @@ private:
                 for (core::BootstrapMethodsAttr::Entry& e : b.entries) {
                     const Result<void, CompactFailure> r1 = markCp(e.methodRef);
                     if (r1.is_err()) {
-                        return r1.unwrap_err();
+                        return Err(r1.unwrap_err());
                     }
                     for (const ca::u32 arg : e.args) {
                         const Result<void, CompactFailure> r2 = markCp(arg);
                         if (r2.is_err()) {
-                            return r2.unwrap_err();
+                            return Err(r2.unwrap_err());
                         }
                     }
                 }
@@ -596,7 +596,7 @@ private:
                         if (v.tag == core::StackMapTableAttr::VType::kObject) {
                             const Result<void, CompactFailure> r = markCp(v.cp);
                             if (r.is_err()) {
-                                return r.unwrap_err();
+                                return Err(r.unwrap_err());
                             }
                         }
                     }
@@ -604,7 +604,7 @@ private:
                         if (v.tag == core::StackMapTableAttr::VType::kObject) {
                             const Result<void, CompactFailure> r = markCp(v.cp);
                             if (r.is_err()) {
-                                return r.unwrap_err();
+                                return Err(r.unwrap_err());
                             }
                         }
                     }
@@ -616,7 +616,7 @@ private:
                 for (core::AnnotationsAttr::Annotation& a : b.annos) {
                     const Result<void, CompactFailure> r = planAnnotation(a);
                     if (r.is_err()) {
-                        return r.unwrap_err();
+                        return Err(r.unwrap_err());
                     }
                 }
                 return Ok();
@@ -626,11 +626,11 @@ private:
                 for (core::LocalVariableTableAttr::Row& row : b.rows) {
                     const Result<void, CompactFailure> r1 = markCp(row.nameCp);
                     if (r1.is_err()) {
-                        return r1.unwrap_err();
+                        return Err(r1.unwrap_err());
                     }
                     const Result<void, CompactFailure> r2 = markCp(row.descCp);
                     if (r2.is_err()) {
-                        return r2.unwrap_err();
+                        return Err(r2.unwrap_err());
                     }
                 }
                 return Ok();
@@ -639,7 +639,7 @@ private:
                 auto& b = static_cast<core::SignatureAttr&>(body);
                 const Result<void, CompactFailure> r = markCp(b.signatureCp);
                 if (r.is_err()) {
-                    return r.unwrap_err();
+                    return Err(r.unwrap_err());
                 }
                 return Ok();
             }
@@ -649,7 +649,7 @@ private:
                 auto& b = static_cast<core::SourceFileAttr&>(body);
                 const Result<void, CompactFailure> r = markCp(b.sourceFileCp);
                 if (r.is_err()) {
-                    return r.unwrap_err();
+                    return Err(r.unwrap_err());
                 }
                 return Ok();
             }
@@ -660,15 +660,15 @@ private:
                 for (core::InnerClassesAttr::Row& row : b.rows) {
                     const Result<void, CompactFailure> r1 = markCp(row.innerClassInfoCp);
                     if (r1.is_err()) {
-                        return r1.unwrap_err();
+                        return Err(r1.unwrap_err());
                     }
                     const Result<void, CompactFailure> r2 = markCp(row.outerClassInfoCp);
                     if (r2.is_err()) {
-                        return r2.unwrap_err();
+                        return Err(r2.unwrap_err());
                     }
                     const Result<void, CompactFailure> r3 = markCp(row.innerNameCp);
                     if (r3.is_err()) {
-                        return r3.unwrap_err();
+                        return Err(r3.unwrap_err());
                     }
                 }
                 return Ok();
@@ -678,11 +678,11 @@ private:
                 auto& b = static_cast<core::EnclosingMethodAttr&>(body);
                 const Result<void, CompactFailure> r1 = markCp(b.classCp);
                 if (r1.is_err()) {
-                    return r1.unwrap_err();
+                    return Err(r1.unwrap_err());
                 }
                 const Result<void, CompactFailure> r2 = markCp(b.methodNatCp);
                 if (r2.is_err()) {
-                    return r2.unwrap_err();
+                    return Err(r2.unwrap_err());
                 }
                 return Ok();
             }
@@ -692,7 +692,7 @@ private:
                 for (const ca::u32 cp : b.exceptionCps) {
                     const Result<void, CompactFailure> r = markCp(cp);
                     if (r.is_err()) {
-                        return r.unwrap_err();
+                        return Err(r.unwrap_err());
                     }
                 }
                 return Ok();
@@ -704,16 +704,16 @@ private:
                     // 下标）/catchIndex（异常表条目下标）不是 CP 索引，不动。
                     const Result<void, CompactFailure> r = markCp(a.typeIndexCp);
                     if (r.is_err()) {
-                        return r.unwrap_err();
+                        return Err(r.unwrap_err());
                     }
                     for (auto& kv : a.values) {
                         const Result<void, CompactFailure> rn = markCp(kv.first);
                         if (rn.is_err()) {
-                            return rn.unwrap_err();
+                            return Err(rn.unwrap_err());
                         }
                         const Result<void, CompactFailure> rv = planElemValue(kv.second);
                         if (rv.is_err()) {
-                            return rv.unwrap_err();
+                            return Err(rv.unwrap_err());
                         }
                     }
                 }
@@ -733,16 +733,16 @@ private:
     {
         const Result<void, CompactFailure> rt = markCp(a.typeCp);
         if (rt.is_err()) {
-            return rt.unwrap_err();
+            return Err(rt.unwrap_err());
         }
         for (const auto& kv : a.values) {
             const Result<void, CompactFailure> rn = markCp(kv.first);
             if (rn.is_err()) {
-                return rn.unwrap_err();
+                return Err(rn.unwrap_err());
             }
             const Result<void, CompactFailure> rv = planElemValue(kv.second);
             if (rv.is_err()) {
-                return rv.unwrap_err();
+                return Err(rv.unwrap_err());
             }
         }
         return Ok();
@@ -754,11 +754,11 @@ private:
             case 'e': {
                 const Result<void, CompactFailure> r1 = markCp(e.typeNameCp);
                 if (r1.is_err()) {
-                    return r1.unwrap_err();
+                    return Err(r1.unwrap_err());
                 }
                 const Result<void, CompactFailure> r2 = markCp(e.constNameCp);
                 if (r2.is_err()) {
-                    return r2.unwrap_err();
+                    return Err(r2.unwrap_err());
                 }
                 return Ok();
             }
@@ -771,7 +771,7 @@ private:
                 for (const core::AnnotationsAttr::ElemValue& it : e.items) {
                     const Result<void, CompactFailure> r = planElemValue(it);
                     if (r.is_err()) {
-                        return r.unwrap_err();
+                        return Err(r.unwrap_err());
                     }
                 }
                 return Ok();
@@ -779,7 +779,7 @@ private:
                 // 'B' 'C' 'D' 'F' 'I' 'J' 'S' 'Z' 's' 'c'：单 u2 常量/类索引。
                 const Result<void, CompactFailure> r = markCp(e.cp);
                 if (r.is_err()) {
-                    return r.unwrap_err();
+                    return Err(r.unwrap_err());
                 }
                 return Ok();
         }
@@ -805,13 +805,13 @@ private:
                 }
                 const Result<void, CompactFailure> r = markCp(in.cp);
                 if (r.is_err()) {
-                    return r.unwrap_err();
+                    return Err(r.unwrap_err());
                 }
             }
             for (CodeAttr::ExcEntry& e : code.excTable) {
                 const Result<void, CompactFailure> r = markCp(e.catchType);
                 if (r.is_err()) {
-                    return r.unwrap_err();
+                    return Err(r.unwrap_err());
                 }
             }
             insnPlan_[&code] = std::move(insns);
@@ -819,7 +819,7 @@ private:
         for (AttrSlot& nested : code.attrs) {
             const Result<void, CompactFailure> r = planAttr(nested);
             if (r.is_err()) {
-                return r.unwrap_err();
+                return Err(r.unwrap_err());
             }
         }
         return Ok();
@@ -844,7 +844,7 @@ private:
                                  return Ok(i);
                              });
         if (r.is_err()) {
-            return r.unwrap_err();
+            return Err(r.unwrap_err());
         }
         return Ok();
     }
@@ -872,11 +872,11 @@ private:
         if (name == kSourceFileName || name == kConstantValueName) {
             const Result<ca::u32, CompactFailure> v = rd();
             if (v.is_err()) {
-                return v.unwrap_err();
+                return Err(v.unwrap_err());
             }
             const Result<ca::u32, CompactFailure> m = cp(v.unwrap());
             if (m.is_err()) {
-                return m.unwrap_err();
+                return Err(m.unwrap_err());
             }
             wr(m.unwrap());
         } else {
@@ -1207,10 +1207,10 @@ Result<void, CompactFailure> compactConstantPool(ClassSession& s)
 {
     Compactor c(s, s.backing());
     if (const Result<void, CompactFailure> r = c.plan(); r.is_err()) {
-        return r.unwrap_err();
+        return Err(r.unwrap_err());
     }
     if (const Result<void, CompactFailure> r = c.materialize(); r.is_err()) {
-        return r.unwrap_err();
+        return Err(r.unwrap_err());
     }
     if (c.encodeFailed()) {
         // 单调映射下 CP1 域宽不变宽，构造上不可达；兜底显式失败不落半截。
