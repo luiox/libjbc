@@ -492,6 +492,69 @@ ca::u32 ConstantPool::addRef(CpTag tag, ca::u32 classCp, ca::u32 nameAndTypeCp)
     return static_cast<ca::u32>(entries_.size() - 1);
 }
 
+ca::u32 ConstantPool::addMethodHandle(ca::u32 kind, ca::u32 refCp)
+{
+    Entry e;
+    e.tag   = CpTag::MethodHandle;
+    e.a     = kind;
+    e.b     = refCp;
+    e.dirty = true;
+    entries_.push_back(e);
+    return static_cast<ca::u32>(entries_.size() - 1);
+}
+
+ca::u32 ConstantPool::addMethodType(ca::u32 descCp)
+{
+    Entry e;
+    e.tag   = CpTag::MethodType;
+    e.a     = descCp;
+    e.dirty = true;
+    entries_.push_back(e);
+    return static_cast<ca::u32>(entries_.size() - 1);
+}
+
+ca::u32 ConstantPool::addDynamic(ca::u32 bsmIndex, ca::u32 nameAndTypeCp)
+{
+    Entry e;
+    e.tag   = CpTag::Dynamic;
+    e.a     = bsmIndex;
+    e.b     = nameAndTypeCp;
+    e.dirty = true;
+    entries_.push_back(e);
+    return static_cast<ca::u32>(entries_.size() - 1);
+}
+
+ca::u32 ConstantPool::addInvokeDynamic(ca::u32 bsmIndex, ca::u32 nameAndTypeCp)
+{
+    Entry e;
+    e.tag   = CpTag::InvokeDynamic;
+    e.a     = bsmIndex;
+    e.b     = nameAndTypeCp;
+    e.dirty = true;
+    entries_.push_back(e);
+    return static_cast<ca::u32>(entries_.size() - 1);
+}
+
+ca::u32 ConstantPool::addModule(ca::u32 nameCp)
+{
+    Entry e;
+    e.tag   = CpTag::Module;
+    e.a     = nameCp;
+    e.dirty = true;
+    entries_.push_back(e);
+    return static_cast<ca::u32>(entries_.size() - 1);
+}
+
+ca::u32 ConstantPool::addPackage(ca::u32 nameCp)
+{
+    Entry e;
+    e.tag   = CpTag::Package;
+    e.a     = nameCp;
+    e.dirty = true;
+    entries_.push_back(e);
+    return static_cast<ca::u32>(entries_.size() - 1);
+}
+
 ca::u32 ConstantPool::appendWide(CpTag tag, ca::i64 lval)
 {
     Entry e;

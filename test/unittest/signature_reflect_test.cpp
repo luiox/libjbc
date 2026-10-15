@@ -81,11 +81,10 @@ std::string_view signatureOf(ClassFile& cf, std::vector<AttrSlot>& attrs)
             return {};
         }
         AttrBody* body = std::move(d).unwrap();
-        if (body->kind() != AttrKind::Raw || static_cast<RawAttr*>(body)->bytes().size() != 2) {
+        if (body->kind() != AttrKind::Signature) {
             return {};
         }
-        const std::vector<ca::u8>& b = static_cast<RawAttr*>(body)->bytes();
-        return cf.utf8((ca::u32(b[0]) << 8) | ca::u32(b[1]));
+        return cf.utf8(static_cast<SignatureAttr*>(body)->signatureCp);
     }
     return {};
 }

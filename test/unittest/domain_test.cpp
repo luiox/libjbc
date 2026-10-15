@@ -74,7 +74,7 @@ ca::usize indexAtPc(const jbc::ir::CodeUnit& u, ca::u32 pc)
 }
 
 // ---------------------------------------------------------------------------
-// 域一：单来源追踪（legacy-stack source/destination interpreter 的最小内核）
+// 域一：单来源追踪（旧栈 source/destination interpreter 的最小内核）
 // ---------------------------------------------------------------------------
 
 struct Origin

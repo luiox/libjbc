@@ -1,6 +1,6 @@
 /// @file        signature_corpus_test.cpp
 /// @brief       泛型签名语料门：真实 javac 产物的全部 Signature 属性
-///        parse→unparse 逐字节恒等（自产 jbcx.corpus / env 注入 private-corpus 双模式），
+///        parse→unparse 逐字节恒等（自产 jbcx.corpus / env 注入语料双模式），
 ///        并给出类数/签名数/形态分布统计。
 ///
 /// 语料级手术验证：每条签名里出现的每个去重内部名做正向 rename → 重 parse
@@ -94,17 +94,11 @@ void visitSignatures(ClassFile& cf, const std::string& path,
                 continue;
             }
             AttrBody* body = std::move(d).unwrap();
-            if (body->kind() != AttrKind::Raw) {
-                ADD_FAILURE() << path << ": Signature attr not Raw (unexpected model)";
+            if (body->kind() != AttrKind::Signature) {
+                ADD_FAILURE() << path << ": Signature attr not typed (unexpected model)";
                 continue;
             }
-            const std::vector<ca::u8>& bytes = static_cast<RawAttr*>(body)->bytes();
-            if (bytes.size() != 2) {
-                ADD_FAILURE() << path << ": Signature attr body != 2 bytes";
-                continue;
-            }
-            const ca::u32 idx = (ca::u32(bytes[0]) << 8) | ca::u32(bytes[1]);
-            fn(cf.utf8(idx), form);
+            fn(cf.utf8(static_cast<SignatureAttr*>(body)->signatureCp), form);
         }
     };
     visit(cf.attrs, SignatureForm::Class);
@@ -271,14 +265,9 @@ void collectAttrSigs(ClassFile& cf, std::vector<AttrSigCoord>& out)
                 ADD_FAILURE() << "Signature attr decode failed";
                 continue;
             }
-            auto* raw = static_cast<RawAttr*>(std::move(d).unwrap());
-            const std::vector<ca::u8>& b = raw->bytes();
-            if (b.size() != 2) {
-                ADD_FAILURE() << "Signature attr body != 2 bytes";
-                continue;
-            }
+            auto* attr = static_cast<SignatureAttr*>(std::move(d).unwrap());
             out.push_back(AttrSigCoord{level, member, i, form,
-                                       std::string(cf.utf8((ca::u32(b[0]) << 8) | b[1]))});
+                                       std::string(cf.utf8(attr->signatureCp))});
         }
     };
     collect(cf.attrs, 0, 0, SignatureForm::Class);
@@ -299,7 +288,7 @@ AttrSlot& coordSlot(ClassFile& cf, const AttrSigCoord& c)
     }
 }
 
-/// @brief 读出某槽当前指向的签名串（Raw 体 u2 索引一跳）。
+/// @brief 读出某槽当前指向的签名串（typed SignatureAttr 的 u2 索引一跳）。
 std::string_view sigStringOf(ClassFile& cf, AttrSlot& slot)
 {
     auto d = cf.decodeAttr(slot);
@@ -307,13 +296,8 @@ std::string_view sigStringOf(ClassFile& cf, AttrSlot& slot)
     if (d.is_err()) {
         return {};
     }
-    auto* raw = static_cast<RawAttr*>(std::move(d).unwrap());
-    const std::vector<ca::u8>& b = raw->bytes();
-    EXPECT_EQ(b.size(), ca::usize{2});
-    if (b.size() < 2) {
-        return {};
-    }
-    return cf.utf8((ca::u32(b[0]) << 8) | ca::u32(b[1]));
+    auto* attr = static_cast<SignatureAttr*>(std::move(d).unwrap());
+    return cf.utf8(attr->signatureCp);
 }
 
 }   // namespace
@@ -445,4 +429,199 @@ TEST(SignatureCorpus, AttrLevelSurgeryPipeline)
     EXPECT_GT(forwardOps, 0u);
     EXPECT_GT(attrsChangedTotal, 0u);
     EXPECT_GT(hitsTotal, 0u);
+}
+
+// ---- LVTT 语料门：签名宿主第二处（LocalVariableTypeTable descriptor 列）
+//      经 sig_attr 全扫入口跑真实语料 ----
+
+namespace {
+
+/// 一条 LVTT 行的坐标与内容快照。
+struct LvttRowCoord
+{
+    ca::usize method = 0;    ///< 方法下标
+    ca::usize codeSlot = 0;  ///< 方法属性表内 Code 槽下标
+    ca::usize lvttSlot = 0;  ///< Code 嵌套属性表内 LVTT 槽下标
+    ca::usize row = 0;       ///< 行下标
+    std::string sig;         ///< 原始签名串（descriptor 列）
+};
+
+/// @brief 收集一个类文件全部 LVTT 行（typed LocalVariableTableAttr 读出）。
+void collectLvttRows(ClassFile& cf, std::vector<LvttRowCoord>& out)
+{
+    for (ca::usize m = 0; m < cf.methods.size(); ++m) {
+        for (ca::usize c = 0; c < cf.methods[m].attrs.size(); ++c) {
+            AttrSlot& codeSlot = cf.methods[m].attrs[c];
+            if (!cf.cp.utf8Equals(codeSlot.nameCp, "Code")) {
+                continue;
+            }
+            auto d = cf.decodeAttr(codeSlot);
+            if (d.is_err()) {
+                ADD_FAILURE() << "Code decode failed";
+                continue;
+            }
+            auto* code = static_cast<CodeAttr*>(std::move(d).unwrap());
+            for (ca::usize n = 0; n < code->attrs.size(); ++n) {
+                AttrSlot& nested = code->attrs[n];
+                if (!cf.cp.utf8Equals(nested.nameCp, "LocalVariableTypeTable")) {
+                    continue;
+                }
+                auto ld = cf.decodeAttr(nested);
+                if (ld.is_err()) {
+                    ADD_FAILURE() << "LVTT decode failed";
+                    continue;
+                }
+                auto* lvt = static_cast<LocalVariableTableAttr*>(std::move(ld).unwrap());
+                for (ca::usize r = 0; r < lvt->rows.size(); ++r) {
+                    out.push_back(LvttRowCoord{m, c, n, r,
+                                               std::string(cf.utf8(lvt->rows[r].descCp))});
+                }
+            }
+        }
+    }
+}
+
+AttrSlot& lvttCoordSlot(ClassFile& cf, const LvttRowCoord& c)
+{
+    AttrSlot& codeSlot = cf.methods[c.method].attrs[c.codeSlot];
+    auto* code = static_cast<CodeAttr*>(cf.decodeAttr(codeSlot).unwrap());
+    return code->attrs[c.lvttSlot];
+}
+
+/// @brief 解出坐标所指行的当前签名串。
+std::string lvttRowSigOf(ClassFile& cf, const LvttRowCoord& c)
+{
+    AttrSlot& slot = lvttCoordSlot(cf, c);
+    auto ld = cf.decodeAttr(slot);
+    EXPECT_TRUE(ld.is_ok());
+    if (ld.is_err()) {
+        return {};
+    }
+    auto* lvt = static_cast<LocalVariableTableAttr*>(std::move(ld).unwrap());
+    return std::string(cf.utf8(lvt->rows[c.row].descCp));
+}
+
+}   // namespace
+
+TEST(SignatureCorpus, LvttLevelSurgeryPipeline)
+{
+    const auto src = jbc::test::corpus::resolveCorpus();
+    if (src.stage == jbc::test::corpus::Stage::None) {
+        GTEST_SKIP() << jbc::test::corpus::skipReason(src);
+    }
+    const std::vector<std::string> files = jbc::test::corpus::collectClassFiles(src.dir);
+    ASSERT_GT(files.size(), ca::usize{10}) << "corpus too small: " << src.dir;
+
+    ca::u32 filesWithLvtt = 0;
+    ca::u32 rowsTotal = 0;
+    ca::u32 forwardOps = 0;
+    ca::u32 rowsChangedTotal = 0;
+
+    for (const std::string& path : files) {
+        const Bytes bytes = slurp(path);
+        ASSERT_FALSE(bytes.empty()) << path;
+
+        // 收集坐标 + 去重内部名（Field 形态全名）。
+        std::vector<LvttRowCoord> coords;
+        {
+            auto r = readClass(ByteView{bytes});
+            ASSERT_TRUE(r.is_ok()) << path;
+            auto cf = std::move(r).unwrap().file;
+            collectLvttRows(*cf, coords);
+        }
+        if (coords.empty()) {
+            continue;
+        }
+        ++filesWithLvtt;
+        rowsTotal += static_cast<ca::u32>(coords.size());
+
+        std::vector<std::string> names;
+        for (const LvttRowCoord& c : coords) {
+            auto spans = classNameSpans(c.sig, SignatureForm::Field);
+            // 语料级行串按 JVMS 应全是字段形态签名；解析失败的类显式红。
+            ASSERT_TRUE(spans.is_ok()) << path << ": " << c.sig;
+            for (const SigClassNameSpan& s : std::move(spans).unwrap()) {
+                if (s.kind != SigClassNameSpan::Kind::InternalName) {
+                    continue;
+                }
+                const std::string name(c.sig.substr(s.offset, s.length));
+                if (std::find(names.begin(), names.end(), name) == names.end()) {
+                    names.push_back(name);
+                }
+            }
+        }
+
+        // 未命中门：缺席名全扫零改写，写回逐字节不动。
+        {
+            auto r2 = readClass(ByteView{bytes});
+            ASSERT_TRUE(r2.is_ok()) << path;
+            auto cf2 = std::move(r2).unwrap().file;
+            auto miss = jbc::ir::renameClassInLocalVariableTypeTables(
+                *cf2, "zzz/Absent_R", "zzz/Moved_R");
+            ASSERT_TRUE(miss.is_ok()) << path;
+            EXPECT_EQ(std::move(miss).unwrap().rowsChanged, 0u) << path;
+            EXPECT_EQ(jbc::test::writeOk(*cf2), bytes) << path;
+        }
+
+        // 逐名正向手术 → 重读逐行比对（纯函数面作 oracle）→ 逆向还原逐字节。
+        for (const std::string& name : names) {
+            const std::string renamed = name + "_R";
+            auto rf = readClass(ByteView{bytes});
+            ASSERT_TRUE(rf.is_ok()) << path;
+            auto cff = std::move(rf).unwrap().file;
+
+            auto fwd = jbc::ir::renameClassInLocalVariableTypeTables(
+                *cff, name, renamed);
+            ASSERT_TRUE(fwd.is_ok())
+                << path << ": forward LVTT surgery failed for " << name;
+            jbc::ir::LvttRenameSummary st = std::move(fwd).unwrap();
+            EXPECT_GT(st.rowsChanged, 0u) << path << ": " << name;
+            ++forwardOps;
+            rowsChangedTotal += st.rowsChanged;
+
+            // 重读：每行与纯函数 oracle 逐串比对。
+            auto rr = readClass(ByteView{jbc::test::writeOk(*cff)});
+            ASSERT_TRUE(rr.is_ok()) << path;
+            auto cfr = std::move(rr).unwrap().file;
+            std::vector<LvttRowCoord> rcoords;
+            collectLvttRows(*cfr, rcoords);
+            ASSERT_EQ(rcoords.size(), coords.size()) << path;
+            for (ca::usize i = 0; i < coords.size(); ++i) {
+                auto want =
+                    renameClassInSignature(coords[i].sig, SignatureForm::Field,
+                                           name, renamed);
+                ASSERT_TRUE(want.is_ok()) << path << ": " << coords[i].sig;
+                const SigRenameResult w = std::move(want).unwrap();
+                EXPECT_EQ(lvttRowSigOf(*cfr, rcoords[i]),
+                          std::string_view(w.signature.c_str(), w.signature.byte_length()))
+                    << path << ": lvtt row " << i << " forward mismatch";
+            }
+
+            // 逆向手术：还原每个原始签名串，整类逐字节还原。
+            auto back = jbc::ir::renameClassInLocalVariableTypeTables(
+                *cff, renamed, name);
+            ASSERT_TRUE(back.is_ok()) << path << ": reverse LVTT surgery failed";
+            EXPECT_EQ(std::move(back).unwrap().rowsChanged, st.rowsChanged)
+                << path << ": " << name;
+            auto rb = readClass(ByteView{jbc::test::writeOk(*cff)});
+            ASSERT_TRUE(rb.is_ok()) << path;
+            auto cfb = std::move(rb).unwrap().file;
+            std::vector<LvttRowCoord> bcoords;
+            collectLvttRows(*cfb, bcoords);
+            ASSERT_EQ(bcoords.size(), coords.size()) << path;
+            for (ca::usize i = 0; i < coords.size(); ++i) {
+                EXPECT_EQ(lvttRowSigOf(*cfb, bcoords[i]), coords[i].sig)
+                    << path << ": lvtt row " << i << " reverse mismatch";
+            }
+        }
+    }
+
+    std::printf("[signature-lvtt-corpus] stage=%d filesWithLvtt=%u rows=%u "
+                "forwardOps=%u rowsChanged=%u\n",
+                static_cast<int>(src.stage), filesWithLvtt, rowsTotal, forwardOps,
+                rowsChangedTotal);
+    EXPECT_GT(filesWithLvtt, 0u) << "corpus must carry LVTT rows (javac -g)";
+    EXPECT_GT(rowsTotal, 0u);
+    EXPECT_GT(forwardOps, 0u);
+    EXPECT_GT(rowsChangedTotal, 0u);
 }

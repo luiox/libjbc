@@ -16,6 +16,67 @@ namespace {
 
 constexpr ca::u32 kMagic = 0xCAFEBABEu;
 
+/// 属性槽写出是否需要源字节：copy-through 路径（本槽或任一嵌套槽走 copy）
+/// 都要源 span 在场。槽未置脏 → copy 本槽 span；槽重编码但其 Code 体里有
+/// 未触碰的嵌套槽 → 嵌套 copy 各自 span。全 New 的合成槽树返回 false。
+bool slotNeedsSource(const AttrSlot& s) noexcept
+{
+    if (!s.needsReencode()) {
+        return true;
+    }
+    const AttrBody* body = s.peek();
+    if (body == nullptr || body->kind() != AttrKind::Code) {
+        return false;
+    }
+    for (const AttrSlot& nested : static_cast<const CodeAttr&>(*body).attrs) {
+        if (slotNeedsSource(nested)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// 写出是否需要源字节：任一走 copy-through 路径的 CP 条目/属性槽都需要。
+///
+/// 全合成模型（从零建类：CP 条目全部经 add* 追加即脏、属性槽全部 New）
+/// 不含任何 copy 路径，无源字节也可写出——MissingSource 只挡「需要
+/// copy-through 而源缺席」的真违约，不再挡从零构建的合法形态。
+bool writeNeedsSource(const ClassFile& cf) noexcept
+{
+    for (ca::u32 i = 1; i < cf.cp.size(); ++i) {
+        if (!cf.cp.valid(i)) {
+            continue;   // wide 续槽随主槽编码
+        }
+        if (!cf.cp.at(i).dirty) {
+            return true;
+        }
+    }
+    const auto memberNeedsSource = [](const MemberInfo& m) {
+        for (const AttrSlot& s : m.attrs) {
+            if (slotNeedsSource(s)) {
+                return true;
+            }
+        }
+        return false;
+    };
+    for (const MemberInfo& m : cf.fields) {
+        if (memberNeedsSource(m)) {
+            return true;
+        }
+    }
+    for (const MemberInfo& m : cf.methods) {
+        if (memberNeedsSource(m)) {
+            return true;
+        }
+    }
+    for (const AttrSlot& s : cf.attrs) {
+        if (slotNeedsSource(s)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool validCpTag(const ClassFile& cf, ca::u32 index, CpTag tag)
 {
     return cf.cp.valid(index) && cf.cp.tagOf(index) == tag;
@@ -84,7 +145,9 @@ Result<void, WriteError> writeMember(const ClassFile& cf,
 Result<std::vector<ca::u8>, WriteError> writeClass(const ClassFile& cf)
 {
     const ByteView source = cf.source();
-    if (!cf.hasSource()) {
+    // 源字节缺席只在「确实要走 copy-through」时才是错误：全合成模型每个
+    // 条目都在重编码态，照常写出（从零建类 A5 的写出路径）。
+    if (!cf.hasSource() && writeNeedsSource(cf)) {
         return Err(WriteError::MissingSource);
     }
     if (cf.interfaces.size() > std::numeric_limits<ca::u16>::max() ||

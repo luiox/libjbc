@@ -104,12 +104,18 @@ Result<void, EditError> CodeDom::checkHandles(const Insn& in) const noexcept
     const core::Shape sh = core::shapeOf(in.op);
     const bool isBranch = sh == core::Shape::Branch2 || sh == core::Shape::Branch4;
     const bool isSwitch = sh == core::Shape::TableSwitch || sh == core::Shape::LookupSwitch;
-    const auto validControlTarget = [&](LabelId label) {
-        const LabelSlot* slot = labelSlotOf(label);
-        return slot != nullptr && slot->anchor != kNoInsn && slotOf(slot->anchor) != nullptr;
-    };
-    if ((isBranch || isSwitch) && !validControlTarget(in.target)) {
-        return Err(EditError::InvalidHandle);
+    // 受控延后绑定态（整体重放路径）：控制目标的锚定校验延后，由
+    // endDeferredTargets 对全量存活指令补验；switch 形状校验不依赖锚定，
+    // 两态一致保留。正常编辑路径防呆不变。
+    if ((isBranch || isSwitch) && !deferredTargets_) {
+        const auto validControlTarget = [&](LabelId label) {
+            const LabelSlot* slot = labelSlotOf(label);
+            return slot != nullptr && slot->anchor != kNoInsn
+                && slotOf(slot->anchor) != nullptr;
+        };
+        if (!validControlTarget(in.target)) {
+            return Err(EditError::InvalidHandle);
+        }
     }
     if (sh == core::Shape::TableSwitch) {
         if (in.b < in.a) {
@@ -123,11 +129,38 @@ Result<void, EditError> CodeDom::checkHandles(const Insn& in) const noexcept
     } else if (sh == core::Shape::LookupSwitch && in.keys.size() != in.targets.size()) {
         return Err(EditError::BadOperand);
     }
-    if (isSwitch) {
+    if (isSwitch && !deferredTargets_) {
         for (const LabelId& t : in.targets) {
+            const auto validControlTarget = [&](LabelId label) {
+                const LabelSlot* slot = labelSlotOf(label);
+                return slot != nullptr && slot->anchor != kNoInsn
+                    && slotOf(slot->anchor) != nullptr;
+            };
             if (!validControlTarget(t)) {
                 return Err(EditError::InvalidHandle);
             }
+        }
+    }
+    return Ok();
+}
+
+void CodeDom::beginDeferredTargets() noexcept
+{
+    deferredTargets_ = true;
+}
+
+Result<void, EditError> CodeDom::endDeferredTargets()
+{
+    // 先退态再校验：失败面不留松弛态，DOM 回到正常编辑语义。
+    deferredTargets_ = false;
+    for (const InsnId id : order_) {
+        const Slot* s = slotOf(id);
+        if (s == nullptr) {
+            continue;
+        }
+        auto check = checkHandles(s->insn);
+        if (check.is_err()) {
+            return Err(check.unwrap_err());
         }
     }
     return Ok();

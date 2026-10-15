@@ -51,6 +51,21 @@ Result<AttrBody*, ReadError> decodeAttrBody(ClassFile& cf, AttrSlot& slot);
 /// 解完之后每个槽都有 body，但仍未置脏，写回依旧走 copy-through。
 Result<void, ReadError> decodeAllAttrs(ClassFile& cf);
 
+/// @brief InnerClasses 属性体的 typed 直读入口（不触碰槽状态；decodeAttrBody
+///        的分派面同走本解码）。
+///
+/// 形状与既有 typed 解码同铁律：半截体 Err、trailing 保留、span 无效 Err。
+Result<std::unique_ptr<AttrBody>, ReadError> decodeInnerClassesBody(ClassFile& cf,
+                                                                    const AttrSlot& slot);
+
+/// @brief EnclosingMethod 属性体的 typed 解码（契约同 @ref decodeInnerClassesBody）。
+Result<std::unique_ptr<AttrBody>, ReadError> decodeEnclosingMethodBody(ClassFile& cf,
+                                                                       const AttrSlot& slot);
+
+/// @brief Exceptions 属性体的 typed 解码（契约同 @ref decodeInnerClassesBody）。
+Result<std::unique_ptr<AttrBody>, ReadError> decodeExceptionsBody(ClassFile& cf,
+                                                                  const AttrSlot& slot);
+
 /// @brief 编码一个属性槽（含 name_index 与 length）。
 ///
 /// - `state ∈ {Untouched, Decoded}` → 原样 copy 源 span（保真路径）

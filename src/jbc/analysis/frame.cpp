@@ -140,7 +140,7 @@ const char* to_string(FrameSummary::Fail f) noexcept
     case FrameSummary::Fail::BadCpRef: return "bad cp ref";
     case FrameSummary::Fail::Wide: return "wide";
     case FrameSummary::Fail::NoFixpoint: return "no fixpoint";
-    case FrameSummary::Fail::Subroutine: return "subroutine (jsr/ret) rejected";
+    case FrameSummary::Fail::Subroutine: return "subroutine path malformed";
     case FrameSummary::Fail::TypeConflict: return "type conflict";
     case FrameSummary::Fail::NoResolver: return "strict without type resolver";
     case FrameSummary::Fail::NotSupported: return "policy not supported";

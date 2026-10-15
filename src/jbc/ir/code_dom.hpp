@@ -233,6 +233,28 @@ public:
     /// 借此把边界标签迁到新头指令（bindLabel）。不修改任何状态。
     std::vector<LabelId> labelsAt(InsnId anchor) const;
 
+    // ---- 受控延后绑定（仅整体方法体重放路径） ----
+
+    /// @brief 进入「分支/switch 目标延后绑定」受控构建态；逐条追加期放开
+    ///        控制目标须已锚定的校验，@ref endDeferredTargets 收尾全量补验。
+    ///
+    /// 整体重放（ClassSession::adoptMethod 的 replayMethodBody）按源顺序
+    /// 逐条搬运：前向分支的目标指令尚未重放，其占位标签必然未锚定——
+    /// append 期的控制目标防呆在该路径上机制性不可满足（design.md §34.3）。
+    /// 受控态只放开「分支/switch 目标须已锚定到本 DOM 存活指令」这一条
+    /// （switch 形状校验保留），退出时对全量存活指令补同一套校验，仍悬垂
+    /// 的目标显式失败。正常编辑路径不进入此态，checkHandles 对外语义不变；
+    /// 重复进入幂等。
+    void beginDeferredTargets() noexcept;
+
+    /// @brief 退出受控延后绑定态：对全量存活指令补 checkHandles 校验
+    ///        （含分支/switch 目标锚定），任何悬垂目标 Err(InvalidHandle)。
+    ///
+    /// 无论校验成败受控态都退出——失败面不留松弛态，调用方（重放）按
+    /// 全有或全无放弃即可。未进入受控态时调用同样安全：全量校验照跑，
+    /// 等于一次结构自检。
+    Result<void, EditError> endDeferredTargets();
+
     // ---- 访问 ----
 
     /// @brief 只读访问；句柄无效返回 nullptr（不抛错，方便探测）。
@@ -316,6 +338,10 @@ private:
     Result<void, EditError> checkHandles(const Insn& in) const noexcept;
 
     ca::u32 owner_;
+    /// @brief 受控延后绑定态（begin/endDeferredTargets 翻转）：真值时
+    ///        checkHandles 跳过分支/switch 目标的锚定校验。仅整体重放路径
+    ///        进入，退出时全量补验（见 beginDeferredTargets 契约）。
+    bool deferredTargets_ = false;
     // deque 保证在两端追加时已有元素的引用/指针不因槽表扩容而失效。
     // 槽位只做逻辑删除，因而 get()/peek() 的非拥有视图可安全跨越后续插入。
     std::deque<Slot> slots_;

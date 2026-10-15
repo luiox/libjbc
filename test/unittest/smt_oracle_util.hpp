@@ -230,7 +230,7 @@ inline bool compileOracleSamples(const fs::path& root)
     return std::system(cmd.c_str()) == 0;
 }
 
-/// 最小 stub resolver（§10.1：真实现归 mjbase，测试内只配最小层）：
+/// 最小 stub resolver（§10.1：真实现归上层消费方，测试内只配最小层）：
 /// 同类返回本类；跨类沿父链求首个公共祖先（缺省父 = Object）；
 /// 空名参与跨类合并视为不可解（防止「无名 Ref 被静默兜底」掩盖缺陷）。
 /// 求解结果经内部驻留表交付——VType.name 是借用视图，不得指向临时串。
@@ -493,6 +493,7 @@ inline std::string vtypeText(const VType& v)
     case VKind::Null: return "null";
     case VKind::UninitThis: return "uninitThis";
     case VKind::Uninitialized: return "uninit@" + std::to_string(v.uninitOffset());
+    case VKind::ReturnAddress: return "retAddr@" + std::to_string(v.jsrPc());
     case VKind::Bottom: return "bottom";
     }
     return "?";

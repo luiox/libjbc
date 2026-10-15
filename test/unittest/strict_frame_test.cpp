@@ -3,7 +3,8 @@
 ///
 /// 三部分：
 /// 1. 合成样本——策略三态 API、new+\<init\> 翻转、同/异 offset Uninit 合并、
-///    跨类合并经 resolver、jsr/ret 显式拒绝、描述符精确注入。冲突/不可算
+///    跨类合并经 resolver、jsr/ret 子程序往返（C2 起建模；专项面在
+///    subroutine_test.cpp）、描述符精确注入。冲突/不可算
 ///    样本断言 Err + failAt 指向正确指令。
 /// 2. 异常边精确传播（J5/C3）——Strict 出口边播种 handler 入口（抛出点
 ///    locals + catch_type 精确类）、any 播 Throwable、死 try 的 handler
@@ -487,7 +488,7 @@ TEST(StrictFrameTest, ResolverFailureIsExplicitAtMergePoint)
 }
 
 // ---------------------------------------------------------------------------
-// jsr/ret：Strict 显式拒绝（子程序数据流归 C2）
+// jsr/ret：Strict 域建模子程序数据流（C2；专项覆盖在 subroutine_test.cpp）
 // ---------------------------------------------------------------------------
 
 namespace {
@@ -517,8 +518,11 @@ std::shared_ptr<ClassSession> jsrClass()
 
 }   // namespace
 
-TEST(StrictFrameTest, JsrRetRejectedInStrictWithLocation)
+TEST(StrictFrameTest, JsrRetStrictComputesSingleCallerRoundtrip)
 {
+    // C2 起行为变化（曾为 Subroutine 显式拒绝）：jsr 压 ReturnAddress{0}，
+    // astore 存入 local2，ret 跳回调用方 jsr 的顺序后继（pc3）。最小往返
+    // 钉在主 strict 测试面，语义细节归 subroutine_test。
     auto s = jsrClass();
     ASSERT_NE(s, nullptr);
     auto p = promoteMethod(*s, 0);
@@ -526,12 +530,34 @@ TEST(StrictFrameTest, JsrRetRejectedInStrictWithLocation)
 
     StubResolver res;
     FrameEngine fe(s->backing().cp, res, FramePolicy::Strict);
-    const FrameSummary sum = fe.compute(*p.unwrap());
-    EXPECT_FALSE(sum.ok);
-    EXPECT_EQ(sum.fail, FrameSummary::Fail::Subroutine);
-    const ca::usize atJsr = indexAtPc(*p.unwrap(), 0);
-    ASSERT_NE(atJsr, static_cast<ca::usize>(-1));
-    EXPECT_EQ(sum.failAt, p.unwrap()->dom.order()[atJsr]);   // 定位到 jsr 指令
+    std::vector<FrameAt> frames;
+    const FrameSummary sum = fe.compute(*p.unwrap(), frames);
+    ASSERT_TRUE(sum.ok) << jbc::analysis::to_string(sum.fail);
+    EXPECT_TRUE(sum.hasSubroutine);
+    EXPECT_EQ(sum.degraded, 0u);   // Strict 建模：ret 不再计 degraded
+
+    // 子程序入口（pc5）栈顶 = 返回地址，载荷 = 调用方 jsr 的 pc。
+    const ca::usize atEntry = indexAtPc(*p.unwrap(), 5);
+    ASSERT_NE(atEntry, static_cast<ca::usize>(-1));
+    ASSERT_EQ(frames[atEntry].stack.size(), 1u);
+    EXPECT_EQ(frames[atEntry].stack[0].k, VKind::ReturnAddress);
+    EXPECT_EQ(frames[atEntry].stack[0].jsrPc(), 0u);
+
+    // ret（pc6）前：返回地址已在 local2。
+    const ca::usize atRet = indexAtPc(*p.unwrap(), 6);
+    ASSERT_NE(atRet, static_cast<ca::usize>(-1));
+    ASSERT_GE(frames[atRet].locals.size(), 3u);
+    EXPECT_EQ(frames[atRet].locals[2].k, VKind::ReturnAddress);
+    EXPECT_EQ(frames[atRet].locals[2].jsrPc(), 0u);
+
+    // 返回点（pc3，jsr 顺序后继）可达：栈空（返回地址已被 astore 消费）、
+    // 局部槽保留子程序出口态。
+    const ca::usize atSite = indexAtPc(*p.unwrap(), 3);
+    ASSERT_NE(atSite, static_cast<ca::usize>(-1));
+    EXPECT_TRUE(frames[atSite].reachable);
+    EXPECT_EQ(frames[atSite].stack.size(), 0u);
+    ASSERT_GE(frames[atSite].locals.size(), 3u);
+    EXPECT_EQ(frames[atSite].locals[2].k, VKind::ReturnAddress);
 }
 
 TEST(StrictFrameTest, JsrRetBestEffortUnchanged)
@@ -545,6 +571,7 @@ TEST(StrictFrameTest, JsrRetBestEffortUnchanged)
     const FrameSummary sum = fe.compute(*p.unwrap());
     EXPECT_TRUE(sum.ok);
     EXPECT_TRUE(sum.hasSubroutine);
+    EXPECT_GT(sum.degraded, 0u);   // BestEffort：legacy 计数不变（零漂移）
 }
 
 // ---------------------------------------------------------------------------
@@ -1424,7 +1451,7 @@ void seedJdkHierarchy(ParentMap& parent, IfaceMap& ifaces)
         "java/util/concurrent/ExecutorService");
     ifaces["java/util/concurrent/ExecutorService"].push_back("java/util/concurrent/Executor");
     mark("java/util/concurrent/Executor");
-    // JDK 基础族（private-corpus 语料常见汇合对象）。第三方库（jackson/asm/benf）
+    // JDK 基础族（大语料常见汇合对象）。第三方库（jackson/asm/benf）
     // 刻意不种子：其跨类汇合按知识缺席显式拒绝，保留不可算分布的活样本。
     parent["java/io/IOException"]         = "java/lang/Exception";
     parent["java/lang/ClassNotFoundException"] = "java/lang/ReflectiveOperationException";
@@ -1540,7 +1567,7 @@ TEST(StrictFrameOracle, CorpusSmtTwoState)
         GTEST_SKIP() << jbc::test::corpus::skipReason(src);
     }
 
-    // 语料根：主语料（env 注入 / 仓内自产 / private-corpus 回退）+ golden 注解样本类
+    // 语料根：主语料（env 注入 / 仓内自产）+ golden 注解样本类
     //（固定入仓，与其它语料闸门同源）。
     std::vector<fs::path> roots{fs::path(src.dir), fs::path("test_resource/libjbc/annotated")};
     std::vector<fs::path> files;

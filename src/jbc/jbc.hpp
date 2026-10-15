@@ -21,11 +21,14 @@
 #include "jbc/core/reader.hpp"
 #include "jbc/core/writer.hpp"
 
+#include "jbc/ir/change_set.hpp"
 #include "jbc/ir/code_dom.hpp"
 #include "jbc/ir/code_editor.hpp"
+#include "jbc/ir/cp_compact.hpp"
 #include "jbc/ir/error.hpp"
 #include "jbc/ir/sig_attr.hpp"
 #include "jbc/ir/symbol_pool.hpp"
+#include "jbc/ir/type_annotation_attr.hpp"
 #include "jbc/ir/units.hpp"
 
 #include "jbc/analysis/domain.hpp"

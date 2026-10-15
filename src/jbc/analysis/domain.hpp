@@ -5,7 +5,7 @@
 /// 置换、get/put/invoke 描述符效应——frame.cpp 时代修出的那一整链），值域 V
 /// 作为载荷随槽移动；消费者只实现域钩子（必选五个，可选细分全部有默认）。
 /// 旧栈 Interpreter<V> 换个值域要重写整张 per-opcode transfer 表（612 行/
-/// 域起跳，legacy-stack 三个 interpreter 各自如此）；本层把 transfer 留在引擎。
+/// 域起跳，三个 interpreter 各自如此）；本层把 transfer 留在引擎。
 ///
 /// FrameEngine（frame.hpp）是本模板的内置实例化：ShapeDomain 产出 VType，
 /// 单一起原则不破——实现只有这一份。
@@ -77,12 +77,36 @@ public:
         return receiver;
     }
 
-    /// RET 执行点（jsr/ret 遗留；引擎照旧记 degraded/hasSubroutine）。
-    /// 默认无操作；Strict 域覆写为置 Subroutine 失败（显式拒绝）。
+    /// jsr/jsr_w 压入的返回地址形态（C2）。默认退回 newValue(Int)——形状域
+    /// 不建模返回地址（legacy 行为逐位不变）；Strict 域覆写为携带调用方
+    /// jsr pc 的 ReturnAddress。
+    virtual V newReturnAddress(const ir::Insn& producer, ir::InsnId at)
+    {
+        return newValue(producer, at, VKind::Int);
+    }
+
+    /// RET 执行点（jsr/ret 遗留；引擎照旧记 hasSubroutine）。默认无操作。
+    /// Strict 域自 C2 起建模 ret 数据流（跳回由引擎按返回地址槽计算），
+    /// 本钩子仅保留给不建模子程序的域做观测/拒绝。
     virtual void onRet(const ir::Insn& in, ir::InsnId id)
     {
         (void)in;
         (void)id;
+    }
+
+    /// 是否建模子程序数据流（C2）。默认 false：引擎对 RET 保持 legacy 行为
+    /// （degraded 计数，无跳回边）；Strict 域覆写 true：RET 不计 degraded，
+    /// 引擎读返回地址槽发跳回边。
+    virtual bool modelsSubroutines() const { return false; }
+
+    /// C2：ret 返回地址求解（引擎只对 modelsSubroutines()=true 的域调用）。
+    /// 槽值可解析为返回地址（携带调用方 jsr pc）时返回 true；否则 false
+    /// （ret 读非返回地址槽——畸形，引擎显式拒绝并定位到 ret）。
+    virtual bool retSiteOf(const V& slotValue, ca::u32& jsrPc) const
+    {
+        (void)slotValue;
+        (void)jsrPc;
+        return false;
     }
 
     /// 异常边精确传播开关（J5/C3）。关闭（默认）：handler 入口在 analyze
@@ -528,9 +552,11 @@ void Machine<V>::applyLocal(const ir::Insn& in, ir::InsnId id, FrameSummary::Fai
             pushVal(dom.newValue(in, id, k), fail);
         }
     } else if (op == Op::RET) {
-        ++out.degraded;      // jsr/ret 遗留
-        out.hasSubroutine = true;   // 显式标记：帧不建模子程序（C2 前置事实）
-        dom.onRet(in, id);   // Strict 域据此显式拒绝（子程序数据流归 C2）
+        out.hasSubroutine = true;   // 显式标记：方法体含 RET（jsr/ret 遗留）
+        if (!dom.modelsSubroutines()) {
+            ++out.degraded;         // 不建模子程序的域：保持 legacy 计数
+        }
+        dom.onRet(in, id);   // Strict 域（C2 起）由引擎读返回地址槽发跳回边
     } else {
         const VKind k = storeKind(op);
         V v{};
@@ -715,7 +741,9 @@ void Machine<V>::apply(const ir::Insn& in, ir::InsnId id, FrameSummary::Fail& fa
             popSlots(1, fail);
         } else if (op == Op::GOTO || op == Op::GOTO_W || op == Op::JSR || op == Op::JSR_W) {
             if (op == Op::JSR || op == Op::JSR_W) {
-                pushVal(dom.newValue(in, id, VKind::Int), fail);   // returnAddress
+                // C2：jsr 压返回地址（JVMS §4.10.2.5/§6.5 jsr——地址 = jsr 的
+                // 顺序后继）。Strict 域携带调用方 jsr pc；形状域退 Int（legacy）。
+                pushVal(dom.newReturnAddress(in, id), fail);
             }
         } else {
             popSlots(2, fail);   // icmp/acmp 家族
@@ -1081,6 +1109,16 @@ DomainResult<V> DomainEngine<V>::analyze(const ir::CodeUnit& u, const MethodSig*
     for (ca::usize i = 0; i < order.size(); ++i) {
         posOf.emplace(order[i].slot, i);
     }
+    // C2：返回地址求解反查表（jsr 指令 srcPc → order 下标）；ret 据此把
+    // 跳回边落到调用方 jsr 的顺序后继。srcPc 逐指令唯一（promote 契约）。
+    std::unordered_map<ca::u32, ca::usize> pcToOrder;
+    pcToOrder.reserve(order.size() * 2);
+    for (ca::usize i = 0; i < order.size(); ++i) {
+        const ir::Insn* in = u.dom.peek(order[i]);
+        if (in != nullptr) {
+            pcToOrder.emplace(in->srcPc, i);
+        }
+    }
 
     const auto sameRow = [&](const SlotV<V>& a, const SlotV<V>& b) {
         return a.bottom == b.bottom && (a.bottom || dom_.equal(a.val, b.val));
@@ -1152,6 +1190,14 @@ DomainResult<V> DomainEngine<V>::analyze(const ir::CodeUnit& u, const MethodSig*
             if (inp->op == core::Op::GOTO || inp->op == core::Op::GOTO_W) {
                 fallthrough = false;
             }
+            if ((inp->op == core::Op::JSR || inp->op == core::Op::JSR_W) &&
+                dom_.modelsSubroutines()) {
+                // C2（仅建模子程序的域）：jsr 的顺序后继是返回点，只能经 ret
+                // 到达——不发顺序边（JVMS §4.10.2.5：jsr 只把控制流交给子
+                // 程序入口）。BestEffort 不建模 ret，保留 legacy 双后继传播
+                //（返回点经 fallthrough 保持可达——bit-identical 契约）。
+                fallthrough = false;
+            }
         } else if (sh == core::Shape::TableSwitch || sh == core::Shape::LookupSwitch) {
             appendTarget(inp->target);
             for (const ir::LabelId& t : inp->targets) {
@@ -1160,6 +1206,30 @@ DomainResult<V> DomainEngine<V>::analyze(const ir::CodeUnit& u, const MethodSig*
             fallthrough = false;
         } else {
             const core::Op op = inp->op;
+            if (op == core::Op::RET && dom_.modelsSubroutines()) {
+                // C2 子程序返回（JVMS §6.5 ret/§4.10.2.5）：后继 = 返回地址槽
+                // 指向的调用方 jsr 的顺序后继。RET 自身无 transfer 效应，后
+                // 状态即子程序出口态——子程序未改写的局部槽保留调用方值
+                //（单调用点时精确；JVMS §4.10.2.5 合并规则的单调用点退化形态）。
+                // 槽空/cat2 垫底/非返回地址（含 Top）= 畸形；返回点越界
+                //（jsr 是方法末条指令，返回地址无落点）= 结构畸形：两者显式
+                // 拒绝定位到 ret。
+                const ca::u32 slot = static_cast<ca::u32>(inp->a);
+                ca::u32 jsrPc = 0;
+                const bool resolved =
+                    slot < m.st.locals.size() && !m.st.locals[slot].bottom &&
+                    dom_.retSiteOf(m.st.locals[slot].val, jsrPc);
+                const auto site = resolved ? pcToOrder.find(jsrPc) : pcToOrder.end();
+                if (resolved && site->second + 1 < order.size()) {
+                    succ.push_back(order[site->second + 1]);
+                } else {
+                    out.fail   = FrameSummary::Fail::Subroutine;
+                    out.failAt = id;
+                    out.ok     = false;
+                    result.frames.clear();
+                    return result;
+                }
+            }
             const bool ends = op == core::Op::RETURN || op == core::Op::IRETURN ||
                               op == core::Op::LRETURN || op == core::Op::FRETURN ||
                               op == core::Op::DRETURN || op == core::Op::ARETURN ||
@@ -1394,7 +1464,10 @@ private:
 /// get/put/invoke/checkcast/ldc/aaload 携带精确内部名、aload/store 靠默认
 /// 恒等穿透已存值；merge 的结构性规则（Top 吸收、Null 引用底、Uninitialized
 /// 按 offset 判等）内置，跨类引用合并交注入 resolver，不可解置 TypeConflict
-/// 失败位，由引擎定位到合并点指令。jsr/ret 显式拒绝（Subroutine）。
+/// 失败位，由引擎定位到合并点指令。子程序数据流（C2，JVMS §4.10.2.5 族）：
+/// jsr 压 ReturnAddress{调用方 jsr pc}、ret 经局部槽跳回调用点顺序后继
+///（引擎发边，出口态携子程序改写后的局部槽）；returnAddress 只与自身合并，
+/// 异调用点互并（多调用点共享入口）显式拒绝（Subroutine）。
 /// 异常边精确传播开启（J5/C3）：handler 入口 = 抛出点 locals + [catch_type
 /// 精确类（CP Class 名；0 = any 播 Throwable）]，handler 不再无条件可达。
 ///
@@ -1421,6 +1494,14 @@ public:
             // BestEffort 形状格的吸收语义（ShapeDomain）格分离，见
             // design.md §10.2.3/§10.4.8。
             return VType{};
+        }
+        if (a.k == VKind::ReturnAddress || b.k == VKind::ReturnAddress) {
+            // C2：returnAddress 只与自身合并（JVMS §4.10.2.5 合并族；同值
+            // 已被上方 sameAs 早退吸收）。异值互并 = 不同 jsr 调用点共享同一
+            // 子程序入口——精确语义需逐调用点状态快照（JVMS §4.10.2.5 的
+            // touched-bit-vector 机制），本域显式拒绝（fail loud，不伪造帧）。
+            rejectSubroutine();
+            return VType{VKind::Bottom, 0, {}};
         }
         if (a.k == VKind::Null && b.k == VKind::Ref) {
             return b;   // null 是万能引用底
@@ -1493,10 +1574,6 @@ public:
             default: return VType{shape, 0, {}};
             }
         }
-        case Op::JSR:
-        case Op::JSR_W:
-            rejectSubroutine();
-            return VType{};
         default: return VType{shape, 0, {}};
         }
     }
@@ -1547,7 +1624,25 @@ public:
         return receiver;
     }
 
-    void onRet(const ir::Insn&, ir::InsnId) override { rejectSubroutine(); }
+    void onRet(const ir::Insn&, ir::InsnId) override {}
+
+    // ---- C2 子程序数据流（JVMS §4.10.2.5 族）----
+
+    VType newReturnAddress(const ir::Insn& in, ir::InsnId) override
+    {
+        return VType::retAddr(in.srcPc);   // 载荷 = 调用方 jsr 的 pc
+    }
+
+    bool modelsSubroutines() const override { return true; }
+
+    bool retSiteOf(const VType& v, ca::u32& jsrPc) const override
+    {
+        if (v.k != VKind::ReturnAddress) {
+            return false;
+        }
+        jsrPc = v.jsrPc();
+        return true;
+    }
 
     /// J5/C3：Strict 域启用精确异常边传播（handler 由出口边惰性并入）。
     bool preciseExceptionEdges() const override { return true; }

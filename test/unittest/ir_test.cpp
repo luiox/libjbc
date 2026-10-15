@@ -873,6 +873,481 @@ TEST(IrSessionTest, EditRelocatesLocalVariableTable)
     EXPECT_EQ(lvt.rows[0].length, 3u);
 }
 
+TEST(IrSessionTest, EditRelocatesLocalVariableTypeTableViaLvtChannel)
+{
+    // LVTT 与 LVT 同 kind（kind 6）合流：属性名不同、行形同构（start/len/
+    // name/sig/slot）。两条属性各挂一行（start=1, len=1），在 pop 后插 nop
+    // （old pc 0,1,2 → new 0,1,3）：start 1→1，旧终点 2 命中 pcmap → 新终点
+    // 3 → length 1→2（range 跨过插入的 nop）。重读断言两条都重定位且 LVTT
+    // 槽位的 typed kind 就是 LocalVariableTable（流入 relocateLvt 的证据）。
+    ClassBuilder cb;
+    const ca::u16 thisIdx = cb.utf8("p/T");
+    const ca::u16 superIdx = cb.utf8("java/lang/Object");
+    const ca::u16 codeIdx = cb.utf8("Code");
+    const ca::u16 lvtIdx = cb.utf8("LocalVariableTable");
+    const ca::u16 lvttIdx = cb.utf8("LocalVariableTypeTable");
+    const ca::u16 nameIdx = cb.utf8("v");
+    const ca::u16 descIdx = cb.utf8("Ljava/util/List;");
+    const ca::u16 sigIdx = cb.utf8("Ljava/util/List<Ljava/lang/String;>;");
+    const ca::u16 mIdx = cb.utf8("m");
+    const ca::u16 voidIdx = cb.utf8("()V");
+    cb.setThis(cb.classRef(thisIdx));
+    cb.setSuper(cb.classRef(superIdx));
+    cb.setAccess(0x0021);
+    cb.setVersion(52);
+
+    auto lvtRow = [nameIdx](ca::u16 typeIdx) {
+        return Bytes{0x00, 0x01,                     // row_count = 1
+                     0x00, 0x01, 0x00, 0x01,         // start_pc=1, length=1
+                     static_cast<ca::u8>(nameIdx >> 8),
+                     static_cast<ca::u8>(nameIdx & 0xFF),
+                     static_cast<ca::u8>(typeIdx >> 8),
+                     static_cast<ca::u8>(typeIdx & 0xFF),
+                     0x00, 0x01};                    // slot=1
+    };
+    const Bytes code = {0x04, 0x57, 0xb1};   // iconst_1; pop; return
+    std::vector<AttrSpec> nested;
+    nested.push_back(AttrSpec{lvtIdx, lvtRow(descIdx)});
+    nested.push_back(AttrSpec{lvttIdx, lvtRow(sigIdx)});
+    std::vector<AttrSpec> methodAttrs;
+    methodAttrs.push_back(AttrSpec{codeIdx, jbc::test::codeContent(1, 2, code, {}, nested)});
+    cb.addMethod(0x0009, mIdx, voidIdx, std::move(methodAttrs));
+
+    auto s = sessionOf(cb.build());
+    ASSERT_NE(s, nullptr);
+    auto p = promoteMethod(*s, 0);
+    ASSERT_TRUE(p.is_ok());
+    jbc::ir::CodeUnit& cu = *p.unwrap();
+    CodeEditor ed(cu);
+    ASSERT_TRUE(ed.insertAfter(cu.dom.order()[1], CodeEditor::simple(Op::NOP)).is_ok());
+    ASSERT_TRUE(lowerMethod(*s, 0).is_ok());
+
+    auto s2 = sessionOf(jbc::test::writeOk(s->backing()));
+    ASSERT_NE(s2, nullptr);
+    auto dc = s2->backing().decodeAttr(s2->backing().methods[0].attrs[0]);
+    ASSERT_TRUE(dc.is_ok());
+    auto& code2 = static_cast<CodeAttr&>(*dc.unwrap());
+    ASSERT_EQ(code2.attrs.size(), 2u);
+
+    // LVTT 槽位与 LVT 槽位同 typed kind（kind 6 合流，重用同一条 relocateLvt）。
+    for (AttrSlot& slot : code2.attrs) {
+        auto d = s2->backing().decodeAttr(slot);
+        ASSERT_TRUE(d.is_ok());
+        EXPECT_EQ(d.unwrap()->kind(), AttrKind::LocalVariableTable);
+    }
+    auto dl = s2->backing().decodeAttr(code2.attrs[0]);
+    ASSERT_TRUE(dl.is_ok());
+    const auto& lvt = static_cast<const LocalVariableTableAttr&>(*dl.unwrap());
+    ASSERT_EQ(lvt.rows.size(), 1u);
+    EXPECT_EQ(lvt.rows[0].startPc, 1u);
+    EXPECT_EQ(lvt.rows[0].length, 2u);   // 旧终点 2 → 新 3：range 跨过 nop
+    auto dt = s2->backing().decodeAttr(code2.attrs[1]);
+    ASSERT_TRUE(dt.is_ok());
+    const auto& lvtt = static_cast<const LocalVariableTableAttr&>(*dt.unwrap());
+    ASSERT_EQ(lvtt.rows.size(), 1u);
+    EXPECT_EQ(lvtt.rows[0].startPc, 1u);
+    EXPECT_EQ(lvtt.rows[0].length, 2u);
+    EXPECT_EQ(lvtt.rows[0].descCp, sigIdx);   // LVTT 第 4 列是 Signature 索引
+}
+
+/// @brief TA 注解条目最小构造：targetType + target_info + type_path +
+///        type_index + 空元素值表（重定位测试只关心 pc 载荷）。
+///        path 为 type_path 段字节序列（每段 2 字节），空表传缺省。
+static Bytes taEntry(ca::u8 targetType, const Bytes& targetInfo, ca::u16 typeIdx,
+                     const Bytes& path = {})
+{
+    Bytes b;
+    b.push_back(targetType);
+    b.insert(b.end(), targetInfo.begin(), targetInfo.end());
+    b.push_back(static_cast<ca::u8>(path.size() / 2));   // type_path: path_length
+    b.insert(b.end(), path.begin(), path.end());
+    b.push_back(static_cast<ca::u8>(typeIdx >> 8));
+    b.push_back(static_cast<ca::u8>(typeIdx & 0xFF));
+    b.push_back(0x00);   // num_element_value_pairs = 0
+    b.push_back(0x00);
+    return b;
+}
+
+/// @brief TA 属性体：num_annotations 前缀 + 条目（测试规模 ≤255 条）。
+static Bytes taAttr(const std::vector<Bytes>& entries)
+{
+    Bytes b{0x00, static_cast<ca::u8>(entries.size())};
+    for (const Bytes& e : entries) {
+        b.insert(b.end(), e.begin(), e.end());
+    }
+    return b;
+}
+
+/// @brief u2 大端字节。
+static Bytes u2b(ca::u16 v)
+{
+    return {static_cast<ca::u8>(v >> 8), static_cast<ca::u8>(v & 0xFF)};
+}
+
+/// @brief u2 大端三元组（localvar 行：start/length/slot）。
+static Bytes u2x3(ca::u16 a, ca::u16 b, ca::u16 c)
+{
+    Bytes r = u2b(a);
+    const Bytes hi = u2b(b);
+    const Bytes lo = u2b(c);
+    r.insert(r.end(), hi.begin(), hi.end());
+    r.insert(r.end(), lo.begin(), lo.end());
+    return r;
+}
+
+/// @brief 字节拼接。
+static Bytes cat(Bytes a, const Bytes& b)
+{
+    a.insert(a.end(), b.begin(), b.end());
+    return a;
+}
+
+TEST(IrSessionTest, EditRelocatesTypeAnnotationsOffsetTargets)
+{
+    // Code 内 RITA 双条目：CAST(0x47) offset=1（pop）、OFFSET(0x43) offset=2
+    // （return）。iconst_1 后插 nop（old 0,1,2 → new 0,1,3）：offset 1→2、
+    // 2→3；cast/type-arg 载荷后段（序号）与 type_path 不动。
+    ClassBuilder cb;
+    const ca::u16 thisIdx = cb.utf8("p/T");
+    const ca::u16 superIdx = cb.utf8("java/lang/Object");
+    const ca::u16 codeIdx = cb.utf8("Code");
+    const ca::u16 ritaIdx = cb.utf8("RuntimeInvisibleTypeAnnotations");
+    const ca::u16 tagIdx = cb.utf8("Lp/Tag;");
+    const ca::u16 mIdx = cb.utf8("m");
+    const ca::u16 voidIdx = cb.utf8("()V");
+    cb.setThis(cb.classRef(thisIdx));
+    cb.setSuper(cb.classRef(superIdx));
+    cb.setAccess(0x0021);
+    cb.setVersion(52);
+
+    Bytes castInfo = u2b(1);       // u2 offset
+    castInfo.push_back(0x00);      // u1 cast type_index（数组维度序号）
+    const Bytes castEntry =
+        taEntry(TypeAnnotationsAttr::kCast, castInfo, tagIdx, {0x03, 0x00});   // 实参路径 1 段
+    const Bytes rita = taAttr({
+        castEntry,
+        taEntry(0x43, u2b(2), tagIdx),   // instanceof 族 offset 目标
+    });
+    const Bytes code = {0x04, 0x57, 0xb1};   // iconst_1; pop; return
+    std::vector<AttrSpec> methodAttrs;
+    methodAttrs.push_back(AttrSpec{
+        codeIdx, jbc::test::codeContent(1, 0, code, {}, {AttrSpec{ritaIdx, rita}})});
+    cb.addMethod(0x0009, mIdx, voidIdx, std::move(methodAttrs));
+
+    auto s = sessionOf(cb.build());
+    ASSERT_NE(s, nullptr);
+    auto p = promoteMethod(*s, 0);
+    ASSERT_TRUE(p.is_ok());
+    jbc::ir::CodeUnit& cu = *p.unwrap();
+    CodeEditor ed(cu);
+    ASSERT_TRUE(ed.insertAfter(cu.dom.order()[0], CodeEditor::simple(Op::NOP)).is_ok());
+    ASSERT_TRUE(lowerMethod(*s, 0).is_ok());
+
+    auto s2 = sessionOf(jbc::test::writeOk(s->backing()));
+    ASSERT_NE(s2, nullptr);
+    auto dc = s2->backing().decodeAttr(s2->backing().methods[0].attrs[0]);
+    ASSERT_TRUE(dc.is_ok());
+    auto& code2 = static_cast<CodeAttr&>(*dc.unwrap());
+    ASSERT_EQ(code2.attrs.size(), 1u);
+    auto dr = s2->backing().decodeAttr(code2.attrs[0]);
+    ASSERT_TRUE(dr.is_ok());
+    const auto& ta = static_cast<const TypeAnnotationsAttr&>(*dr.unwrap());
+    ASSERT_EQ(ta.annotations.size(), 2u);
+    EXPECT_EQ(ta.annotations[0].targetType, TypeAnnotationsAttr::kCast);
+    EXPECT_EQ(ta.annotations[0].offset, 2u);          // 1 → 2（nop 插在其前）
+    EXPECT_EQ(ta.annotations[0].typeArgumentIndex, 0u);
+    ASSERT_EQ(ta.annotations[0].typePath.size(), 1u); // path 不携带 pc：原样
+    EXPECT_EQ(ta.annotations[0].typePath[0].kind, 3u);
+    EXPECT_EQ(ta.annotations[1].targetType, 0x43);
+    EXPECT_EQ(ta.annotations[1].offset, 3u);          // 2 → 3
+}
+
+TEST(IrSessionTest, EditRelocatesTypeAnnotationsLocalVarRows)
+{
+    // localvar_target 行走 LVT 同款终点规则：行 {start=1,len=1} 的旧终点 2
+    // 命中 pcmap；行 {start=0,len=3} 的旧终点 3==旧 code 长 → 钳到新长度。
+    // 方法开头插 nop（old 0,1,2 → new 1,2,3，新长 4）。
+    ClassBuilder cb;
+    const ca::u16 thisIdx = cb.utf8("p/T");
+    const ca::u16 superIdx = cb.utf8("java/lang/Object");
+    const ca::u16 codeIdx = cb.utf8("Code");
+    const ca::u16 ritaIdx = cb.utf8("RuntimeVisibleTypeAnnotations");
+    const ca::u16 tagIdx = cb.utf8("Lp/Tag;");
+    const ca::u16 mIdx = cb.utf8("m");
+    const ca::u16 voidIdx = cb.utf8("()V");
+    cb.setThis(cb.classRef(thisIdx));
+    cb.setSuper(cb.classRef(superIdx));
+    cb.setAccess(0x0021);
+    cb.setVersion(52);
+
+    Bytes lvInfo = u2b(2);                 // local_variable_table_length = 2
+    {   // 行1 {start=1, len=1, slot=1}
+        const Bytes r = u2x3(1, 1, 1);
+        lvInfo.insert(lvInfo.end(), r.begin(), r.end());
+    }
+    {   // 行2 {start=0, len=3, slot=2}（终点触底旧 code 长）
+        const Bytes r = u2x3(0, 3, 2);
+        lvInfo.insert(lvInfo.end(), r.begin(), r.end());
+    }
+    const Bytes rita = taAttr({taEntry(TypeAnnotationsAttr::kLocalVar, lvInfo, tagIdx)});
+    const Bytes code = {0x04, 0x57, 0xb1};
+    std::vector<AttrSpec> methodAttrs;
+    methodAttrs.push_back(AttrSpec{
+        codeIdx, jbc::test::codeContent(1, 3, code, {}, {AttrSpec{ritaIdx, rita}})});
+    cb.addMethod(0x0009, mIdx, voidIdx, std::move(methodAttrs));
+
+    auto s = sessionOf(cb.build());
+    ASSERT_NE(s, nullptr);
+    auto p = promoteMethod(*s, 0);
+    ASSERT_TRUE(p.is_ok());
+    jbc::ir::CodeUnit& cu = *p.unwrap();
+    CodeEditor ed(cu);
+    ASSERT_TRUE(ed.insertBefore(cu.dom.order()[0], CodeEditor::simple(Op::NOP)).is_ok());
+    ASSERT_TRUE(lowerMethod(*s, 0).is_ok());
+
+    auto s2 = sessionOf(jbc::test::writeOk(s->backing()));
+    ASSERT_NE(s2, nullptr);
+    auto dc = s2->backing().decodeAttr(s2->backing().methods[0].attrs[0]);
+    ASSERT_TRUE(dc.is_ok());
+    auto& code2 = static_cast<CodeAttr&>(*dc.unwrap());
+    auto dr = s2->backing().decodeAttr(code2.attrs[0]);
+    ASSERT_TRUE(dr.is_ok());
+    const auto& ta = static_cast<const TypeAnnotationsAttr&>(*dr.unwrap());
+    ASSERT_EQ(ta.annotations.size(), 1u);
+    ASSERT_EQ(ta.annotations[0].localVars.size(), 2u);
+    EXPECT_EQ(ta.annotations[0].localVars[0].startPc, 2u);   // 1 → 2
+    EXPECT_EQ(ta.annotations[0].localVars[0].length, 1u);    // 终点 2 → 3
+    EXPECT_EQ(ta.annotations[0].localVars[1].startPc, 1u);   // 0 → 1
+    EXPECT_EQ(ta.annotations[0].localVars[1].length, 3u);    // 终点触底钳新长 4
+}
+
+TEST(IrSessionTest, TypeAnnotationsNonOffsetTargetsSurviveRelocation)
+{
+    // 无 pc 目标（method return empty、catch 表下标）在布局改动中原样保留：
+    // catch_index 是异常表条目下标而非 pc，lower 重建异常表保持顺序，不动。
+    ClassBuilder cb;
+    const ca::u16 thisIdx = cb.utf8("p/T");
+    const ca::u16 superIdx = cb.utf8("java/lang/Object");
+    const ca::u16 codeIdx = cb.utf8("Code");
+    const ca::u16 ritaIdx = cb.utf8("RuntimeInvisibleTypeAnnotations");
+    const ca::u16 tagIdx = cb.utf8("Lp/Tag;");
+    const ca::u16 mIdx = cb.utf8("m");
+    const ca::u16 voidIdx = cb.utf8("()V");
+    cb.setThis(cb.classRef(thisIdx));
+    cb.setSuper(cb.classRef(superIdx));
+    cb.setAccess(0x0021);
+    cb.setVersion(52);
+
+    const Bytes rita = taAttr({
+        taEntry(TypeAnnotationsAttr::kMethodReturn, {}, tagIdx),   // empty_target
+        taEntry(TypeAnnotationsAttr::kCatch, u2b(0), tagIdx),      // catch_index=0
+    });
+    const Bytes code = {0x04, 0x57, 0xb1};
+    std::vector<AttrSpec> methodAttrs;
+    methodAttrs.push_back(AttrSpec{
+        codeIdx, jbc::test::codeContent(1, 0, code, {}, {AttrSpec{ritaIdx, rita}})});
+    cb.addMethod(0x0009, mIdx, voidIdx, std::move(methodAttrs));
+
+    auto s = sessionOf(cb.build());
+    ASSERT_NE(s, nullptr);
+    auto p = promoteMethod(*s, 0);
+    ASSERT_TRUE(p.is_ok());
+    jbc::ir::CodeUnit& cu = *p.unwrap();
+    CodeEditor ed(cu);
+    ASSERT_TRUE(ed.insertAfter(cu.dom.order()[0], CodeEditor::simple(Op::NOP)).is_ok());
+    ASSERT_TRUE(lowerMethod(*s, 0).is_ok());
+
+    auto s2 = sessionOf(jbc::test::writeOk(s->backing()));
+    ASSERT_NE(s2, nullptr);
+    auto dc = s2->backing().decodeAttr(s2->backing().methods[0].attrs[0]);
+    ASSERT_TRUE(dc.is_ok());
+    auto& code2 = static_cast<CodeAttr&>(*dc.unwrap());
+    auto dr = s2->backing().decodeAttr(code2.attrs[0]);
+    ASSERT_TRUE(dr.is_ok());
+    const auto& ta = static_cast<const TypeAnnotationsAttr&>(*dr.unwrap());
+    ASSERT_EQ(ta.annotations.size(), 2u);
+    EXPECT_EQ(ta.annotations[0].targetType, TypeAnnotationsAttr::kMethodReturn);
+    EXPECT_EQ(ta.annotations[1].targetType, TypeAnnotationsAttr::kCatch);
+    EXPECT_EQ(ta.annotations[1].catchIndex, 0u);
+}
+
+TEST(IrSessionTest, TypeAnnotationsBadOffsetFailsClosed)
+{
+    // CAST offset=5 不在任何指令起点 → RelocationBadTarget；全有或全无：
+    // 元数据、code、同表 LNT、TA 全部保持原样（TA 槽保持 Decoded 不脏）。
+    ClassBuilder cb;
+    const ca::u16 thisIdx = cb.utf8("p/T");
+    const ca::u16 superIdx = cb.utf8("java/lang/Object");
+    const ca::u16 codeIdx = cb.utf8("Code");
+    const ca::u16 lntIdx = cb.utf8("LineNumberTable");
+    const ca::u16 ritaIdx = cb.utf8("RuntimeInvisibleTypeAnnotations");
+    const ca::u16 tagIdx = cb.utf8("Lp/Tag;");
+    const ca::u16 mIdx = cb.utf8("m");
+    const ca::u16 voidIdx = cb.utf8("()V");
+    cb.setThis(cb.classRef(thisIdx));
+    cb.setSuper(cb.classRef(superIdx));
+    cb.setAccess(0x0021);
+    cb.setVersion(52);
+
+    Bytes castInfo = u2b(5);       // 越界 offset：pcmap 必 miss
+    castInfo.push_back(0x00);
+    const Bytes rita = taAttr({taEntry(TypeAnnotationsAttr::kCast, castInfo, tagIdx)});
+    const Bytes code = {0x04, 0x57, 0xb1};
+    std::vector<AttrSpec> nested;
+    nested.push_back(AttrSpec{lntIdx, {0x00, 0x01, 0x00, 0x00, 0x00, 0x01}});
+    nested.push_back(AttrSpec{ritaIdx, rita});
+    std::vector<AttrSpec> methodAttrs;
+    methodAttrs.push_back(AttrSpec{codeIdx, jbc::test::codeContent(1, 0, code, {}, nested)});
+    cb.addMethod(0x0009, mIdx, voidIdx, std::move(methodAttrs));
+
+    const Bytes original = cb.build();
+    auto s = sessionOf(original);
+    ASSERT_NE(s, nullptr);
+    auto p = promoteMethod(*s, 0);
+    ASSERT_TRUE(p.is_ok());
+    jbc::ir::CodeUnit& cu = *p.unwrap();
+    CodeEditor ed(cu);
+    ASSERT_TRUE(ed.insertAfter(cu.dom.order()[0], CodeEditor::simple(Op::NOP)).is_ok());
+
+    const ca::u32 cpSize = s->backing().cp.size();
+    const auto r = lowerMethod(*s, 0);
+    ASSERT_TRUE(r.is_err());
+    EXPECT_EQ(r.unwrap_err(), jbc::ir::LowerError::RelocationBadTarget);
+    EXPECT_EQ(s->backing().cp.size(), cpSize);
+    EXPECT_EQ(jbc::test::writeOk(s->backing()), original);
+
+    auto dc = s->backing().decodeAttr(s->backing().methods[0].attrs[0]);
+    ASSERT_TRUE(dc.is_ok());
+    auto& codeAttr = static_cast<CodeAttr&>(*dc.unwrap());
+    ASSERT_EQ(codeAttr.attrs.size(), 2u);
+    EXPECT_EQ(codeAttr.attrs[0].state, AttrSlot::State::Decoded);   // LNT 未半改
+    auto dr = s->backing().decodeAttr(codeAttr.attrs[1]);
+    ASSERT_TRUE(dr.is_ok());
+    const auto& ta = static_cast<const TypeAnnotationsAttr&>(*dr.unwrap());
+    ASSERT_EQ(ta.annotations.size(), 1u);
+    EXPECT_EQ(ta.annotations[0].offset, 5u);
+    EXPECT_EQ(codeAttr.attrs[1].state, AttrSlot::State::Decoded);   // TA 未半改
+}
+
+TEST(IrSessionTest, EditRelocatesCharacterRangeTable)
+{
+    // CRT（javac -Xjcov 私有属性）行双列都是指令起始 pc：start_pc/end_pc
+    // 各自精确命中 pcmap。iconst_1 后插 nop（old 0,1,2 → new 0,1,3）：
+    // 行 {1,2} → {2,3}；行 {0,2} → {0,3}。char 列与 flags 不携带 pc，不动。
+    ClassBuilder cb;
+    const ca::u16 thisIdx = cb.utf8("p/T");
+    const ca::u16 superIdx = cb.utf8("java/lang/Object");
+    const ca::u16 codeIdx = cb.utf8("Code");
+    const ca::u16 crtIdx = cb.utf8("CharacterRangeTable");
+    const ca::u16 mIdx = cb.utf8("m");
+    const ca::u16 voidIdx = cb.utf8("()V");
+    cb.setThis(cb.classRef(thisIdx));
+    cb.setSuper(cb.classRef(superIdx));
+    cb.setAccess(0x0021);
+    cb.setVersion(52);
+
+    auto row = [](ca::u16 start, ca::u16 end) {
+        // {u2 start, u2 end, u4 charStart, u4 charEnd, u2 flags}
+        static const Bytes kChars = {0x00, 0x00, 0x0c, 0x09, 0x00, 0x00, 0x0c, 0x17};
+        return cat(cat(u2b(start), u2b(end)), cat(kChars, u2b(1)));
+    };
+    Bytes crt = u2b(2);
+    const Bytes r0 = row(1, 2);
+    const Bytes r1 = row(0, 2);
+    crt.insert(crt.end(), r0.begin(), r0.end());
+    crt.insert(crt.end(), r1.begin(), r1.end());
+
+    const Bytes code = {0x04, 0x57, 0xb1};
+    std::vector<AttrSpec> methodAttrs;
+    methodAttrs.push_back(AttrSpec{
+        codeIdx, jbc::test::codeContent(1, 0, code, {}, {AttrSpec{crtIdx, crt}})});
+    cb.addMethod(0x0009, mIdx, voidIdx, std::move(methodAttrs));
+
+    auto s = sessionOf(cb.build());
+    ASSERT_NE(s, nullptr);
+    auto p = promoteMethod(*s, 0);
+    ASSERT_TRUE(p.is_ok());
+    jbc::ir::CodeUnit& cu = *p.unwrap();
+    CodeEditor ed(cu);
+    ASSERT_TRUE(ed.insertAfter(cu.dom.order()[0], CodeEditor::simple(Op::NOP)).is_ok());
+    ASSERT_TRUE(lowerMethod(*s, 0).is_ok());
+
+    const Bytes out = jbc::test::writeOk(s->backing());
+    auto s2 = sessionOf(out);
+    ASSERT_NE(s2, nullptr);
+    auto dc = s2->backing().decodeAttr(s2->backing().methods[0].attrs[0]);
+    ASSERT_TRUE(dc.is_ok());
+    auto& code2 = static_cast<CodeAttr&>(*dc.unwrap());
+    ASSERT_EQ(code2.attrs.size(), 1u);
+    auto dr = s2->backing().decodeAttr(code2.attrs[0]);
+    ASSERT_TRUE(dr.is_ok());
+    EXPECT_EQ(code2.attrs[0].peek()->kind(), AttrKind::CharacterRangeTable);
+    const auto& crt2 = static_cast<const CharacterRangeTableAttr&>(*dr.unwrap());
+    ASSERT_EQ(crt2.rows.size(), 2u);
+    EXPECT_EQ(crt2.rows[0].startPc, 2u);   // 1 → 2
+    EXPECT_EQ(crt2.rows[0].endPc, 3u);     // 2 → 3
+    EXPECT_EQ(crt2.rows[1].startPc, 0u);   // 0 → 0
+    EXPECT_EQ(crt2.rows[1].endPc, 3u);     // 2 → 3
+    EXPECT_EQ(crt2.rows[0].charStart, 0x0c09u);   // 非 pc 列不动
+    EXPECT_EQ(crt2.rows[0].flags, 1u);
+}
+
+TEST(IrSessionTest, CharacterRangeTableBadPcFailsClosed)
+{
+    // CRT 行 end_pc=9 不在任何指令起点：CRT 已建模，因此是 RelocationBadTarget
+    // （而不是未建模墙的 NotModeled）；全有或全无——code 与同表 LNT 原样。
+    ClassBuilder cb;
+    const ca::u16 thisIdx = cb.utf8("p/T");
+    const ca::u16 superIdx = cb.utf8("java/lang/Object");
+    const ca::u16 codeIdx = cb.utf8("Code");
+    const ca::u16 lntIdx = cb.utf8("LineNumberTable");
+    const ca::u16 crtIdx = cb.utf8("CharacterRangeTable");
+    const ca::u16 mIdx = cb.utf8("m");
+    const ca::u16 voidIdx = cb.utf8("()V");
+    cb.setThis(cb.classRef(thisIdx));
+    cb.setSuper(cb.classRef(superIdx));
+    cb.setAccess(0x0021);
+    cb.setVersion(52);
+
+    Bytes crt = u2b(1);
+    const Bytes r0 = cat(cat(u2b(0), u2b(9)),
+                         cat(Bytes{0x00, 0x00, 0x0c, 0x09, 0x00, 0x00, 0x0c, 0x17}, u2b(1)));
+    crt.insert(crt.end(), r0.begin(), r0.end());
+
+    const Bytes code = {0x04, 0x57, 0xb1};
+    std::vector<AttrSpec> nested;
+    nested.push_back(AttrSpec{lntIdx, {0x00, 0x01, 0x00, 0x00, 0x00, 0x01}});
+    nested.push_back(AttrSpec{crtIdx, crt});
+    std::vector<AttrSpec> methodAttrs;
+    methodAttrs.push_back(AttrSpec{codeIdx, jbc::test::codeContent(1, 0, code, {}, nested)});
+    cb.addMethod(0x0009, mIdx, voidIdx, std::move(methodAttrs));
+
+    const Bytes original = cb.build();
+    auto s = sessionOf(original);
+    ASSERT_NE(s, nullptr);
+    auto p = promoteMethod(*s, 0);
+    ASSERT_TRUE(p.is_ok());
+    jbc::ir::CodeUnit& cu = *p.unwrap();
+    CodeEditor ed(cu);
+    ASSERT_TRUE(ed.insertAfter(cu.dom.order()[0], CodeEditor::simple(Op::NOP)).is_ok());
+
+    const auto r = lowerMethod(*s, 0);
+    ASSERT_TRUE(r.is_err());
+    EXPECT_EQ(r.unwrap_err(), jbc::ir::LowerError::RelocationBadTarget);
+    EXPECT_EQ(jbc::test::writeOk(s->backing()), original);
+
+    auto dc = s->backing().decodeAttr(s->backing().methods[0].attrs[0]);
+    ASSERT_TRUE(dc.is_ok());
+    auto& codeAttr = static_cast<CodeAttr&>(*dc.unwrap());
+    auto dl = s->backing().decodeAttr(codeAttr.attrs[0]);
+    ASSERT_TRUE(dl.is_ok());
+    const auto& lnt = static_cast<const LineNumberTableAttr&>(*dl.unwrap());
+    ASSERT_EQ(lnt.rows.size(), 1u);
+    EXPECT_EQ(lnt.rows[0].startPc, 0u);   // LNT 未半改
+    EXPECT_EQ(codeAttr.attrs[0].state, AttrSlot::State::Decoded);
+    EXPECT_EQ(codeAttr.attrs[1].state, AttrSlot::State::Decoded);
+}
+
 TEST(IrSessionTest, RelocatesCompactStackMapFrameDelta)
 {
     const Bytes code = {0x00, 0x00, 0x00, 0xb1};   // return at old pc=3

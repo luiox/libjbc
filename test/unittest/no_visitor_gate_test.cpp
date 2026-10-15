@@ -95,7 +95,7 @@ struct Violation
 };
 
 /// 定位 src 根：优先运行目录约定（xmake `set_rundir("$(projectdir)")` →
-/// morpher 根），回退 __FILE__（编译期路径，测试文件在 test/unittest/ 下）。
+/// 仓根），回退 __FILE__（编译期路径，测试文件在 test/unittest/ 下）。
 /// 两处都找不到 = 测试环境错配，返回空由调用方 FAIL——门禁缺席必须可见，
 /// 不做 skip。
 fs::path srcRoot()

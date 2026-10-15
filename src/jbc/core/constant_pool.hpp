@@ -187,6 +187,25 @@ public:
     ca::u32 addDoubleBits(ca::u64 bits);
     ca::u32 addRef(CpTag tag, ca::u32 classCp, ca::u32 nameAndTypeCp);
 
+    /// @brief 追加 MethodHandle（JVMS 4.4.8）：kind 为 reference_kind（1..9），
+    ///        refCp 指向 Fieldref/Methodref/InterfaceMethodref。
+    ca::u32 addMethodHandle(ca::u32 kind, ca::u32 refCp);
+
+    /// @brief 追加 MethodType（JVMS 4.4.9）：descCp 指向方法描述符 Utf8。
+    ca::u32 addMethodType(ca::u32 descCp);
+
+    /// @brief 追加 Dynamic（JVMS 4.4.10）：bsmIndex 是 BootstrapMethods 属性的
+    ///        条目下标（不是 CP 索引），nameAndTypeCp 指向 NameAndType。
+    ca::u32 addDynamic(ca::u32 bsmIndex, ca::u32 nameAndTypeCp);
+
+    /// @brief 追加 InvokeDynamic（JVMS 4.4.10）：参数语义与 @ref addDynamic 同。
+    ca::u32 addInvokeDynamic(ca::u32 bsmIndex, ca::u32 nameAndTypeCp);
+
+    /// @brief 追加 Module/Package（JVMS 4.4.11）：nameCp 指向 Utf8
+    ///        （module-info 专用形态）。
+    ca::u32 addModule(ca::u32 nameCp);
+    ca::u32 addPackage(ca::u32 nameCp);
+
     /// @brief 追加起点：写回时 [1, restorePoint) 可 copy 原字节，之后须重编码。
     ca::u32 restorePoint() const noexcept { return restorePoint_; }
 

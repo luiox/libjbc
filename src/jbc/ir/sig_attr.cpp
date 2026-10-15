@@ -25,21 +25,16 @@ bool isSignatureSlot(const core::ClassFile& cf, const core::AttrSlot& slot) noex
 
 /// @brief 解码并读出属性体：Signature 体 = u2 signature_index（JVMS 4.7.9）。
 ///
-/// Signature 现状不在已建模属性之列——Raw 兜底是全库既定契约（下游 mjbase
-/// 按 Raw 字节消费）。手术面因此在 Raw 体上原位读写 u2，属性模型零改动；
-/// 体不足 2 字节属畸形，显式 Err（未触碰写回仍走 copy 逐字节无损，§29）。
+/// Signature 是已建模属性（@ref SignatureAttr，typed 解码按属性名分派）；
+/// 体不足 2 字节属畸形，解码即 Err（未触碰写回仍走 copy 逐字节无损，§29）。
 Result<ca::u32, SigAttrError> readSignatureIndex(core::ClassFile& cf, core::AttrSlot& slot)
 {
     const Result<core::AttrBody*, core::ReadError> d = cf.decodeAttr(slot);
     if (d.is_err()) {
         return Err(SigAttrError{SigAttrError::Kind::SlotDecode, {}});
     }
-    auto* raw = static_cast<core::RawAttr*>(std::move(d).unwrap());
-    const std::vector<ca::u8>& b = raw->bytes();
-    if (b.size() < 2) {
-        return Err(SigAttrError{SigAttrError::Kind::SlotDecode, {}});
-    }
-    return Ok((ca::u32(b[0]) << 8) | ca::u32(b[1]));
+    auto* attr = static_cast<core::SignatureAttr*>(std::move(d).unwrap());
+    return Ok(attr->signatureCp);
 }
 
 /// @brief 查重落位：命中既有池返回原索引，miss 才追加（追加前做容量预检）。
@@ -90,10 +85,10 @@ Result<ca::u32, SigAttrError> planSlot(core::ClassFile& cf, core::AttrSlot& slot
     return Ok(renamed.hits);
 }
 
-/// @brief 落位一个待改写项：intern 去重 + 原位改写 u2 体 + 置脏。
+/// @brief 落位一个待改写项：intern 去重 + 改写 signature_index + 置脏。
 ///
-/// 体长 > 2 的畸形输入（尾部垃圾同族）只改前两字节，其余原样保留——Raw
-/// 体写回逐字节copy，天然不丢尾。
+/// 体长 > 2 的畸形输入（尾部垃圾同族）只改 u2 索引，尾部经 trailing 原样
+/// 保留——重编码写回天然不丢尾。
 Result<void, SigAttrError> applyPending(core::ClassFile& cf, const PendingRename& p)
 {
     auto idx = internSignatureString(cf, std::string_view{p.newSig});
@@ -101,9 +96,8 @@ Result<void, SigAttrError> applyPending(core::ClassFile& cf, const PendingRename
         return Err(std::move(idx).unwrap_err());
     }
     const ca::u32 newIdx = std::move(idx).unwrap();
-    auto* raw  = static_cast<core::RawAttr*>(p.slot->mutate());
-    raw->bytes()[0] = static_cast<ca::u8>(newIdx >> 8);
-    raw->bytes()[1] = static_cast<ca::u8>(newIdx);
+    auto* attr = static_cast<core::SignatureAttr*>(p.slot->mutate());
+    attr->signatureCp = newIdx;
     return Ok();
 }
 
@@ -201,6 +195,124 @@ renameClassInSignatureAttrs(core::ClassFile& cf, std::string_view old_internal,
     //      如实传播，不静默吞）----
     for (const PendingRename& p : pending) {
         auto r = applyPending(cf, p);
+        if (r.is_err()) {
+            return Err(std::move(r).unwrap_err());
+        }
+        st.hits += p.hits;
+    }
+    return Ok(st);
+}
+
+namespace {
+
+/// @brief 一个 LVTT 待落位行：宿主槽 + 行坐标 + 改写后的新签名串 + 命中数。
+///
+/// 行指针在预检与落位两阶段间有效（两阶段之间不改写任何行表结构，向量
+/// 不重分配）。
+struct LvttPendingRow
+{
+    core::AttrSlot* slot;
+    core::LocalVariableTableAttr::Row* row;
+    ca::str::Utf8String newSig;
+    ca::u32 hits;
+};
+
+/// @brief 落位一个 LVTT 待改写行：intern 去重 + 改行 descCp + 槽置脏。
+Result<void, SigAttrError> applyLvttPending(core::ClassFile& cf,
+                                            const LvttPendingRow& p)
+{
+    auto idx = internSignatureString(cf, std::string_view{p.newSig});
+    if (idx.is_err()) {
+        return Err(std::move(idx).unwrap_err());
+    }
+    auto* lvt = static_cast<core::LocalVariableTableAttr*>(p.slot->mutate());
+    p.row->descCp = std::move(idx).unwrap();
+    return Ok();
+}
+
+}   // namespace
+
+Result<LvttRenameSummary, SigAttrError>
+renameClassInLocalVariableTypeTables(core::ClassFile& cf,
+                                     std::string_view old_internal,
+                                     std::string_view new_internal)
+{
+    using jbc::type::SignatureForm;
+
+    constexpr std::string_view kCodeName = "Code";
+    constexpr std::string_view kLvttName = "LocalVariableTypeTable";
+
+    // ---- 阶段一：全量预检（纯读）。解码只推进 Untouched→Decoded，写回对
+    //      Decoded 仍走 copy；任何解码/解析失败在此整体 Err，零改写零追加。
+    //      行指针跨阶段存续（见 LvttPendingRow）。----
+    std::vector<LvttPendingRow> pending;
+    LvttRenameSummary st;
+    core::AttrSlot* lastSlot = nullptr;   ///< pending 追加序即槽游程序，表计数用
+
+    for (core::MemberInfo& m : cf.methods) {
+        for (core::AttrSlot& slot : m.attrs) {
+            if (!cf.cp.utf8Equals(slot.nameCp, kCodeName)) {
+                continue;
+            }
+            auto d = cf.decodeAttr(slot);
+            if (d.is_err()) {
+                return Err(SigAttrError{SigAttrError::Kind::SlotDecode, {}});
+            }
+            auto* code = static_cast<core::CodeAttr*>(std::move(d).unwrap());
+            for (core::AttrSlot& nested : code->attrs) {
+                if (!cf.cp.utf8Equals(nested.nameCp, kLvttName)) {
+                    continue;
+                }
+                auto ld = cf.decodeAttr(nested);
+                if (ld.is_err()) {
+                    return Err(SigAttrError{SigAttrError::Kind::SlotDecode, {}});
+                }
+                auto* lvt =
+                    static_cast<core::LocalVariableTableAttr*>(std::move(ld).unwrap());
+                ++st.tablesTotal;
+                for (core::LocalVariableTableAttr::Row& row : lvt->rows) {
+                    const std::string_view sig = cf.utf8(row.descCp);
+                    auto r = jbc::type::renameClassInSignature(
+                        sig, SignatureForm::Field, old_internal, new_internal);
+                    if (r.is_err()) {
+                        return Err(SigAttrError{SigAttrError::Kind::Signature,
+                                                std::move(r).unwrap_err()});
+                    }
+                    jbc::type::SigRenameResult renamed = std::move(r).unwrap();
+                    if (renamed.hits == 0) {
+                        continue;
+                    }
+                    pending.push_back(LvttPendingRow{
+                        &nested, &row, std::move(renamed.signature), renamed.hits});
+                    if (lastSlot != &nested) {
+                        ++st.tablesChanged;
+                        lastSlot = &nested;
+                    }
+                }
+            }
+        }
+    }
+    if (pending.empty()) {
+        return Ok(st);   // 未命中：零改写、零追加
+    }
+    st.rowsChanged = static_cast<ca::u32>(pending.size());
+
+    // ---- 阶段二：容量预检（先算后写；新串经查重后仍 miss 的条目数，
+    //      重复新串只追加一次——首个落位后其余命中既有池）----
+    ca::u32 additions = 0;
+    for (const LvttPendingRow& p : pending) {
+        if (cf.cp.findUtf8(std::string_view{p.newSig}) == 0) {
+            ++additions;
+        }
+    }
+    if (cf.cp.size() + additions > kMaxCpCount) {
+        return Err(SigAttrError{SigAttrError::Kind::CpCapacity, {}});
+    }
+
+    // ---- 阶段三：统一落位（容量已过，intern 不再失败；错误通道保留是
+    //      如实传播，不静默吞）----
+    for (const LvttPendingRow& p : pending) {
+        auto r = applyLvttPending(cf, p);
         if (r.is_err()) {
             return Err(std::move(r).unwrap_err());
         }

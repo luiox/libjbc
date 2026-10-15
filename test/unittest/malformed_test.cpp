@@ -202,9 +202,9 @@ TEST(MalformedTest, TruncatedCodeBodyFailsDecodeButWritesByteExact)
 
 TEST(MalformedTest, TruncatedKnownAttrBodiesFailDecode)
 {
-    // 六族已知属性各自的「半截体」：声明计数读完、载荷不足。
-    // （Signature 属性不在已建模之列：Raw 兜底不产 decode Err，其半截体
-    //   的手术拒绝面在 sig_attr_test。）
+    // 各已知属性各自的「半截体」：声明计数读完、载荷不足。
+    // （Signature 已建模（u2 体）：半截体同样 decode Err；未触碰写回逐字节
+    //   copy，手术拒绝面在 sig_attr_test。）
     struct Case
     {
         const char* name;
@@ -217,6 +217,7 @@ TEST(MalformedTest, TruncatedKnownAttrBodiesFailDecode)
         {"LocalVariableTable", lvtRow},                                      // 行中途截断
         {"StackMapTable", {0x00, 0x01}},                                     // 1 帧无载荷
         {"RuntimeVisibleAnnotations", {0x00, 0x01, 0x00, 0x10, 0x00, 0x01, 0x73}},  // 值截半
+        {"Signature", {0x00}},                                               // u2 截半
     };
     for (const Case& c : cases) {
         ClassBuilder cb;

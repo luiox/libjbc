@@ -8,7 +8,10 @@
 /// Uninitialized 形态，合并经注入的 ITypeResolver 求解，算不动以指令级
 /// 诊断显式拒绝（验收口径：可算者与 javac 一致、不可算者显式拒绝并给
 /// 指令定位）。ITypeResolver 可注入：公共父类求解需要类层级，默认
-/// ShapeResolver 不区分引用子类型；真实现归 mjbase（层次图求解）。
+/// ShapeResolver 不区分引用子类型；真实现归上层消费方（层次图求解）。
+/// Strict 域自 C2 起建模 jsr/ret 子程序数据流（JVMS §4.10.2.5：
+/// jsr 压返回地址、ret 经局部槽跳回；单调用点精确，多调用点共享入口
+/// 显式拒绝——见 design.md §10.6）。
 #pragma once
 
 #include <memory>
@@ -44,7 +47,8 @@ enum class VKind : ca::u8 {
     Ref,
     Null,
     UninitThis,
-    Uninitialized,   ///< new 产出的未初始化实例（§10.1：按 new 指令 pc 判等）
+    Uninitialized,    ///< new 产出的未初始化实例（§10.1：按 new 指令 pc 判等）
+    ReturnAddress,    ///< jsr 压入的返回地址（C2：按调用方 jsr 指令 pc 判等）
     Bottom,
 };
 
@@ -52,12 +56,13 @@ enum class VKind : ca::u8 {
 ///
 /// - BestEffort：只有 k（+ Ref 的 cls 诊断）有效，name 恒空。
 /// - Strict：Ref 携带精确内部名（name，借用 CP 视图，寿命 = 常量池）；
-///   Uninitialized 的 cls 字段承载产生方 new 指令的 pc（uninitOffset()）。
+///   Uninitialized 的 cls 字段承载产生方 new 指令的 pc（uninitOffset()）；
+///   ReturnAddress 的 cls 字段承载调用方 jsr 指令的 pc（jsrPc()，C2）。
 ///   UninitThis 只出现在构造器超调用前的 this 槽（§10.1）。
 struct VType
 {
     VKind k = VKind::Top;
-    ca::u32 cls = 0;       ///< Ref 的 CP Class 索引；Uninitialized 时为 new 的 pc
+    ca::u32 cls = 0;       ///< Ref 的 CP Class 索引；Uninitialized/ReturnAddress 时为指令 pc
     std::string_view name; ///< Strict：Ref 的精确内部名（借用视图，可为空）
 
     /// 槽位数（cat2 = 2）。
@@ -65,6 +70,9 @@ struct VType
 
     /// Uninitialized 形态：产生方 new 指令的 pc。
     ca::u32 uninitOffset() const noexcept { return cls; }
+
+    /// ReturnAddress 形态：调用方 jsr 指令的 pc（ret 据此跳回其顺序后继）。
+    ca::u32 jsrPc() const noexcept { return cls; }
 
     /// 精确类名引用形态（Strict）。
     static VType ref(std::string_view internalName) noexcept
@@ -76,6 +84,12 @@ struct VType
     static VType uninitNew(ca::u32 newPc) noexcept
     {
         return VType{VKind::Uninitialized, newPc, {}};
+    }
+
+    /// ReturnAddress 形态：pc 为调用方 jsr 指令偏移（C2）。
+    static VType retAddr(ca::u32 jsrPc) noexcept
+    {
+        return VType{VKind::ReturnAddress, jsrPc, {}};
     }
 
     /// Strict 帧比对语义的相等（k + 名字 + uninit offset；cls 诊断位不计）。
@@ -95,7 +109,7 @@ enum class TypeMergeError : ca::u8 {
 ///
 /// 只解决「两个具体引用类型的公共父类」；结构性规则（Top 吸收、Null 底、
 /// Uninitialized 按 offset 判等）由计算域内置，不经此接口。实现体归
-/// mjbase（层次图求解）；libjbc 内置 ShapeResolver 作默认降级。字符串
+/// 上层消费方（层次图求解）；libjbc 内置 ShapeResolver 作默认降级。字符串
 /// 参数是借用视图（寿命 = 常量池）。
 class ITypeResolver
 {
@@ -141,13 +155,17 @@ struct FrameSummary
         BadCpRef,      ///< CP 引用无法解析（描述符缺失等）
         Wide,
         NoFixpoint,    ///< 访问量超熔断阈值：状态不收敛（建模缺陷的兜底报告）
-        Subroutine,    ///< jsr/ret：Strict 域显式拒绝（子程序数据流归 C2）
+        Subroutine,    ///< 子程序路径畸形/不可算（C2）：ret 读非返回地址槽、
+                       ///<   返回点越界（jsr 无顺序后继）、多调用点共享入口的
+                       ///<   returnAddress 合并冲突（JVMS 4.10.2.5：只与自身
+                       ///<   合并）；jsr/ret 数据流本身已建模，不再整体拒绝
         TypeConflict,  ///< Strict：跨类合并/异 offset Uninit 合并等不可算冲突
         NoResolver,    ///< Strict：未注入 ITypeResolver（fail loud，不降级）
         NotSupported,  ///< Preserve：占位档被选入计算路径（读侧归 C4/J7）
     } fail = Fail::None;
     ir::InsnId failAt = ir::kNoInsn;   ///< fail != None 时的现场指令（诊断定位）
-    bool hasSubroutine = false;        ///< 方法体含 RET（jsr/ret 遗留，帧不建模）
+    bool hasSubroutine = false;        ///< 方法体含 RET（jsr/ret 遗留；BestEffort
+                                       ///<   只计数不建模，Strict 建模数据流）
 };
 
 const char* to_string(FrameSummary::Fail f) noexcept;
@@ -241,7 +259,7 @@ std::vector<VType> initialLocalsOf(const MethodSig& sig);
 /// 的现值只是旧栈产物；低于原值亦采用（Top 支配口径下重算值与 verifier
 /// 一致）。本函数只做这一件事，不触碰 lower/管线：BestEffort 手动链路与
 /// promote 拷贝语义零变化，「lower 时自动重算」的隐式接线不做（管线级策略
-/// 归 mjbase 后续批）。
+/// 归后续批）。
 ///
 /// 两个 verifier 地板并入采用值（FrameSummary 记的是数据流触达，不含两条
 /// 规范性底线；§10.5 成文）：

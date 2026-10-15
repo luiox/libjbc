@@ -26,7 +26,7 @@ using jbc::test::corpus::resolveCorpus;
 namespace {
 
 /// 真实语料 oracle（EXPECT_GT(methods, 1000) 量级护栏）的语料解析序：
-/// env 注入 > 仓内自产（javac 现场编译，F1）> private-corpus 本机路径。三路全缺席时
+/// env 注入 > 仓内自产（javac 现场编译，F1）。两路全缺席时
 /// skip 而不是硬失败（javac/JDK 缺席的环境不该挂仓内门禁）。
 std::vector<std::string> collectClassFiles(const std::string& mainRoot)
 {

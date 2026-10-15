@@ -20,6 +20,7 @@ using namespace jbc::type;
 using jbc::test::AttrSpec;
 using jbc::test::Bytes;
 using jbc::test::ClassBuilder;
+using jbc::test::codeContent;
 
 namespace {
 
@@ -85,7 +86,7 @@ AttrSlot& slotAt(ClassFile& cf, int level, ca::usize i)
     }
 }
 
-/// @brief 读出某槽当前指向的签名串（Raw 体 u2 索引一跳）。
+/// @brief 读出某槽当前指向的签名串（typed SignatureAttr 的 u2 索引一跳）。
 std::string_view sigStringOf(ClassFile& cf, AttrSlot& slot)
 {
     auto d = cf.decodeAttr(slot);
@@ -93,13 +94,8 @@ std::string_view sigStringOf(ClassFile& cf, AttrSlot& slot)
     if (d.is_err()) {
         return {};
     }
-    auto* raw = static_cast<RawAttr*>(std::move(d).unwrap());
-    const std::vector<ca::u8>& b = raw->bytes();
-    EXPECT_EQ(b.size(), ca::usize{2});
-    if (b.size() < 2) {
-        return {};
-    }
-    return cf.utf8((ca::u32(b[0]) << 8) | ca::u32(b[1]));
+    auto* attr = static_cast<SignatureAttr*>(std::move(d).unwrap());
+    return cf.utf8(attr->signatureCp);
 }
 
 }   // namespace
@@ -116,26 +112,25 @@ TEST(SigAttrTest, DecodeOnlyWriteIsByteIdentical)
     EXPECT_EQ(jbc::test::writeOk(*cf), sc.bytes);
 }
 
-TEST(SigAttrTest, RawBodyExposesSignatureIndex)
+TEST(SigAttrTest, TypedBodyExposesSignatureIndex)
 {
     const SigClass sc = makeSigClass();
     auto cf = jbc::test::readOk(sc.bytes);
     ASSERT_NE(cf, nullptr);
 
-    // Signature 现状不在已建模属性之列：Raw 兜底（下游按 Raw 字节消费的
-    // 既定契约），体 = u2 signature_index；手术面即在该体上原位读写。
+    // Signature 是 typed 属性（AttrKind::Signature）：体 = u2 signature_index，
+    // 手术面在该模型上读写索引；解码只推进 Untouched→Decoded，写回仍 copy。
     for (int level = 0; level < 3; ++level) {
         AttrSlot& slot = slotAt(*cf, level, 0);
         auto d = cf->decodeAttr(slot);
         ASSERT_TRUE(d.is_ok());
         AttrBody* body = std::move(d).unwrap();
-        ASSERT_EQ(body->kind(), AttrKind::Raw) << "level " << level;
-        auto* raw = static_cast<RawAttr*>(body);
-        ASSERT_EQ(raw->bytes().size(), ca::usize{2});
+        ASSERT_EQ(body->kind(), AttrKind::Signature) << "level " << level;
+        auto* attr = static_cast<SignatureAttr*>(body);
+        EXPECT_TRUE(attr->trailing.empty()) << "level " << level;
         const ca::u16 want = level == 0 ? sc.classSigIdx
                             : level == 1 ? sc.methodSigIdx : sc.fieldSigIdx;
-        EXPECT_EQ((ca::u32(raw->bytes()[0]) << 8) | raw->bytes()[1], want) << "level " << level;
-        // 未置脏：解码只推进 Untouched→Decoded，写回仍 copy。
+        EXPECT_EQ(attr->signatureCp, want) << "level " << level;
         EXPECT_EQ(slot.state, AttrSlot::State::Decoded);
         EXPECT_FALSE(slot.needsReencode());
     }
@@ -311,7 +306,7 @@ TEST(SigAttrTest, SameTargetStringReusesExistingPoolEntry)
     EXPECT_EQ(cf->cp.size(), cpMid) << "reverse rename reuses original entry";
 }
 
-// ---- 非 2 字节体：手术只改前两字节，其余原样保留（Raw 体逐字节写回）----
+// ---- 非 2 字节体：手术只改 u2 索引，尾部经 trailing 原样保留（§27.1）----
 
 TEST(SigAttrTest, ExtraBodyBytesSurviveSurgery)
 {
@@ -337,11 +332,10 @@ TEST(SigAttrTest, ExtraBodyBytesSurviveSurgery)
     ASSERT_NE(cf2, nullptr);
     auto d = cf2->decodeAttr(cf2->attrs[0]);
     ASSERT_TRUE(d.is_ok());
-    auto* raw = static_cast<RawAttr*>(std::move(d).unwrap());
-    ASSERT_EQ(raw->bytes().size(), ca::usize{3});
-    EXPECT_EQ(raw->bytes()[2], 0xFE) << "tail byte must survive";
-    const ca::u32 idx = (ca::u32(raw->bytes()[0]) << 8) | raw->bytes()[1];
-    EXPECT_EQ(cf2->utf8(idx), "Ldemo/Renamed;");
+    auto* attr = static_cast<SignatureAttr*>(std::move(d).unwrap());
+    ASSERT_EQ(attr->trailing.size(), ca::usize{1});
+    EXPECT_EQ(attr->trailing[0], 0xFE) << "tail byte must survive";
+    EXPECT_EQ(cf2->utf8(attr->signatureCp), "Ldemo/Renamed;");
 }
 
 // ---- 失败显式：坏签名 / 形态不符 / 半截属性体 ----
@@ -420,4 +414,328 @@ TEST(SigAttrTest, TruncatedSlotFailsDecodeKind)
     ASSERT_TRUE(r.is_err());
     EXPECT_EQ(std::move(r).unwrap_err().kind, SigAttrError::Kind::SlotDecode);
     EXPECT_EQ(jbc::test::writeOk(*cf), bytes) << "untouched write must roundtrip";
+}
+
+// ---- LVTT descriptor 列（签名宿主第二处）：结构化手术接线 ----
+
+namespace {
+
+/// LVTT/LVT 行内容：5 × u2（JVMS 4.7.13 行布局）。
+Bytes lvtRowContent(ca::u16 startPc, ca::u16 length, ca::u16 nameCp,
+                    ca::u16 descCp, ca::u16 slot)
+{
+    Bytes b;
+    const auto put16 = [&b](ca::u16 v) {
+        b.push_back(static_cast<ca::u8>(v >> 8));
+        b.push_back(static_cast<ca::u8>(v));
+    };
+    put16(startPc);
+    put16(length);
+    put16(nameCp);
+    put16(descCp);
+    put16(slot);
+    return b;
+}
+
+/// 行表内容：u2 count + 行（LVTT/LVT 同布局）。
+Bytes lvtTableContent(const std::vector<Bytes>& rows)
+{
+    Bytes b;
+    b.push_back(static_cast<ca::u8>(rows.size() >> 8));
+    b.push_back(static_cast<ca::u8>(rows.size()));
+    for (const Bytes& r : rows) {
+        b.insert(b.end(), r.begin(), r.end());
+    }
+    return b;
+}
+
+/// @brief 带一个方法（Code 嵌套 LVTT + LVT）的最小类。
+///
+/// LVTT 三行：'$' 内嵌命中行 / '.' 段链命中行（同一内部名的两等价字节
+/// 形态）/ 未命中普通引用行；LVT 一行擦除描述符（不属 LVTT 手术入口，
+/// 作邻居对照）。命中对：demo/Box$Inner → demo/Box$Renamed（同 '$' 段
+/// 结构，RenameShapeMismatch 不触发）。
+struct LvttClass
+{
+    Bytes bytes;
+    ca::u16 hitInnerIdx = 0;     ///< Ldemo/Box$Inner;
+    ca::u16 hitChainIdx = 0;     ///< Ldemo/Box<TT;>.Inner;
+    ca::u16 missIdx = 0;         ///< Ljava/lang/String;
+    ca::u16 lvtRowDescIdx = 0;   ///< Ldemo/Expr;（LVT 擦除行）
+
+    static constexpr const char* kHitInner = "Ldemo/Box$Inner;";
+    static constexpr const char* kHitChain = "Ldemo/Box<TT;>.Inner;";
+    static constexpr const char* kMiss = "Ljava/lang/String;";
+    static constexpr const char* kLvtRowDesc = "Ldemo/Expr;";
+};
+
+LvttClass makeLvttClass()
+{
+    ClassBuilder cb;
+    const ca::u16 thisIdx = cb.utf8("p/Use");
+    const ca::u16 superIdx = cb.utf8("java/lang/Object");
+    const ca::u16 codeName = cb.utf8("Code");
+    const ca::u16 lvttName = cb.utf8("LocalVariableTypeTable");
+    const ca::u16 lvtName = cb.utf8("LocalVariableTable");
+    const ca::u16 varName = cb.utf8("i");
+    const ca::u16 hitInner = cb.utf8(LvttClass::kHitInner);
+    const ca::u16 hitChain = cb.utf8(LvttClass::kHitChain);
+    const ca::u16 miss = cb.utf8(LvttClass::kMiss);
+    const ca::u16 lvtRowDesc = cb.utf8(LvttClass::kLvtRowDesc);
+    const ca::u16 runName = cb.utf8("run");
+    const ca::u16 runDesc = cb.utf8("()V");
+
+    cb.setThis(cb.classRef(thisIdx));
+    cb.setSuper(cb.classRef(superIdx));
+    cb.setVersion(52);
+
+    std::vector<AttrSpec> nested;
+    nested.push_back(AttrSpec{lvttName,
+                              lvtTableContent({lvtRowContent(0, 1, varName, hitInner, 0),
+                                               lvtRowContent(0, 1, varName, hitChain, 1),
+                                               lvtRowContent(0, 1, varName, miss, 2)})});
+    nested.push_back(AttrSpec{lvtName,
+                              lvtTableContent({lvtRowContent(0, 1, varName, lvtRowDesc, 0)})});
+    cb.addMethod(0x0001, runName, runDesc,
+                 {AttrSpec{codeName, codeContent(0, 2, Bytes{0xb1}, {}, nested)}});
+    return LvttClass{cb.build(), hitInner, hitChain, miss, lvtRowDesc};
+}
+
+/// @brief 解出方法 0 的 Code 内第 nestIdx 个嵌套属性（LocalVariableTableAttr）。
+LocalVariableTableAttr& nestedLvtAt(ClassFile& cf, ca::usize nestIdx)
+{
+    AttrSlot& codeSlot = cf.methods[0].attrs[0];
+    auto d = cf.decodeAttr(codeSlot);
+    EXPECT_TRUE(d.is_ok());
+    auto* code = static_cast<CodeAttr*>(std::move(d).unwrap());
+    auto ld = cf.decodeAttr(code->attrs[nestIdx]);
+    EXPECT_TRUE(ld.is_ok());
+    return *static_cast<LocalVariableTableAttr*>(std::move(ld).unwrap());
+}
+
+}   // namespace
+
+TEST(SigAttrTest, LvttHardGateNoHitIsByteIdentical)
+{
+    const LvttClass lc = makeLvttClass();
+    auto cf = jbc::test::readOk(lc.bytes);
+    ASSERT_NE(cf, nullptr);
+
+    // 缺席名全扫：零命中零改写，写回逐字节不动（解码发生也不置脏）。
+    auto miss = renameClassInLocalVariableTypeTables(*cf, "zzz/Absent_R", "zzz/Moved_R");
+    ASSERT_TRUE(miss.is_ok());
+    const LvttRenameSummary ms = std::move(miss).unwrap();
+    EXPECT_EQ(ms.tablesTotal, 1u);
+    EXPECT_EQ(ms.tablesChanged, 0u);
+    EXPECT_EQ(jbc::test::writeOk(*cf), lc.bytes);
+}
+
+TEST(SigAttrTest, LvttRowsRewriteDualForm)
+{
+    const LvttClass lc = makeLvttClass();
+    auto cf = jbc::test::readOk(lc.bytes);
+    ASSERT_NE(cf, nullptr);
+
+    // 同一内部名（demo/Box$Inner）的两种签名字节形态各命中一次：
+    // '$' 内嵌行整体段名替换，'.' 段链行末段替换（其余字节原样保留）。
+    auto r = renameClassInLocalVariableTypeTables(*cf, "demo/Box$Inner",
+                                                  "demo/Box$Renamed");
+    ASSERT_TRUE(r.is_ok());
+    const LvttRenameSummary st = std::move(r).unwrap();
+    EXPECT_EQ(st.tablesTotal, 1u);
+    EXPECT_EQ(st.tablesChanged, 1u);
+    EXPECT_EQ(st.rowsChanged, 2u);
+    EXPECT_GE(st.hits, 2u);
+
+    // 重读：两命中行结构化改写，未命中行与邻居 LVT 行原样。
+    LocalVariableTableAttr& lvtt = nestedLvtAt(*cf, 0);
+    EXPECT_EQ(cf->utf8(lvtt.rows[0].descCp), "Ldemo/Box$Renamed;");
+    EXPECT_EQ(cf->utf8(lvtt.rows[1].descCp), "Ldemo/Box<TT;>.Renamed;");
+    EXPECT_EQ(lvtt.rows[2].descCp, lc.missIdx);
+    LocalVariableTableAttr& lvt = nestedLvtAt(*cf, 1);
+    EXPECT_EQ(lvt.rows[0].descCp, lc.lvtRowDescIdx);
+}
+
+TEST(SigAttrTest, LvttGenericTypeArgRewrite)
+{
+    // 类型实参嵌套：命中点在实参位置的类类型上。
+    ClassBuilder cb;
+    const ca::u16 thisIdx = cb.utf8("p/Use");
+    const ca::u16 superIdx = cb.utf8("java/lang/Object");
+    const ca::u16 codeName = cb.utf8("Code");
+    const ca::u16 lvttName = cb.utf8("LocalVariableTypeTable");
+    const ca::u16 varName = cb.utf8("i");
+    const ca::u16 row = cb.utf8("Ldemo/Box<Ldemo/Expr;>;");
+    const ca::u16 runName = cb.utf8("run");
+    const ca::u16 runDesc = cb.utf8("()V");
+    cb.setThis(cb.classRef(thisIdx));
+    cb.setSuper(cb.classRef(superIdx));
+    cb.setVersion(52);
+    const Bytes lvttRows = lvtTableContent({lvtRowContent(0, 1, varName, row, 0)});
+    cb.addMethod(0x0001, runName, runDesc,
+                 {AttrSpec{codeName,
+                           codeContent(0, 1, Bytes{0xb1}, {},
+                                       {AttrSpec{lvttName, lvttRows}})}});
+    auto cf = jbc::test::readOk(cb.build());
+    ASSERT_NE(cf, nullptr);
+
+    auto r = renameClassInLocalVariableTypeTables(*cf, "demo/Expr", "demo/Renamed");
+    ASSERT_TRUE(r.is_ok());
+    EXPECT_EQ(std::move(r).unwrap().rowsChanged, 1u);
+    LocalVariableTableAttr& lvtt = nestedLvtAt(*cf, 0);
+    EXPECT_EQ(cf->utf8(lvtt.rows[0].descCp), "Ldemo/Box<Ldemo/Renamed;>;");
+}
+
+TEST(SigAttrTest, LvttReverseRenameRestoresBytes)
+{
+    const LvttClass lc = makeLvttClass();
+    auto cf = jbc::test::readOk(lc.bytes);
+    ASSERT_NE(cf, nullptr);
+
+    auto fwd = renameClassInLocalVariableTypeTables(*cf, "demo/Box$Inner",
+                                                    "demo/Box$Renamed");
+    ASSERT_TRUE(fwd.is_ok());
+    const ca::usize cpAfterForward = cf->cp.size();
+
+    // 逆向 rename：复用回原 CP 条目（查重命中，不再追加），行串逐字节还原。
+    auto back =
+        renameClassInLocalVariableTypeTables(*cf, "demo/Box$Renamed", "demo/Box$Inner");
+    ASSERT_TRUE(back.is_ok());
+    EXPECT_EQ(std::move(back).unwrap().rowsChanged, 2u);
+    EXPECT_EQ(cf->cp.size(), cpAfterForward) << "reverse rename must not grow the pool";
+    LocalVariableTableAttr& lvtt = nestedLvtAt(*cf, 0);
+    EXPECT_EQ(cf->utf8(lvtt.rows[0].descCp), LvttClass::kHitInner);
+    EXPECT_EQ(cf->utf8(lvtt.rows[1].descCp), LvttClass::kHitChain);
+    EXPECT_EQ(lvtt.rows[0].descCp, lc.hitInnerIdx) << "original entry reused";
+    EXPECT_EQ(lvtt.rows[1].descCp, lc.hitChainIdx) << "original entry reused";
+}
+
+TEST(SigAttrTest, LvttShapeMismatchFailsAllOrNothing)
+{
+    // '$' 段结构不一致：链段 Inner 改到单段名 Renamed——显式拒绝，零改写。
+    ClassBuilder cb;
+    const ca::u16 thisIdx = cb.utf8("p/Use");
+    const ca::u16 superIdx = cb.utf8("java/lang/Object");
+    const ca::u16 codeName = cb.utf8("Code");
+    const ca::u16 lvttName = cb.utf8("LocalVariableTypeTable");
+    const ca::u16 varName = cb.utf8("i");
+    const ca::u16 chain = cb.utf8("Ldemo/Outer<TT;>.Inner;");
+    const ca::u16 runName = cb.utf8("run");
+    const ca::u16 runDesc = cb.utf8("()V");
+    cb.setThis(cb.classRef(thisIdx));
+    cb.setSuper(cb.classRef(superIdx));
+    cb.setVersion(52);
+    const Bytes lvttRows = lvtTableContent({lvtRowContent(0, 1, varName, chain, 0)});
+    cb.addMethod(0x0001, runName, runDesc,
+                 {AttrSpec{codeName,
+                           codeContent(0, 1, Bytes{0xb1}, {},
+                                       {AttrSpec{lvttName, lvttRows}})}});
+    const Bytes bytes = cb.build();
+    auto cf = jbc::test::readOk(bytes);
+    ASSERT_NE(cf, nullptr);
+
+    auto r = renameClassInLocalVariableTypeTables(*cf, "demo/Outer$Inner",
+                                                  "demo/Renamed");
+    ASSERT_TRUE(r.is_err());
+    EXPECT_EQ(std::move(r).unwrap_err().kind, SigAttrError::Kind::Signature);
+    EXPECT_EQ(jbc::test::writeOk(*cf), bytes) << "rejected surgery must not write";
+}
+
+TEST(SigAttrTest, LvttBadRowSignatureFailsWholeScan)
+{
+    // 一行非签名（擦除基元描述符 I）：字段形态解析失败——全扫全有或全无。
+    ClassBuilder cb;
+    const ca::u16 thisIdx = cb.utf8("p/Use");
+    const ca::u16 superIdx = cb.utf8("java/lang/Object");
+    const ca::u16 codeName = cb.utf8("Code");
+    const ca::u16 lvttName = cb.utf8("LocalVariableTypeTable");
+    const ca::u16 varName = cb.utf8("i");
+    const ca::u16 good = cb.utf8("Ldemo/Box;");
+    const ca::u16 bad = cb.utf8("I");
+    const ca::u16 runName = cb.utf8("run");
+    const ca::u16 runDesc = cb.utf8("()V");
+    cb.setThis(cb.classRef(thisIdx));
+    cb.setSuper(cb.classRef(superIdx));
+    cb.setVersion(52);
+    const Bytes lvttRows =
+        lvtTableContent({lvtRowContent(0, 1, varName, good, 0),
+                         lvtRowContent(0, 1, varName, bad, 1)});
+    cb.addMethod(0x0001, runName, runDesc,
+                 {AttrSpec{codeName,
+                           codeContent(0, 1, Bytes{0xb1}, {},
+                                       {AttrSpec{lvttName, lvttRows}})}});
+    const Bytes bytes = cb.build();
+    auto cf = jbc::test::readOk(bytes);
+    ASSERT_NE(cf, nullptr);
+
+    auto r = renameClassInLocalVariableTypeTables(*cf, "demo/Box", "demo/Renamed");
+    ASSERT_TRUE(r.is_err());
+    EXPECT_EQ(std::move(r).unwrap_err().kind, SigAttrError::Kind::Signature);
+    // 好行也没被改写，写回逐字节不动。
+    EXPECT_EQ(jbc::test::writeOk(*cf), bytes);
+}
+
+TEST(SigAttrTest, LvttTruncatedBodyFailsDecodeKind)
+{
+    ClassBuilder cb;
+    const ca::u16 thisIdx = cb.utf8("p/Use");
+    const ca::u16 superIdx = cb.utf8("java/lang/Object");
+    const ca::u16 codeName = cb.utf8("Code");
+    const ca::u16 lvttName = cb.utf8("LocalVariableTypeTable");
+    const ca::u16 runName = cb.utf8("run");
+    const ca::u16 runDesc = cb.utf8("()V");
+    cb.setThis(cb.classRef(thisIdx));
+    cb.setSuper(cb.classRef(superIdx));
+    cb.setVersion(52);
+    // count=1 但行只有 3 个 u2：行中途截断。
+    cb.addMethod(0x0001, runName, runDesc,
+                 {AttrSpec{codeName,
+                           codeContent(0, 1, Bytes{0xb1}, {},
+                                       {AttrSpec{lvttName, {0x00, 0x01, 0x00, 0x00,
+                                                            0x00, 0x01, 0x00, 0x00}}})}});
+    const Bytes bytes = cb.build();
+    auto cf = jbc::test::readOk(bytes);
+    ASSERT_NE(cf, nullptr);
+
+    auto r = renameClassInLocalVariableTypeTables(*cf, "demo/Box", "demo/Renamed");
+    ASSERT_TRUE(r.is_err());
+    EXPECT_EQ(std::move(r).unwrap_err().kind, SigAttrError::Kind::SlotDecode);
+    EXPECT_EQ(jbc::test::writeOk(*cf), bytes) << "untouched write must roundtrip";
+}
+
+TEST(SigAttrTest, LvttTrailingBytesSurviveSurgery)
+{
+    // 体尾垃圾（§27.1 trailing 同族）：行改写后重编码原样保留尾字节。
+    ClassBuilder cb;
+    const ca::u16 thisIdx = cb.utf8("p/Use");
+    const ca::u16 superIdx = cb.utf8("java/lang/Object");
+    const ca::u16 codeName = cb.utf8("Code");
+    const ca::u16 lvttName = cb.utf8("LocalVariableTypeTable");
+    const ca::u16 varName = cb.utf8("i");
+    const ca::u16 row = cb.utf8("Ldemo/Box;");
+    const ca::u16 runName = cb.utf8("run");
+    const ca::u16 runDesc = cb.utf8("()V");
+    cb.setThis(cb.classRef(thisIdx));
+    cb.setSuper(cb.classRef(superIdx));
+    cb.setVersion(52);
+    Bytes lvtt = lvtTableContent({lvtRowContent(0, 1, varName, row, 0)});
+    lvtt.push_back(0xFE);   // 尾部垃圾
+    cb.addMethod(0x0001, runName, runDesc,
+                 {AttrSpec{codeName,
+                           codeContent(0, 1, Bytes{0xb1}, {}, {AttrSpec{lvttName, lvtt}})}});
+    const Bytes bytes = cb.build();
+    auto cf = jbc::test::readOk(bytes);
+    ASSERT_NE(cf, nullptr);
+
+    auto r = renameClassInLocalVariableTypeTables(*cf, "demo/Box", "demo/Renamed");
+    ASSERT_TRUE(r.is_ok());
+    EXPECT_EQ(std::move(r).unwrap().rowsChanged, 1u);
+
+    const Bytes out = jbc::test::writeOk(*cf);
+    auto rr = jbc::test::readOk(out);
+    ASSERT_NE(rr, nullptr);
+    LocalVariableTableAttr& lvt = nestedLvtAt(*rr, 0);
+    EXPECT_EQ(rr->utf8(lvt.rows[0].descCp), "Ldemo/Renamed;");
+    ASSERT_EQ(lvt.trailing.size(), ca::usize{1});
+    EXPECT_EQ(lvt.trailing[0], 0xFE) << "tail byte must survive";
 }

@@ -8,6 +8,11 @@
 /// 产出「看似完整但 JVM 行为未定义」的 class——正是旧库事故的来源之一。
 /// 需要整体重编码的场合（例如自测「重编码应字节相同」），调用方先
 /// @ref decodeAllAttrs 再写回，代价与风险都显式。
+///
+/// 从零构建的模型（A5：makeSession(NewClassSeed) 的产物）没有源字节，但其
+/// 每个 CP 条目与属性槽都处在「新编码」态，不包含任何 copy-through 路径，
+/// 照常写出。MissingSource 因此只在「确实需要 copy 而源缺席」时返回
+/// （如关闭 preserveSourceBytes 读入后又写回），不再挡从零构建的合法形态。
 #pragma once
 
 #include <vector>

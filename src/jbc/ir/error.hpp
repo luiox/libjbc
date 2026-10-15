@@ -22,6 +22,8 @@ enum class PromoteError {
     AttrNotDecoded,    ///< Code 属性尚未解码
     BadInstructions,   ///< 指令序列导入失败（畸形 code 数组）
     NotModeled,        ///< 存在本版本不建模的结构，拒绝升格（该方法保持 raw）
+    InvalidHandle,     ///< 方法身份句柄无效（已删除或来自另一会话）
+    InvalidSeed,       ///< 从零建类的种子不合法（空 this 名等）
 };
 
 /// @brief lower 失败原因（ir 高层 → classfile 低层）。
@@ -33,6 +35,9 @@ enum class LowerError {
     NotPromoted,       ///< lower 的方法没有先 promote
     RelocationNotModeled,  ///< 布局改变且存在无 handler 的受影响属性——明确失败
     RelocationBadTarget,   ///< pcmap 无法精确重定向某个 pc 引用
+    InvalidHandle,     ///< 成员身份句柄无效（已删除或来自另一会话）
+    InvalidSeed,       ///< 新增成员的种子不合法（空名字/描述符、重名等）
+    NotModeled,        ///< 搬移/挂入涉及本版本不建模的结构（indy、宽常量等）
 };
 
 const char* to_string(EditError e) noexcept;

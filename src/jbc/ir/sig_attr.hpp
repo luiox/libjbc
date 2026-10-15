@@ -1,22 +1,21 @@
 /// @file        sig_attr.hpp
-/// @brief       Signature 属性的泛型保持手术：类名改写的属性层接线。
+/// @brief       泛型签名的属性层手术：类名改写的属性层接线。
 ///
-/// 类名手术（rename）经 libjbc 编辑路径发生时，class/method/field 三级挂载
-/// 点的 Signature 属性若不随之重写，产出即悬垂泛型——JVM 按 Signature 解析
-/// 泛型会指回旧名。本模块把 design.md §32 的签名树手术面（纯函数）接到属性
-/// 层：调用方显式注入一对旧名/新名并触发手术，才 promote（解码属性体 + 解析
-/// 签名树）→ 改写 → lower（intern 新串 + 重编码）；不触发则槽保持 Untouched，
-/// 字节逐字节 copy-through。
+/// 类名手术（rename）经 libjbc 编辑路径发生时，泛型签名在类文件中的两处
+/// 宿主若不随之重写，产出即悬垂泛型——JVM 按签名解析泛型会指回旧名：
+/// Signature 属性（class/method/field 三级挂载点）与 LocalVariableTypeTable
+/// 行的 descriptor 列（字段形态签名）。本模块把 design.md §32 的签名树
+/// 手术面（纯函数）接到属性层：调用方显式注入一对旧名/新名并触发手术，
+/// 才 promote（解码属性体 + 解析签名树）→ 改写 → lower（intern 新串 +
+/// 重编码）；不触发则槽保持 Untouched，字节逐字节 copy-through。
 ///
-/// 属性模型零改动：Signature 属性体是 `u2 signature_index`（JVMS 4.7.9），
-/// 现状不在已建模属性之列——Raw 兜底是全库既定契约（下游消费者按 Raw 字节
-/// 消费）。手术面在 Raw 体上原位读写 u2 并经 @ref core::AttrSlot::mutate
-/// 置脏，写回走既有 Raw 重编码路径；typed Signature 属性模型留待 B 轨与
-/// 下游消费者协同迁移的后续批。
+/// 属性模型：Signature 是 typed 属性（@ref core::SignatureAttr，属性体
+/// `u2 signature_index`，JVMS 4.7.9；签名串在 CP Utf8）。手术面经 typed 解码
+/// 读索引、经 @ref core::AttrSlot::mutate 改索引置脏，写回走既有重编码路径。
 ///
 /// 契约（design.md §32.4）：
 ///   1. **显式调用出活**：库不发明会话级 rename 编排（跨类映射计划属
-///      legacy-stack ClassIndex 域）；本层只提供单类内、按旧名/新名成对的手术入口。
+///      上层消费方 ClassIndex 域）；本层只提供单类内、按旧名/新名成对的手术入口。
 ///   2. **形态由挂载点决定**：类级 → Class、方法级 → Method、字段级 →
 ///      Field（§32.3 形态歧义不猜；单槽原语显式收 form 参数）。
 ///   3. **手术语义复用签名层契约**：'.' 段链与 '$' 内嵌双形态全名匹配、
@@ -95,5 +94,35 @@ struct SigAttrRenameSummary
 Result<SigAttrRenameSummary, SigAttrError>
 renameClassInSignatureAttrs(core::ClassFile& cf, std::string_view old_internal,
                             std::string_view new_internal);
+
+/// @brief LVTT 行手术的汇总。
+struct LvttRenameSummary
+{
+    ca::u32 tablesTotal = 0;   ///< 扫到的 LocalVariableTypeTable 属性数
+    ca::u32 tablesChanged = 0; ///< 其中发生行改写的表数
+    ca::u32 rowsChanged = 0;   ///< 改写的行数
+    ca::u32 hits = 0;          ///< 命中类类型出现总次数
+};
+
+/// @brief 全方法 Code 内全部 LocalVariableTypeTable 行（descriptor 列）的
+///        类名改写。
+///
+/// LVTT 的 descriptor 列承载**字段形态签名**（JVMS 4.7.9.1
+/// FieldTypeSignature）——泛型签名在类文件中的第二处宿主（§32.4 挂账的
+/// LVT 族半边）。逐行走 @ref renameClassInSignature（form 固定 Field），
+/// §32 双形态全名匹配 / RenameShapeMismatch 拒绝 / 未命中零改写逐字适用。
+///
+/// **全有或全无**（与 @ref renameClassInSignatureAttrs 同款三阶段）：先做
+/// 解码 + 解析 + 改名全量预检（纯读；Code/LVTT 槽解码失败或任一行签名
+/// 解析失败即 Err，未改写任何槽、未追加任何 CP 条目），再统一容量预检，
+/// 最后才 intern 落位置脏。未命中的表不置脏，写回逐字节 copy-through。
+/// 新串经 findUtf8 查重落位（命中复用不膨胀，逆向 rename 复用回原条目）。
+///
+/// LVT 行（LocalVariableTable，擦除后描述符）不属本入口——描述符手术归
+/// 描述符层（jbc::type descriptor 的 span 面），签名/描述符两族不混。
+Result<LvttRenameSummary, SigAttrError>
+renameClassInLocalVariableTypeTables(core::ClassFile& cf,
+                                     std::string_view old_internal,
+                                     std::string_view new_internal);
 
 }   // namespace jbc::ir

@@ -34,6 +34,11 @@ ca::core::Result<SmtVType, SmtBuildError> toVerif(ir::ClassSession& s, const VTy
     case VKind::UninitThis: return R(ca::core::Ok(SmtVType{SmtVType::kUninitializedThis, 0}));
     case VKind::Uninitialized:
         return R(ca::core::Ok(SmtVType{SmtVType::kUninitialized, v.uninitOffset()}));
+    case VKind::ReturnAddress:
+        // C2 裁决：full_frame 的 verification_type_info 无 returnAddress 形态
+        //（JVMS §4.7.4 封闭 tag 集）——SMT 生成对子程序方法显式拒绝，不静默
+        // 改码为 Top/Int 伪造帧（v≤49 无 SMT 走旧校验是规范许可行为）。
+        return R(ca::core::Err(SmtBuildError::Subroutine));
     case VKind::Ref:
         if (v.name.empty()) {
             return R(ca::core::Err(SmtBuildError::BottomInFrame));
@@ -160,6 +165,7 @@ const char* to_string(SmtBuildError e) noexcept
     case SmtBuildError::BottomInFrame: return "conflict/unnamed slot in frame";
     case SmtBuildError::TargetNotInsn: return "uninitialized payload not a new pc";
     case SmtBuildError::TooBig: return "frame count or delta exceeds u2";
+    case SmtBuildError::Subroutine: return "frame slot holds returnAddress (subroutine not encodable)";
     }
     return "?";
 }

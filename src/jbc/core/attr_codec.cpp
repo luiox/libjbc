@@ -18,6 +18,14 @@ constexpr std::string_view kLocalVariableTableName     = "LocalVariableTable";
 constexpr std::string_view kLocalVariableTypeTableName = "LocalVariableTypeTable";
 constexpr std::string_view kRvaName = "RuntimeVisibleAnnotations";
 constexpr std::string_view kRiaName = "RuntimeInvisibleAnnotations";
+constexpr std::string_view kRvtaName = "RuntimeVisibleTypeAnnotations";
+constexpr std::string_view kRitaName = "RuntimeInvisibleTypeAnnotations";
+constexpr std::string_view kSignatureName = "Signature";
+constexpr std::string_view kCharacterRangeTableName = "CharacterRangeTable";
+constexpr std::string_view kSourceFileName = "SourceFile";
+constexpr std::string_view kInnerClassesName = "InnerClasses";
+constexpr std::string_view kEnclosingMethodName = "EnclosingMethod";
+constexpr std::string_view kExceptionsName = "Exceptions";
 
 /// @brief u16 域宽检查：编码闸门的基础谓词（design.md §27.2——超界显式
 ///        Err，禁止 static_cast 静默截断）。
@@ -255,6 +263,12 @@ public:
         const Result<ca::u16, ReadError> r = cur_.u16();
         return take(r);
     }
+    ca::u32 u4()
+    {
+        if (!ensure(4)) return 0;
+        const Result<ca::u32, ReadError> r = cur_.u32();
+        return take(r);
+    }
 
     /// @brief 剩余未读字节的视图（游标不前进）。声明结构读完后的 trailing
     ///        保留（design.md §27.1）据此取字节；仅在 ok() 时有意义。
@@ -284,6 +298,15 @@ private:
         return r.unwrap();
     }
     ca::u32 take(const Result<ca::u16, ReadError>& r)
+    {
+        if (r.is_err()) {
+            ok_  = false;
+            err_ = r.unwrap_err();
+            return 0;
+        }
+        return r.unwrap();
+    }
+    ca::u32 take(const Result<ca::u32, ReadError>& r)
     {
         if (r.is_err()) {
             ok_  = false;
@@ -542,6 +565,295 @@ Result<std::unique_ptr<AttrBody>, ReadError> decodeAnnotations(ClassFile& cf, co
     return Ok(std::unique_ptr<AttrBody>(std::move(b)));
 }
 
+Result<std::unique_ptr<AttrBody>, ReadError> decodeSignature(ClassFile& cf, const AttrSlot& slot)
+{
+    bool spanOk = false;
+    Ard r = makeReader(cf, slot, spanOk);
+    if (!spanOk) {
+        return Err(ReadError::Truncated);
+    }
+    auto b = std::make_unique<SignatureAttr>();
+    b->signatureCp = r.u2();
+    if (!r.ok()) {
+        return Err(r.err());
+    }
+    keepBodyTrailing(cf, slot, b->trailing, r);
+    return Ok(std::unique_ptr<AttrBody>(std::move(b)));
+}
+
+/// @brief CharacterRangeTable 解码（javac -Xjcov 私有属性，规格见属性体
+///        注释）：u2 行数 + 每行 {u2, u2, u4, u4, u2}。行数声明与剩余字节
+///        不符（半截行 / 声明超出实际）时 Ard 置 Truncated，显式失败——
+///        边界可确定的部分不猜测容忍（§27 同纪律）。
+Result<std::unique_ptr<AttrBody>, ReadError> decodeCharacterRangeTable(ClassFile& cf,
+                                                                       const AttrSlot& slot)
+{
+    bool spanOk = false;
+    Ard r = makeReader(cf, slot, spanOk);
+    if (!spanOk) {
+        return Err(ReadError::Truncated);
+    }
+    auto b = std::make_unique<CharacterRangeTableAttr>();
+    const ca::u32 n = r.u2();
+    b->rows.reserve(n > 1000 ? 1000 : n);
+    for (ca::u32 i = 0; i < n; ++i) {
+        CharacterRangeTableAttr::Row row;
+        row.startPc   = r.u2();
+        row.endPc     = r.u2();
+        row.charStart = r.u4();
+        row.charEnd   = r.u4();
+        row.flags     = r.u2();
+        b->rows.push_back(row);
+    }
+    if (!r.ok()) {
+        return Err(r.err());
+    }
+    keepBodyTrailing(cf, slot, b->trailing, r);
+    return Ok(std::unique_ptr<AttrBody>(std::move(b)));
+}
+
+/// @brief B3 四件结构元数据（SourceFile/InnerClasses/EnclosingMethod/
+///        Exceptions）解码器族，形状与既有 typed 解码同铁律（半截体 Err、
+///        trailing 保留）。只挂类级/成员级属性表、无 pc 载荷，relocation
+///        契约（§33 封闭集）不涉及。四件均已接 decodeAttrBody 分派
+///        （design.md §32.9）；公开入口保留为直接解码面（不触碰槽状态）。
+Result<std::unique_ptr<AttrBody>, ReadError> decodeSourceFile(ClassFile& cf, const AttrSlot& slot)
+{
+    bool spanOk = false;
+    Ard r = makeReader(cf, slot, spanOk);
+    if (!spanOk) {
+        return Err(ReadError::Truncated);
+    }
+    auto b = std::make_unique<SourceFileAttr>();
+    b->sourceFileCp = r.u2();
+    if (!r.ok()) {
+        return Err(r.err());
+    }
+    keepBodyTrailing(cf, slot, b->trailing, r);
+    return Ok(std::unique_ptr<AttrBody>(std::move(b)));
+}
+
+/// @brief InnerClasses typed 解码（公开直读入口，不触碰槽状态；分派面走
+///        decodeAttrBody）。
+Result<std::unique_ptr<AttrBody>, ReadError> decodeInnerClassesBody(ClassFile& cf,
+                                                                    const AttrSlot& slot)
+{
+    bool spanOk = false;
+    Ard r = makeReader(cf, slot, spanOk);
+    if (!spanOk) {
+        return Err(ReadError::Truncated);
+    }
+    auto b = std::make_unique<InnerClassesAttr>();
+    const ca::u32 n = r.u2();
+    b->rows.reserve(n > 1000 ? 1000 : n);
+    for (ca::u32 i = 0; i < n; ++i) {
+        InnerClassesAttr::Row row;
+        row.innerClassInfoCp = r.u2();
+        row.outerClassInfoCp = r.u2();
+        row.innerNameCp      = r.u2();
+        row.accessFlags      = r.u2();
+        b->rows.push_back(row);
+    }
+    if (!r.ok()) {
+        return Err(r.err());
+    }
+    keepBodyTrailing(cf, slot, b->trailing, r);
+    return Ok(std::unique_ptr<AttrBody>(std::move(b)));
+}
+
+/// @brief EnclosingMethod typed 解码（公开直读入口，契约同
+///        @ref decodeInnerClassesBody）。
+Result<std::unique_ptr<AttrBody>, ReadError> decodeEnclosingMethodBody(ClassFile& cf,
+                                                                       const AttrSlot& slot)
+{
+    bool spanOk = false;
+    Ard r = makeReader(cf, slot, spanOk);
+    if (!spanOk) {
+        return Err(ReadError::Truncated);
+    }
+    auto b = std::make_unique<EnclosingMethodAttr>();
+    b->classCp     = r.u2();
+    b->methodNatCp = r.u2();
+    if (!r.ok()) {
+        return Err(r.err());
+    }
+    keepBodyTrailing(cf, slot, b->trailing, r);
+    return Ok(std::unique_ptr<AttrBody>(std::move(b)));
+}
+
+/// @brief Exceptions typed 解码（公开直读入口，契约同
+///        @ref decodeInnerClassesBody）。
+Result<std::unique_ptr<AttrBody>, ReadError> decodeExceptionsBody(ClassFile& cf,
+                                                                  const AttrSlot& slot)
+{
+    bool spanOk = false;
+    Ard r = makeReader(cf, slot, spanOk);
+    if (!spanOk) {
+        return Err(ReadError::Truncated);
+    }
+    auto b = std::make_unique<ExceptionsAttr>();
+    const ca::u32 n = r.u2();
+    b->exceptionCps.reserve(n > 100 ? 100 : n);
+    for (ca::u32 i = 0; i < n; ++i) {
+        b->exceptionCps.push_back(r.u2());
+    }
+    if (!r.ok()) {
+        return Err(r.err());
+    }
+    keepBodyTrailing(cf, slot, b->trailing, r);
+    return Ok(std::unique_ptr<AttrBody>(std::move(b)));
+}
+
+/// @brief type_path 读取（JVMS 4.7.20.2）：path_length + 若干 (kind,
+///        type_argument_index) 对；kind > 3 属非法，显式拒绝。
+Result<std::vector<TypeAnnotationsAttr::TypePathEntry>, ReadError>
+readTypePath(Ard& r)
+{
+    std::vector<TypeAnnotationsAttr::TypePathEntry> out;
+    const ca::u32 n = r.u1();
+    out.reserve(n);
+    for (ca::u32 i = 0; i < n; ++i) {
+        TypeAnnotationsAttr::TypePathEntry e;
+        e.kind = static_cast<ca::u8>(r.u1());
+        e.typeArgIndex = static_cast<ca::u8>(r.u1());
+        if (e.kind > 3) {
+            return Err(ReadError::UnsupportedFeature);
+        }
+        out.push_back(e);
+    }
+    if (!r.ok()) {
+        return Err(r.err());
+    }
+    return Ok(std::move(out));
+}
+
+/// @brief target_info 读取：按 target_type 分派（JVMS 4.7.20.1 表）；
+///        未定义的 target_type 显式拒绝（结构与边界都可确定之外的东西
+///        不猜测容忍，§27.2 同纪律）。
+Result<void, ReadError> readTargetInfo(Ard& r, TypeAnnotationsAttr::Annotation& a)
+{
+    using TA = TypeAnnotationsAttr;
+    switch (a.targetType) {
+    case TA::kClassTypeParameter:
+    case TA::kMethodTypeParameter:
+        a.typeParameterIndex = static_cast<ca::u8>(r.u1());
+        break;
+    case TA::kSupertype:
+        a.supertypeIndex = r.u2();
+        break;
+    case TA::kClassTypeParameterBound:
+    case TA::kMethodTypeParameterBound:
+        a.typeParameterIndex = static_cast<ca::u8>(r.u1());
+        a.boundIndex = static_cast<ca::u8>(r.u1());
+        break;
+    case TA::kField:
+    case TA::kMethodReturn:
+    case TA::kMethodReceiver:
+        break;
+    case TA::kFormalsParameter:
+        a.formalParameterIndex = static_cast<ca::u8>(r.u1());
+        break;
+    case TA::kThrows:
+        a.throwsIndex = r.u2();
+        break;
+    case TA::kLocalVar:
+    case TA::kLocalVarResource: {
+        const ca::u32 n = r.u2();
+        a.localVars.reserve(n > 1000 ? 1000 : n);
+        for (ca::u32 i = 0; i < n; ++i) {
+            TA::LocalVarEntry e;
+            e.startPc = r.u2();
+            e.length  = r.u2();
+            e.slot    = r.u2();
+            a.localVars.push_back(e);
+        }
+        break;
+    }
+    case TA::kCatch:
+        a.catchIndex = r.u2();
+        break;
+    default:
+        // 0x43..0x46：instanceof/new/方法引用——offset 载荷；0x47 cast——
+        // offset + type_index；0x48..0x4B：调用/引用类型实参——offset +
+        // type_argument_index。
+        if (a.targetType >= TA::kOffsetBase && a.targetType <= TA::kOffsetMax) {
+            a.offset = r.u2();
+            break;
+        }
+        if (a.targetType == TA::kCast) {
+            a.offset = r.u2();
+            a.typeArgumentIndex = static_cast<ca::u8>(r.u1());   ///< cast 的 type_index
+            break;
+        }
+        if (a.targetType >= TA::kTypeArgBase && a.targetType <= TA::kTypeArgMax) {
+            a.offset = r.u2();
+            a.typeArgumentIndex = static_cast<ca::u8>(r.u1());
+            break;
+        }
+        return Err(ReadError::UnsupportedFeature);
+    }
+    if (!r.ok()) {
+        return Err(r.err());
+    }
+    return Ok();
+}
+
+/// @brief type_annotation 读取：target_info + type_path + 注解体。
+Result<std::unique_ptr<TypeAnnotationsAttr::Annotation>, ReadError>
+readTypeAnnotation(Ard& r)
+{
+    auto a = std::make_unique<TypeAnnotationsAttr::Annotation>();
+    a->targetType = static_cast<ca::u8>(r.u1());
+    auto t = readTargetInfo(r, *a);
+    if (t.is_err()) {
+        return Err(t.unwrap_err());
+    }
+    auto p = readTypePath(r);
+    if (p.is_err()) {
+        return Err(p.unwrap_err());
+    }
+    a->typePath = std::move(p).unwrap();
+    a->typeIndexCp = r.u2();
+    const ca::u32 nv = r.u2();
+    a->values.reserve(nv > 16 ? 16 : nv);
+    for (ca::u32 i = 0; i < nv; ++i) {
+        const ca::u32 nameIdx = r.u2();
+        auto v = readElemValue(r);
+        if (v == nullptr) {
+            return Err(r.err());
+        }
+        a->values.emplace_back(nameIdx, std::move(*v));
+    }
+    if (!r.ok()) {
+        return Err(r.err());
+    }
+    return Ok(std::move(a));
+}
+
+Result<std::unique_ptr<AttrBody>, ReadError> decodeTypeAnnotations(ClassFile& cf, const AttrSlot& slot)
+{
+    bool spanOk = false;
+    Ard r = makeReader(cf, slot, spanOk);
+    if (!spanOk) {
+        return Err(ReadError::Truncated);
+    }
+    auto b = std::make_unique<TypeAnnotationsAttr>();
+    const ca::u32 n = r.u2();
+    b->annotations.reserve(n > 64 ? 64 : n);
+    for (ca::u32 i = 0; i < n; ++i) {
+        auto a = readTypeAnnotation(r);
+        if (a.is_err()) {
+            return Err(a.unwrap_err());
+        }
+        b->annotations.push_back(std::move(*std::move(a).unwrap()));
+    }
+    if (!r.ok()) {
+        return Err(r.err());
+    }
+    keepBodyTrailing(cf, slot, b->trailing, r);
+    return Ok(std::unique_ptr<AttrBody>(std::move(b)));
+}
+
 Result<void, WriteError> writeVType(ByteSink& o, const StackMapTableAttr::VType& v)
 {
     o.u8(v.tag);
@@ -624,6 +936,137 @@ Result<void, WriteError> writeElemValue(ByteSink& o, const AnnotationsAttr::Elem
     return Ok();
 }
 
+/// @brief type_path 写回（与 readTypePath 对称）。
+Result<void, WriteError> writeTypePath(ByteSink& o,
+                                       const std::vector<TypeAnnotationsAttr::TypePathEntry>& p)
+{
+    if (p.size() > std::numeric_limits<ca::u8>::max()) {
+        return Err(WriteError::Unencodable);
+    }
+    o.u8(static_cast<ca::u8>(p.size()));
+    for (const auto& e : p) {
+        o.u8(e.kind);
+        o.u8(e.typeArgIndex);
+    }
+    return Ok();
+}
+
+/// @brief target_info 写回：按 target_type 分派（与 readTargetInfo 对称）。
+Result<void, WriteError> writeTargetInfo(ByteSink& o,
+                                         const TypeAnnotationsAttr::Annotation& a)
+{
+    using TA = TypeAnnotationsAttr;
+    switch (a.targetType) {
+    case TA::kClassTypeParameter:
+    case TA::kMethodTypeParameter:
+        o.u8(a.typeParameterIndex);
+        break;
+    case TA::kSupertype:
+        if (!fitsU16(a.supertypeIndex)) {
+            return Err(WriteError::Unencodable);
+        }
+        o.u16(static_cast<ca::u16>(a.supertypeIndex));
+        break;
+    case TA::kClassTypeParameterBound:
+    case TA::kMethodTypeParameterBound:
+        o.u8(a.typeParameterIndex);
+        o.u8(a.boundIndex);
+        break;
+    case TA::kField:
+    case TA::kMethodReturn:
+    case TA::kMethodReceiver:
+        break;
+    case TA::kFormalsParameter:
+        o.u8(a.formalParameterIndex);
+        break;
+    case TA::kThrows:
+        if (!fitsU16(a.throwsIndex)) {
+            return Err(WriteError::Unencodable);
+        }
+        o.u16(static_cast<ca::u16>(a.throwsIndex));
+        break;
+    case TA::kLocalVar:
+    case TA::kLocalVarResource:
+        if (a.localVars.size() > std::numeric_limits<ca::u16>::max()) {
+            return Err(WriteError::Unencodable);
+        }
+        o.u16(static_cast<ca::u16>(a.localVars.size()));
+        for (const auto& e : a.localVars) {
+            if (!fitsU16(e.startPc) || !fitsU16(e.length) || !fitsU16(e.slot)) {
+                return Err(WriteError::Unencodable);
+            }
+            o.u16(static_cast<ca::u16>(e.startPc));
+            o.u16(static_cast<ca::u16>(e.length));
+            o.u16(static_cast<ca::u16>(e.slot));
+        }
+        break;
+    case TA::kCatch:
+        if (!fitsU16(a.catchIndex)) {
+            return Err(WriteError::Unencodable);
+        }
+        o.u16(static_cast<ca::u16>(a.catchIndex));
+        break;
+    default:
+        if (a.targetType >= TA::kOffsetBase && a.targetType <= TA::kOffsetMax) {
+            if (!fitsU16(a.offset)) {
+                return Err(WriteError::Unencodable);
+            }
+            o.u16(static_cast<ca::u16>(a.offset));
+            break;
+        }
+        if (a.targetType == TA::kCast) {
+            if (!fitsU16(a.offset)) {
+                return Err(WriteError::Unencodable);
+            }
+            o.u16(static_cast<ca::u16>(a.offset));
+            o.u8(a.typeArgumentIndex);
+            break;
+        }
+        if (a.targetType >= TA::kTypeArgBase && a.targetType <= TA::kTypeArgMax) {
+            if (!fitsU16(a.offset)) {
+                return Err(WriteError::Unencodable);
+            }
+            o.u16(static_cast<ca::u16>(a.offset));
+            o.u8(a.typeArgumentIndex);
+            break;
+        }
+        return Err(WriteError::Unencodable);
+    }
+    return Ok();
+}
+
+/// @brief type_annotation 写回：target_info + type_path + 注解体。
+Result<void, WriteError> writeTypeAnnotation(ByteSink& o,
+                                             const TypeAnnotationsAttr::Annotation& a)
+{
+    if (!fitsU16(a.typeIndexCp) ||
+        a.values.size() > std::numeric_limits<ca::u16>::max()) {
+        return Err(WriteError::Unencodable);
+    }
+    o.u8(a.targetType);
+    const Result<void, WriteError> rt = writeTargetInfo(o, a);
+    if (rt.is_err()) {
+        return Err(rt.unwrap_err());
+    }
+    const Result<void, WriteError> rp = writeTypePath(o, a.typePath);
+    if (rp.is_err()) {
+        return Err(rp.unwrap_err());
+    }
+    o.u16(static_cast<ca::u16>(a.typeIndexCp));
+    o.u16(static_cast<ca::u16>(a.values.size()));
+    for (const auto& kv : a.values) {
+        if (!fitsU16(kv.first)) {
+            return Err(WriteError::Unencodable);
+        }
+        o.u16(static_cast<ca::u16>(kv.first));
+        const Result<void, WriteError> rv = writeElemValue(o, kv.second);
+        if (rv.is_err()) {
+            return Err(rv.unwrap_err());
+        }
+    }
+    return Ok();
+}
+
 Result<AttrBody*, ReadError> decodeAttrBody(ClassFile& cf, AttrSlot& slot)
 {
     const std::string_view name = cf.cp.utf8Of(slot.nameCp);
@@ -664,6 +1107,41 @@ Result<AttrBody*, ReadError> decodeAttrBody(ClassFile& cf, AttrSlot& slot)
     }
     if (name == kRvaName || name == kRiaName) {
         auto r = decodeAnnotations(cf, slot);
+        if (r.is_err()) return Err(r.unwrap_err());
+        return attach(std::move(r).unwrap());
+    }
+    if (name == kRvtaName || name == kRitaName) {
+        auto r = decodeTypeAnnotations(cf, slot);
+        if (r.is_err()) return Err(r.unwrap_err());
+        return attach(std::move(r).unwrap());
+    }
+    if (name == kSignatureName) {
+        auto r = decodeSignature(cf, slot);
+        if (r.is_err()) return Err(r.unwrap_err());
+        return attach(std::move(r).unwrap());
+    }
+    if (name == kCharacterRangeTableName) {
+        auto r = decodeCharacterRangeTable(cf, slot);
+        if (r.is_err()) return Err(r.unwrap_err());
+        return attach(std::move(r).unwrap());
+    }
+    if (name == kSourceFileName) {
+        auto r = decodeSourceFile(cf, slot);
+        if (r.is_err()) return Err(r.unwrap_err());
+        return attach(std::move(r).unwrap());
+    }
+    if (name == kInnerClassesName) {
+        auto r = decodeInnerClassesBody(cf, slot);
+        if (r.is_err()) return Err(r.unwrap_err());
+        return attach(std::move(r).unwrap());
+    }
+    if (name == kEnclosingMethodName) {
+        auto r = decodeEnclosingMethodBody(cf, slot);
+        if (r.is_err()) return Err(r.unwrap_err());
+        return attach(std::move(r).unwrap());
+    }
+    if (name == kExceptionsName) {
+        auto r = decodeExceptionsBody(cf, slot);
         if (r.is_err()) return Err(r.unwrap_err());
         return attach(std::move(r).unwrap());
     }
@@ -893,6 +1371,111 @@ Result<void, WriteError> encodeAttr(const ClassFile& cf,
                 if (ra.is_err()) {
                     return Err(ra.unwrap_err());
                 }
+            }
+            body.raw(ByteView{b.trailing});
+            break;
+        }
+        case AttrKind::Signature: {
+            const auto& b = static_cast<const SignatureAttr&>(*slot.body);
+            if (!fitsU16(b.signatureCp)) {
+                return Err(WriteError::Unencodable);
+            }
+            body.u16(static_cast<ca::u16>(b.signatureCp));
+            body.raw(ByteView{b.trailing});
+            break;
+        }
+        case AttrKind::TypeAnnotations: {
+            const auto& b = static_cast<const TypeAnnotationsAttr&>(*slot.body);
+            if (b.annotations.size() > std::numeric_limits<ca::u16>::max()) {
+                return Err(WriteError::Unencodable);
+            }
+            body.u16(static_cast<ca::u16>(b.annotations.size()));
+            for (const auto& a : b.annotations) {
+                const Result<void, WriteError> ra = writeTypeAnnotation(body, a);
+                if (ra.is_err()) {
+                    return Err(ra.unwrap_err());
+                }
+            }
+            body.raw(ByteView{b.trailing});
+            break;
+        }
+        case AttrKind::CharacterRangeTable: {
+            // u2 域宽闸门（§27.2）：start_pc/end_pc/flags 是 u2 编码，超界
+            // 显式 Err；char_start/char_end 本就是 u4 编码，无闸门。
+            const auto& b = static_cast<const CharacterRangeTableAttr&>(*slot.body);
+            if (b.rows.size() > std::numeric_limits<ca::u16>::max()) {
+                return Err(WriteError::Unencodable);
+            }
+            for (const auto& row : b.rows) {
+                if (!fitsU16(row.startPc) || !fitsU16(row.endPc) || !fitsU16(row.flags)) {
+                    return Err(WriteError::Unencodable);
+                }
+            }
+            body.u16(static_cast<ca::u16>(b.rows.size()));
+            for (const auto& row : b.rows) {
+                body.u16(static_cast<ca::u16>(row.startPc));
+                body.u16(static_cast<ca::u16>(row.endPc));
+                body.u32(row.charStart);
+                body.u32(row.charEnd);
+                body.u16(static_cast<ca::u16>(row.flags));
+            }
+            body.raw(ByteView{b.trailing});
+            break;
+        }
+        case AttrKind::SourceFile: {
+            // u2 域宽闸门（§27.2）：sourcefile_index 超 u16 显式 Err。
+            const auto& b = static_cast<const SourceFileAttr&>(*slot.body);
+            if (!fitsU16(b.sourceFileCp)) {
+                return Err(WriteError::Unencodable);
+            }
+            body.u16(static_cast<ca::u16>(b.sourceFileCp));
+            body.raw(ByteView{b.trailing});
+            break;
+        }
+        case AttrKind::InnerClasses: {
+            const auto& b = static_cast<const InnerClassesAttr&>(*slot.body);
+            if (b.rows.size() > std::numeric_limits<ca::u16>::max()) {
+                return Err(WriteError::Unencodable);
+            }
+            for (const auto& row : b.rows) {
+                if (!fitsU16(row.innerClassInfoCp) || !fitsU16(row.outerClassInfoCp) ||
+                    !fitsU16(row.innerNameCp) || !fitsU16(row.accessFlags)) {
+                    return Err(WriteError::Unencodable);
+                }
+            }
+            body.u16(static_cast<ca::u16>(b.rows.size()));
+            for (const auto& row : b.rows) {
+                body.u16(static_cast<ca::u16>(row.innerClassInfoCp));
+                body.u16(static_cast<ca::u16>(row.outerClassInfoCp));
+                body.u16(static_cast<ca::u16>(row.innerNameCp));
+                body.u16(static_cast<ca::u16>(row.accessFlags));
+            }
+            body.raw(ByteView{b.trailing});
+            break;
+        }
+        case AttrKind::EnclosingMethod: {
+            const auto& b = static_cast<const EnclosingMethodAttr&>(*slot.body);
+            if (!fitsU16(b.classCp) || !fitsU16(b.methodNatCp)) {
+                return Err(WriteError::Unencodable);
+            }
+            body.u16(static_cast<ca::u16>(b.classCp));
+            body.u16(static_cast<ca::u16>(b.methodNatCp));
+            body.raw(ByteView{b.trailing});
+            break;
+        }
+        case AttrKind::Exceptions: {
+            const auto& b = static_cast<const ExceptionsAttr&>(*slot.body);
+            if (b.exceptionCps.size() > std::numeric_limits<ca::u16>::max()) {
+                return Err(WriteError::Unencodable);
+            }
+            for (const ca::u32 cp : b.exceptionCps) {
+                if (!fitsU16(cp)) {
+                    return Err(WriteError::Unencodable);
+                }
+            }
+            body.u16(static_cast<ca::u16>(b.exceptionCps.size()));
+            for (const ca::u32 cp : b.exceptionCps) {
+                body.u16(static_cast<ca::u16>(cp));
             }
             body.raw(ByteView{b.trailing});
             break;

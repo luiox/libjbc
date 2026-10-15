@@ -3,7 +3,7 @@ package demo;
 import java.util.function.Function;
 
 public final class Main {
-    public static Expr CACHED;
+    public static @TypeUse(cls = Expr.class) Expr CACHED;
 
     public static Expr make(int delta) {
         return new Add(delta);
@@ -31,8 +31,18 @@ public final class Main {
         CACHED = pick(e, e2);
         System.out.println("sum=" + sum + " box=" + (box.get() == e2)
             + " cls=" + e.getClass().getName() + " name=" + Expr.class.getName()
-            + " lit=" + literal);
+            + " lit=" + literal + " ta=" + taName());
         return sum;
+    }
+
+    /** 反射读 CACHED 字段类型注解的 cls 值——TA 手术正确性的真跑断言。 */
+    public static String taName() {
+        try {
+            return Main.class.getField("CACHED").getAnnotatedType()
+                .getAnnotation(TypeUse.class).cls().getName();
+        } catch (NoSuchFieldException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public static void main(String[] args) throws Fail {

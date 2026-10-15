@@ -1,12 +1,13 @@
 /// @file        real_class_test.cpp
 /// @brief       真实 class 样本上的字节级往返验证（未触碰 / 全解码两条路径）。
 ///
-/// 样本表随语料来源切换（F1 解析序）：env/private-corpus 模式取 private-corpus 的 8 个代表类
-/// （真实混淆输入），仓内自产模式取 jbcx.corpus 的 8 个形态代表类（枚举/
+/// 样本表随语料来源切换（F1 解析序）：env 模式取注入语料内确定性选取的
+/// 代表类，仓内自产模式取 jbcx.corpus 的 8 个形态代表类（枚举/
 /// lambda/泛型/接口默认/内部类/长方法/宽局部/异常）。两类样本走同一套断言：
 /// 未触碰写回字节一致 + 全解码写回字节一致。
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <fstream>
 #include <string>
 #include <vector>
@@ -20,18 +21,6 @@ using jbc::test::Bytes;
 
 namespace {
 
-/// env/private-corpus 模式的样本：private-corpus 私有语料的代表类（相对 private-corpus 根）。
-const char* kAresSamples[] = {
-    "transformers/OpaquePredicate.class",
-    "transformers/encrpytion/ParameterEncryption.class",
-    "transformers/encrpytion/NewNumberEncryption.class",
-    "transformers/renamer/ClassRenamer.class",
-    "transformers/encrpytion/ReferenceEncryption.class",
-    "structure/ir/graph/ControlFlowGraph.class",
-    "util/InsnListBuilder.class",
-    "name/NameGenerator.class",
-};
-
 /// 仓内自产模式的样本：jbcx.corpus 形态代表类（相对自产根）。
 const char* kCorpusSamples[] = {
     "jbcx/corpus/VolEnumShape.class",        // 枚举 + 常量体匿名类
@@ -44,20 +33,38 @@ const char* kCorpusSamples[] = {
     "jbcx/corpus/VolTry.class",              // 异常表全形态 + TWR
 };
 
-std::vector<std::string> sampleList(jbc::test::corpus::Stage stage)
+std::vector<std::string> sampleList(const jbc::test::corpus::CorpusSource& src)
 {
     std::vector<std::string> out;
-    if (stage == jbc::test::corpus::Stage::SelfProduced) {
+    if (src.stage == jbc::test::corpus::Stage::SelfProduced) {
         for (const char* s : kCorpusSamples) {
             out.push_back(s);
         }
     }
     else {
-        for (const char* s : kAresSamples) {
-            out.push_back(s);
+        // env 注入模式：注入语料内确定性选取（递归收集排序取前 8）。
+        std::vector<std::string> files =
+            jbc::test::corpus::collectClassFiles(src.dir);
+        std::sort(files.begin(), files.end());
+        const std::size_t take = files.size() < 8 ? files.size() : 8;
+        for (std::size_t i = 0; i < take; ++i) {
+            out.push_back(std::filesystem::path(files[i]).lexically_relative(src.dir).string());
         }
     }
     return out;
+}
+
+void checkRealClass(const std::string& path);
+
+/// 按序号取样本跑真类校验；env 语料不足 8 个类时后续样本 skip。
+void checkSample(const jbc::test::corpus::CorpusSource& src, std::size_t i)
+{
+    const std::vector<std::string> samples = sampleList(src);
+    if (i >= samples.size() || samples[i].empty()) {
+        GTEST_SKIP() << "env corpus smaller than 8 classes";
+        return;
+    }
+    checkRealClass(src.dir + "/" + samples[i]);
 }
 
 Bytes slurp(const std::string& path, bool& found)
@@ -110,7 +117,7 @@ TEST(RealClassTest, Sample1)
     if (src.stage == jbc::test::corpus::Stage::None) {
         GTEST_SKIP() << jbc::test::corpus::skipReason(src);
     }
-    checkRealClass(src.dir + "/" + sampleList(src.stage)[0]);
+    checkSample(src, 0);
 }
 TEST(RealClassTest, Sample2)
 {
@@ -118,7 +125,7 @@ TEST(RealClassTest, Sample2)
     if (src.stage == jbc::test::corpus::Stage::None) {
         GTEST_SKIP() << jbc::test::corpus::skipReason(src);
     }
-    checkRealClass(src.dir + "/" + sampleList(src.stage)[1]);
+    checkSample(src, 1);
 }
 TEST(RealClassTest, Sample3)
 {
@@ -126,7 +133,7 @@ TEST(RealClassTest, Sample3)
     if (src.stage == jbc::test::corpus::Stage::None) {
         GTEST_SKIP() << jbc::test::corpus::skipReason(src);
     }
-    checkRealClass(src.dir + "/" + sampleList(src.stage)[2]);
+    checkSample(src, 2);
 }
 TEST(RealClassTest, Sample4)
 {
@@ -134,7 +141,7 @@ TEST(RealClassTest, Sample4)
     if (src.stage == jbc::test::corpus::Stage::None) {
         GTEST_SKIP() << jbc::test::corpus::skipReason(src);
     }
-    checkRealClass(src.dir + "/" + sampleList(src.stage)[3]);
+    checkSample(src, 3);
 }
 TEST(RealClassTest, Sample5)
 {
@@ -142,7 +149,7 @@ TEST(RealClassTest, Sample5)
     if (src.stage == jbc::test::corpus::Stage::None) {
         GTEST_SKIP() << jbc::test::corpus::skipReason(src);
     }
-    checkRealClass(src.dir + "/" + sampleList(src.stage)[4]);
+    checkSample(src, 4);
 }
 TEST(RealClassTest, Sample6)
 {
@@ -150,7 +157,7 @@ TEST(RealClassTest, Sample6)
     if (src.stage == jbc::test::corpus::Stage::None) {
         GTEST_SKIP() << jbc::test::corpus::skipReason(src);
     }
-    checkRealClass(src.dir + "/" + sampleList(src.stage)[5]);
+    checkSample(src, 5);
 }
 TEST(RealClassTest, Sample7)
 {
@@ -158,7 +165,7 @@ TEST(RealClassTest, Sample7)
     if (src.stage == jbc::test::corpus::Stage::None) {
         GTEST_SKIP() << jbc::test::corpus::skipReason(src);
     }
-    checkRealClass(src.dir + "/" + sampleList(src.stage)[6]);
+    checkSample(src, 6);
 }
 TEST(RealClassTest, Sample8)
 {
@@ -166,5 +173,5 @@ TEST(RealClassTest, Sample8)
     if (src.stage == jbc::test::corpus::Stage::None) {
         GTEST_SKIP() << jbc::test::corpus::skipReason(src);
     }
-    checkRealClass(src.dir + "/" + sampleList(src.stage)[7]);
+    checkSample(src, 7);
 }

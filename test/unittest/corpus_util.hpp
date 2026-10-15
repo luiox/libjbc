@@ -1,17 +1,17 @@
 /// @file        corpus_util.hpp
-/// @brief       F1 主门语料解析：env 注入 > 仓内自产（javac 现场编译）> private-corpus 本机路径。
+/// @brief       F1 主门语料解析：env 注入 > 仓内自产（javac 现场编译）。
 ///
-/// 最强护栏（>1000 方法帧 oracle、语料往返、attr/ir/insn 语料门）曾经只依赖
-/// 本机 private-corpus 语料（私有产品代码，绝不入仓），仓内缺席即 skip。本设施把护栏
-/// 变成「仓内自产、JDK-only 依赖」：
+/// 最强护栏（>1000 方法帧 oracle、语料往返、attr/ir/insn 语料门）基于
+/// 「仓内自产、JDK-only 依赖」的语料设施，仓内缺席即 skip：
 ///
-/// 1. `LIBJBC_REAL_CLASS_DIR` 环境变量注入时语义不变（CI/本机仍可指 private-corpus），
+/// 1. `LIBJBC_REAL_CLASS_DIR` 环境变量注入时语义不变（CI/本机注入任意语料目录），
 ///    注入但目录缺席按缺席处理（不静默回退，保持注入的权威性）。
-/// 2. 缺省时用 javac 现场编译仓内样本源（mtest_set/test_resource/java/
-///    jbc_corpus）到 test/libjbc_corpus/classes（生成产物目录，gitignore）。
-///    javac 缺席时不硬失败，退回 private-corpus 本机路径；private-corpus 也缺席时调用方 skip。
-/// 3. 样本源与产物之间的陈旧检测：manifest 缺失或任一 .java 比 manifest 新
-///    就重编。manifest 记录类数，供调用方输出量级信息。
+/// 2. 缺省时用 javac 现场编译仓内样本源（test_resource/java/jbc_corpus）
+///    到 test/libjbc_corpus/classes（生成产物目录，gitignore）。
+///    javac 缺席时不硬失败；语料缺席时调用方 skip。
+/// 3. 样本源与产物之间的陈旧检测：manifest 缺失、编译旗语指纹不符或任一
+///    .java 比 manifest 新就重编。manifest 记录类数与旗语指纹，供调用方
+///    输出量级信息。
 #pragma once
 
 #include <gtest/gtest.h>
@@ -29,13 +29,12 @@ namespace jbc::test::corpus {
 
 namespace fs = std::filesystem;
 
-/// @brief 语料来源阶段（决定依赖哪些门：env 缺席 skip、javac 缺席 skip、private-corpus 缺席 skip）。
+/// @brief 语料来源阶段（决定依赖哪些门：env 缺席 skip、javac 缺席 skip）。
 enum class Stage
 {
     None,          ///< 无可用语料（调用方应 GTEST_SKIP）
     Env,           ///< LIBJBC_REAL_CLASS_DIR 注入
     SelfProduced,  ///< 仓内样本源现场编译产物
-    Local,          ///< 本机 private-corpus 路径（历史缺省）
 };
 
 /// @brief Windows/POSIX 通用的命令静默执行（stdout/stderr 重定向到日志文件）。
@@ -71,6 +70,12 @@ inline fs::path manifestPath()
     return fs::path("test") / "libjbc_corpus" / "corpus_manifest.txt";
 }
 
+/// @brief 编译旗语指纹（manifest 标记行）：旗语升级即整批重编。
+///
+/// `-g` 产出 LVT/LVTT 调试属性——LVTT 签名列是泛型签名的第二处宿主，
+/// 语料门需要它在自产模式下可复现（env 注入模式的分布另计）。
+constexpr const char* kCompileFlagsMark = "flags=-g";
+
 inline std::vector<fs::path> collectSources()
 {
     std::vector<fs::path> out;
@@ -90,6 +95,20 @@ inline bool buildNeeded()
     std::error_code ec;
     if (!fs::exists(manifestPath(), ec) || ec) {
         return true;
+    }
+    // 编译旗语指纹：manifest 缺当前旗语即重编（旗语升级如补 -g 产出 LVT/LVTT）。
+    {
+        std::ifstream in(manifestPath());
+        std::string line;
+        bool hasVarsDebug = false;
+        while (std::getline(in, line)) {
+            if (line == kCompileFlagsMark) {
+                hasVarsDebug = true;
+            }
+        }
+        if (!hasVarsDebug) {
+            return true;
+        }
     }
     const auto marker = fs::last_write_time(manifestPath(), ec);
     if (ec) {
@@ -124,7 +143,7 @@ inline bool produceSelfCorpus()
         files += src.string();
         files += "\"";
     }
-    const std::string cmd = "javac --release 8 -encoding UTF-8 -d \""
+    const std::string cmd = "javac --release 8 -g -encoding UTF-8 -d \""
         + producedDir().string() + "\"" + files;
     const fs::path log = fs::path("test") / "libjbc_corpus" / "javac.log";
     fs::create_directories(log.parent_path(), ec);
@@ -142,7 +161,7 @@ inline bool produceSelfCorpus()
         }
     }
     std::ofstream manifest(manifestPath(), std::ios::binary | std::ios::trunc);
-    manifest << "classes=" << classes << "\n";
+    manifest << "classes=" << classes << "\n" << kCompileFlagsMark << "\n";
     return classes > 0;
 }
 
@@ -167,11 +186,11 @@ struct CorpusSource
     Stage stage = Stage::None;
 };
 
-/// @brief 解析序：env 注入 > 仓内自产 > private-corpus 本机路径（历史缺省）。
+/// @brief 解析序：env 注入 > 仓内自产。
 ///
 /// env 注入的语义与批前一致：环境变量指向的目录存在即用，不存在则整体缺席
 /// （注入是权威指令，不静默改道）。仓内自产在产物缺席/陈旧且 javac 在位时
-/// 现场编译；javac 缺席退回 private-corpus 缺省路径。
+/// 现场编译；javac 缺席则调用方 skip。
 inline CorpusSource resolveCorpus()
 {
     CorpusSource out;
@@ -192,11 +211,6 @@ inline CorpusSource resolveCorpus()
         out.dir = producedDir().string();
         out.stage = Stage::SelfProduced;
         return out;
-    }
-    const fs::path fallback("./local_class_corpus");
-    if (dirHasClassFiles(fallback)) {
-        out.dir = fallback.string();
-        out.stage = Stage::Local;
     }
     return out;
 }
@@ -222,7 +236,6 @@ inline std::string skipReason(const CorpusSource& s)
     case Stage::None: return "corpus unavailable (javac/JDK absent and no local corpus)";
     case Stage::Env: return "env corpus empty";
     case Stage::SelfProduced: return "self-produced corpus empty";
-    case Stage::Local: return "local fallback corpus empty";
     }
     return "corpus unavailable";
 }

@@ -37,6 +37,13 @@ enum class AttrKind : int {
     StackMapTable = 4,     ///< StackMapTable 属性（Code 嵌套）
     Annotations = 5,       ///< Runtime{Visible,Invisible}Annotations（简单形态）
     LocalVariableTable = 6,   ///< LocalVariableTable/LocalVariableTypeTable（Code 嵌套，行布局同构）
+    Signature = 7,         ///< Signature（JVMS 4.7.9，类/方法/字段三级挂载）
+    TypeAnnotations = 8,   ///< Runtime{Visible,Invisible}TypeAnnotations（JVMS 4.7.20）
+    CharacterRangeTable = 9,  ///< CharacterRangeTable（javac -Xjcov 私有，Code 嵌套）
+    SourceFile = 10,       ///< SourceFile（JVMS 4.7.10）
+    InnerClasses = 11,     ///< InnerClasses（JVMS 4.7.6）
+    EnclosingMethod = 12,  ///< EnclosingMethod（JVMS 4.7.7）
+    Exceptions = 13,       ///< Exceptions（JVMS 4.7.5）
 };
 
 /// @brief 属性体基类：一切已解码属性内容的共同祖先。
@@ -347,8 +354,8 @@ inline ca::u32 smtDelta(ca::u32 prevAbsPc, ca::u32 targetPc) noexcept
 /// @brief Runtime{Visible,Invisible}Annotations（JVMS 4.7.16/4.7.17）。
 ///
 /// 只建模 class/field/method 级的简单形态（无 target_info）。参数/类型级
-/// 注解（*TypeAnnotation 家族）结构复杂且用例集中在混淆器少见的路径，
-/// 保持 Raw 兜底，需要时再立模型。
+/// 注解（*TypeAnnotation 家族）另立 typed 模型 @ref TypeAnnotationsAttr
+/// （本族 ElemValue 为两族共用）。
 class AnnotationsAttr : public AttrBody
 {
 public:
@@ -375,6 +382,236 @@ public:
     };
 
     std::vector<Annotation> annos;
+
+    /// @brief 声明结构之后的非标准尾部字节（trailing 同族，design.md §27.1）。
+    std::vector<ca::u8> trailing;
+};
+
+/// @brief Signature 属性（JVMS 4.7.9）：泛型签名的单 u2 载荷。
+///
+/// 类/方法/字段三级挂载点各至多一个；属性体是 `u2 signature_index`，签名串
+/// 在 CP Utf8，语法与手术语义归 @ref jbc::type::signature（design.md §32），
+/// 属性层手术入口见 @ref jbc::ir::sig_attr（§32.4）。
+class SignatureAttr : public AttrBody
+{
+public:
+    static constexpr AttrKind kKind = AttrKind::Signature;
+
+    SignatureAttr() noexcept : AttrBody(kKind) {}
+
+    ca::u32 signatureCp = 0;   ///< Utf8 CP 索引（泛型签名串）
+
+    /// @brief 声明结构之后的非标准尾部字节（trailing 同族，design.md §27.1）。
+    ///
+    /// 合法 Signature 体恰为 2 字节；超长输入的尾字节奏此保留，重编码原样
+    /// 写回，不静默丢弃。
+    std::vector<ca::u8> trailing;
+};
+
+/// @brief Runtime{Visible,Invisible}TypeAnnotations 属性（JVMS 4.7.20/4.7.21）。
+///
+/// 类型注解族的全结构建模：target_type + target_info 并取（4.7.20.1 十形态）
+/// + type_path（4.7.20.2）+ 注解体（type_index 描述符 + element_value 表，
+/// 与 @ref AnnotationsAttr 共用 ElemValue）。可见性只差属性名（ AttrSlot.
+/// nameCp 承载，体不感知），RuntimeVisibleTypeAnnotations 与
+/// RuntimeInvisibleTypeAnnotations 共用本模型。挂载点：类/字段/方法属性表
+/// 与 Code 嵌套属性表。类名手术面（type_index 与 'c' 元素值的类描述符）见
+/// @ref jbc::ir::type_annotation_attr（design.md §32.7）。
+class TypeAnnotationsAttr : public AttrBody
+{
+public:
+    static constexpr AttrKind kKind = AttrKind::TypeAnnotations;
+
+    /// target_type 值（JVMS 4.7.20.1 表 A；载荷形状见各注释）。
+    static constexpr ca::u8 kClassTypeParameter = 0x00;   ///< u1 type_parameter_index
+    static constexpr ca::u8 kMethodTypeParameter = 0x01;  ///< u1 type_parameter_index
+    static constexpr ca::u8 kSupertype = 0x10;            ///< u2 interfaces[]/super 下标
+    static constexpr ca::u8 kClassTypeParameterBound = 0x11;  ///< u1 param + u1 bound
+    static constexpr ca::u8 kMethodTypeParameterBound = 0x12; ///< u1 param + u1 bound
+    static constexpr ca::u8 kField = 0x13;                ///< empty（字段类型）
+    static constexpr ca::u8 kMethodReturn = 0x14;         ///< empty（方法返回类型）
+    static constexpr ca::u8 kMethodReceiver = 0x15;       ///< empty（receiver 类型）
+    static constexpr ca::u8 kFormalsParameter = 0x16;     ///< u1 formal_parameter_index
+    static constexpr ca::u8 kThrows = 0x17;               ///< u2 Exceptions 表下标
+    static constexpr ca::u8 kLocalVar = 0x40;             ///< u2 表长 + {u2,u2,u2}*
+    static constexpr ca::u8 kLocalVarResource = 0x41;     ///< 同上（try-with-resources）
+    static constexpr ca::u8 kCatch = 0x42;                ///< u2 异常表条目下标
+    static constexpr ca::u8 kOffsetBase = 0x43;  ///< 0x43..0x46 instanceof/new/方法引用，u2 offset
+    static constexpr ca::u8 kOffsetMax = 0x46;
+    static constexpr ca::u8 kCast = 0x47;                 ///< u2 offset + u1 type_index（cast 位置）
+    static constexpr ca::u8 kTypeArgBase = 0x48;  ///< 0x48..0x4B 调用/引用类型实参，u2 offset + u1 arg
+    static constexpr ca::u8 kTypeArgMax = 0x4B;
+
+    TypeAnnotationsAttr() noexcept : AttrBody(kKind) {}
+
+    /// @brief type_path 一段（JVMS 4.7.20.2）：kind 0..3 + 类型实参下标。
+    struct TypePathEntry
+    {
+        ca::u8 kind = 0;         ///< 0 深入数组 1 深入嵌套 2 通配符界 3 类型实参
+        ca::u8 typeArgIndex = 0; ///< kind==3 时有效
+    };
+
+    /// @brief localvar_target 一行（start_pc/length/index 三 u2，布局同 LVT 行
+    ///        的 pc 段 + slot，但无 name/descriptor——引用的是槽位不是名字）。
+    struct LocalVarEntry
+    {
+        ca::u32 startPc = 0;
+        ca::u32 length = 0;
+        ca::u32 slot = 0;
+    };
+
+    /// @brief 一条 type_annotation。target_info 按字段注释分派取用。
+    struct Annotation
+    {
+        ca::u8 targetType = kField;
+
+        ca::u8 typeParameterIndex = 0;    ///< 0x00 / 0x01 / 0x11 / 0x12
+        ca::u8 boundIndex = 0;            ///< 0x11 / 0x12
+        ca::u32 supertypeIndex = 0;       ///< 0x10（interfaces[] 下标或 65535=superclass）
+        ca::u8 formalParameterIndex = 0;  ///< 0x16
+        ca::u32 throwsIndex = 0;          ///< 0x17（Exceptions 表下标，CP Class 引用）
+        std::vector<LocalVarEntry> localVars;  ///< 0x40/0x41
+        ca::u32 catchIndex = 0;           ///< 0x42（异常表条目下标）
+        ca::u32 offset = 0;               ///< 0x43..0x47
+        ca::u8 typeArgumentIndex = 0;     ///< 0x47 cast 的 type_index / 0x48..0x4B 实参下标
+
+        std::vector<TypePathEntry> typePath;
+
+        ca::u32 typeIndexCp = 0;  ///< 注解类型描述符（字段描述符形态，CP Utf8）
+        std::vector<std::pair<ca::u32, AnnotationsAttr::ElemValue>> values;
+    };
+
+    std::vector<Annotation> annotations;
+
+    /// @brief 声明结构之后的非标准尾部字节（trailing 同族，design.md §27.1）。
+    std::vector<ca::u8> trailing;
+};
+
+/// @brief CharacterRangeTable 属性（javac -Xjcov 的私有调试属性）。
+///
+/// 规格不是 JVMS 条目（JVMS 到 4.7.24 为止），以 JDK javac 源
+/// （CRTable.writeCRT）与 -Xjcov 产物字节实测为准：`u2 行数 +
+/// { u2 start_pc; u2 end_pc; u4 char_start; u4 char_end; u2 flags }*`。
+/// start_pc 是范围首指令 pc；end_pc 是**含末指令**的 pc（javac 写
+/// entry.endPc-1），二者都是指令起始 pc，重定位各自精确命中 pcmap。
+/// char_start/char_end 是源文件位置的 (line << 10) | column 编码（0 起），
+/// flags 是 CRT_* 位集——两者与字节码无关，按不透明整数保真。JDK 11+ 的
+/// javac 已停发本属性（-Xjcov 被忽略），仅旧编译器产物携带；Code 嵌套挂载。
+class CharacterRangeTableAttr : public AttrBody
+{
+public:
+    static constexpr AttrKind kKind = AttrKind::CharacterRangeTable;
+
+    CharacterRangeTableAttr() noexcept : AttrBody(kKind) {}
+
+    struct Row
+    {
+        ca::u32 startPc   = 0;  ///< 范围首指令 pc（u2 编码）
+        ca::u32 endPc     = 0;  ///< 含末指令 pc（u2 编码）
+        ca::u32 charStart = 0;  ///< 源起 (line<<10)|column（u4 编码）
+        ca::u32 charEnd   = 0;  ///< 源止 (line<<10)|column（u4 编码）
+        ca::u32 flags     = 0;  ///< CRT_* 位集（u2 编码，不透明保真）
+    };
+
+    std::vector<Row> rows;
+
+    /// @brief 声明结构之后的非标准尾部字节（trailing 同族，design.md §27.1）。
+    std::vector<ca::u8> trailing;
+};
+
+/// @brief B3 四件结构元数据属性（SourceFile/InnerClasses/EnclosingMethod/
+///        Exceptions）的共同边界，成文于此避免四处重复：
+///
+///  1. **只挂类级/成员级属性表，不 Code 嵌套，载荷全是 CP 索引与访问位，
+///     无任何 pc 偏移**——relocation 契约（§33 封闭集）不涉及它们，布局
+///     改动不需要、也不得对这四件做任何重定位。
+///  2. **codec 形状与既有 typed 属性同铁律**：半截体 decode 显式 Err、
+///     声明结构后的多余字节奏 trailing（§27.1）、编码逐字段过 u16 域宽
+///     闸门（§27.2）。
+///  3. **分派现状**：四件均已接 decodeAttrBody 的 typed 分派（B3 接线批与
+///     上层消费面迁移同批落地，design.md §32.9）；公开解码函数
+///     （attr_codec.hpp 的 *Body 入口）保留为不触碰槽状态的直接解码面。
+class SourceFileAttr : public AttrBody
+{
+public:
+    static constexpr AttrKind kKind = AttrKind::SourceFile;
+
+    SourceFileAttr() noexcept : AttrBody(kKind) {}
+
+    ca::u32 sourceFileCp = 0;   ///< Utf8 CP 索引（源文件名）
+
+    /// @brief 声明结构之后的非标准尾部字节（trailing 同族，design.md §27.1）。
+    ///
+    /// 合法 SourceFile 体恰为 2 字节；超长输入的尾字节奏此保留，重编码
+    /// 原样写回，不静默丢弃。
+    std::vector<ca::u8> trailing;
+};
+
+/// @brief InnerClasses 属性（JVMS 4.7.6）：内部类信息表（类级挂载）。
+///
+/// 行三 CP 槽即类名手术面：inner_class_info/outer_class_info 指向 CP
+/// Class 条目（inner_name 语义随 outer 存在性约束），inner_name 是简单名
+/// Utf8。既有 Raw 手术路径（上层消费方 remapper）对三槽的改写语义——类名映射
+/// 命中才动、outer==0 保 0、简单名随内部类二进制名映射同步且仅在全名命中
+/// 旧简单名时改写——与 @ref Row 三槽一一对应，typed 读写可完整表达
+/// （design.md §32.9）。
+class InnerClassesAttr : public AttrBody
+{
+public:
+    static constexpr AttrKind kKind = AttrKind::InnerClasses;
+
+    InnerClassesAttr() noexcept : AttrBody(kKind) {}
+
+    struct Row
+    {
+        ca::u32 innerClassInfoCp = 0;  ///< CP Class（内部类二进制名）
+        ca::u32 outerClassInfoCp = 0;  ///< CP Class；0 = 匿名/无外围类
+        ca::u32 innerNameCp = 0;       ///< CP Utf8 简单名；0 = 匿名
+        ca::u32 accessFlags = 0;       ///< 内部类访问位（u2 位集）
+    };
+
+    std::vector<Row> rows;
+
+    /// @brief 声明结构之后的非标准尾部字节（trailing 同族，design.md §27.1）。
+    std::vector<ca::u8> trailing;
+};
+
+/// @brief EnclosingMethod 属性（JVMS 4.7.7）：局部类/匿名类的外围类与
+///        直接包围方法（类级挂载）。
+///
+/// classCp 指向 CP Class（直接外围类，恒非 0）；methodNatCp 指向 CP
+/// NameAndType，**0 合法**——外围类是实例初始化器或静态初始化器时不指名
+/// 方法。两槽即类名手术面：类名重映射动 classCp；方法重映射动 methodNatCp
+/// （解析 NAT 后换新条目，NestHost/NestMembers 不在本属性）。与
+/// @ref InnerClassesAttr 同属 B3 分派挂账（见上）。
+class EnclosingMethodAttr : public AttrBody
+{
+public:
+    static constexpr AttrKind kKind = AttrKind::EnclosingMethod;
+
+    EnclosingMethodAttr() noexcept : AttrBody(kKind) {}
+
+    ca::u32 classCp = 0;      ///< CP Class（直接外围类）
+    ca::u32 methodNatCp = 0;  ///< CP NameAndType；0 = 无直接包围方法
+
+    /// @brief 声明结构之后的非标准尾部字节（trailing 同族，design.md §27.1）。
+    std::vector<ca::u8> trailing;
+};
+
+/// @brief Exceptions 属性（JVMS 4.7.5）：checked 异常类表（方法级挂载）。
+///
+/// 体是 `u2 count + u2 class_index*`，条目指向 CP Class。异常类重映射 =
+/// 逐条目 CP Class 重指向（既有 Raw 手术路径的语义），typed 模型以
+/// @ref exceptionCps 直接表达。与 @ref InnerClassesAttr 同属 B3 分派挂账
+/// （见上）。
+class ExceptionsAttr : public AttrBody
+{
+public:
+    static constexpr AttrKind kKind = AttrKind::Exceptions;
+
+    ExceptionsAttr() noexcept : AttrBody(kKind) {}
+
+    std::vector<ca::u32> exceptionCps;  ///< CP Class 索引表（checked 异常）
 
     /// @brief 声明结构之后的非标准尾部字节（trailing 同族，design.md §27.1）。
     std::vector<ca::u8> trailing;
@@ -425,6 +662,48 @@ template <>
 struct TypeOf<jbc::core::AnnotationsAttr>
 {
     static constexpr int value = static_cast<int>(jbc::core::AttrKind::Annotations);
+};
+
+template <>
+struct TypeOf<jbc::core::SignatureAttr>
+{
+    static constexpr int value = static_cast<int>(jbc::core::AttrKind::Signature);
+};
+
+template <>
+struct TypeOf<jbc::core::TypeAnnotationsAttr>
+{
+    static constexpr int value = static_cast<int>(jbc::core::AttrKind::TypeAnnotations);
+};
+
+template <>
+struct TypeOf<jbc::core::CharacterRangeTableAttr>
+{
+    static constexpr int value = static_cast<int>(jbc::core::AttrKind::CharacterRangeTable);
+};
+
+template <>
+struct TypeOf<jbc::core::SourceFileAttr>
+{
+    static constexpr int value = static_cast<int>(jbc::core::AttrKind::SourceFile);
+};
+
+template <>
+struct TypeOf<jbc::core::InnerClassesAttr>
+{
+    static constexpr int value = static_cast<int>(jbc::core::AttrKind::InnerClasses);
+};
+
+template <>
+struct TypeOf<jbc::core::EnclosingMethodAttr>
+{
+    static constexpr int value = static_cast<int>(jbc::core::AttrKind::EnclosingMethod);
+};
+
+template <>
+struct TypeOf<jbc::core::ExceptionsAttr>
+{
+    static constexpr int value = static_cast<int>(jbc::core::AttrKind::Exceptions);
 };
 
 }   // namespace ca::core::tag_cast

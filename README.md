@@ -27,9 +27,9 @@ xmake run libjbc_unittest --gtest_brief=1
 
 ## 测试语料
 
-三档解析：`LIBJBC_REAL_CLASS_DIR` 环境变量注入的目录 > 仓内样本
-（`test_resource/java/jbc_corpus`，测试期 `javac --release 8` 现场编译）>
-本机私有语料目录（缺省不存在，缺席即 skip）。
+两档解析：`LIBJBC_REAL_CLASS_DIR` 环境变量注入的目录 > 仓内样本
+（`test_resource/java/jbc_corpus`，测试期 `javac --release 8` 现场编译）；
+两档全缺席时语料门 skip 而不是硬失败。
 
 ## 最小示例
 
@@ -56,4 +56,4 @@ auto w = writeClass(cf);               // 未触碰 copy 原样，触碰重编�
 
 ## License
 
-TBD
+MIT（见 [LICENSE](LICENSE)）。

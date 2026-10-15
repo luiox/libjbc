@@ -47,7 +47,7 @@ Bytes buildWithAttr(const std::string& name, const Bytes& body)
 std::vector<std::string> collectClassFiles(const std::string& mainRoot)
 {
     namespace fs = std::filesystem;
-    // 主语料 = 语料解析序产物（env > 仓内自产 > private-corpus，F1）；
+    // 主语料 = 语料解析序产物（env > 仓内自产，F1）；
     // 固定语料 = test_resource 里的注解样本（cfr 提取，含类/方法级注解与
     // lambda 的 BootstrapMethods），保证注解路径不依赖构建产物存在。
     std::vector<fs::path> roots{fs::path(mainRoot), fs::path("test_resource/libjbc/annotated")};
@@ -449,7 +449,7 @@ TEST(AttrExtraRealClassTest, DecodeAllMutateAllRewriteIdentical)
         GTEST_SKIP() << jbc::test::corpus::skipReason(src);
     }
 
-    ca::usize seen[7] = {0, 0, 0, 0, 0, 0, 0};
+    ca::usize seen[16] = {};  // 按 AttrKind 值计数（容量随新建模属性增长；B3 四件后最大 kind=13）
     auto dirtyAll = [&](std::vector<AttrSlot>& slots) {
         for (AttrSlot& s : slots) {
             if (s.decoded()) {

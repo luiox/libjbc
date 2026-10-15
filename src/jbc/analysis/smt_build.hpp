@@ -34,6 +34,10 @@ enum class SmtBuildError : ca::u8 {
     BottomInFrame,   ///< 帧槽出现 Bottom / 无名引用（冲突残留或播种缺名——防御拒绝）
     TargetNotInsn,   ///< Uninitialized 载荷未命中方法内任何 new 指令 pc
     TooBig,          ///< 帧数 / delta 超 u2 编码域
+    Subroutine,      ///< 帧槽含 ReturnAddress：SMT 无法编码子程序（C2 裁决——
+                     ///<   verification_type_info 是封闭 tag 集，无 returnAddress
+                     ///<   形态（JVMS §4.7.4）；v≤49 不带 SMT 走旧校验是规范
+                     ///<   许可行为，不需要也不得生成 SMT）
 };
 
 const char* to_string(SmtBuildError e) noexcept;

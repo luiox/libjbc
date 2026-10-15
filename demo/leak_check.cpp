@@ -270,7 +270,8 @@ int main(int argc, char** argv)
 {
     asanSelfTest();
 
-    const fs::path root = argc > 1 ? argv[1] : "./local_class_corpus";
+    const char* envRoot = std::getenv("LIBJBC_REAL_CLASS_DIR");
+    const fs::path root = argc > 1 ? argv[1] : (envRoot ? envRoot : "./corpus");
     const std::size_t limit = argc > 2 ? std::strtoull(argv[2], nullptr, 10) : 300;
 
     const std::vector<fs::path> files = collect(root, limit);

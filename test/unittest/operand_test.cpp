@@ -270,11 +270,11 @@ TEST(OperandRealClassTest, AllCpInsnsResolve)
             }
         }
     }
-    // 量级门按语料阶段分档：private-corpus（混淆产物，CP 指令面最宽）沿用历史标定；
+    // 量级门按语料阶段分档：env 注入语料（可含混淆产物，CP 指令面最宽）沿用历史标定；
     // 仓内自产语料（javac 规范产物）按自身量级设门槛。解析正确性门不分档：
     // 不允许任何解析不出的 CP 指令（multianewarray 已由 classOf 收口；
-    // private-corpus 全语料 37398 条 unresolved=0 的口径，对任何语料都必须成立）。
-    if (src.stage == jbc::test::corpus::Stage::Local || src.stage == jbc::test::corpus::Stage::Env) {
+    // 历史全量语料 37398 条 unresolved=0 的口径，对任何语料都必须成立）。
+    if (src.stage == jbc::test::corpus::Stage::Env) {
         EXPECT_GT(memberOk, 5000u);
         EXPECT_GT(classOk, 500u);
         EXPECT_GT(constOk, 1000u);

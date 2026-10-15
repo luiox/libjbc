@@ -9,6 +9,7 @@
 /// 本文件同时是 doc_ai/ergonomics.md 的证据来源：写它时遇到的每一处
 /// 别扭都会记进摩擦点清单，不为了好看而绕开。
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -28,21 +29,28 @@ using Bytes = std::vector<ca::u8>;
 
 namespace {
 
-const char* kCorpusRoot = "./local_class_corpus/";
+/// 语料根：LIBJBC_REAL_CLASS_DIR 环境变量 > ./corpus 本地目录。
+const char* corpusRoot()
+{
+    if (const char* arg = std::getenv("LIBJBC_REAL_CLASS_DIR")) {
+        return arg;
+    }
+    return "./corpus";
+}
 
 std::vector<std::string> collectClassFiles()
 {
     namespace fs = std::filesystem;
     std::vector<std::string> out;
     std::error_code ec;
-    for (fs::recursive_directory_iterator it(kCorpusRoot, ec), end; it != end && !ec;
+    for (fs::recursive_directory_iterator it(corpusRoot(), ec), end; it != end && !ec;
          it.increment(ec)) {
         if (!ec && it->is_regular_file() && it->path().extension() == ".class") {
             out.push_back(it->path().string());
         }
     }
     if (out.empty()) {
-        std::printf("corpus not found under %s (build private-corpus first)\n", kCorpusRoot);
+        std::printf("corpus not found under %s (pass a dir or set LIBJBC_REAL_CLASS_DIR)\n", corpusRoot());
     }
     return out;
 }
@@ -147,7 +155,7 @@ int main()
         }
         // 语义层入口：字符串常量按内容去重 intern（每类一个 CP 条目），
         // 消费者不接触 Methodref→NaT→Utf8 布局，也不手工拼 addXxx。
-        const ca::u32 marker = s->internString("private-corpus-marked");
+        const ca::u32 marker = s->internString("corpus-marked");
         for (ca::usize i = 0; i < s->unit().methods.size(); ++i) {
             auto p = promoteMethod(*s, i);
             if (p.is_err()) {
@@ -201,7 +209,7 @@ int main()
             jbc::ir::ClassSession::ConstSem cv;
             if (f == nullptr || !s2->constOf(*f, cv) ||
                 cv.kind != jbc::ir::ClassSession::ConstSem::Kind::String ||
-                cv.str != "private-corpus-marked") {
+                cv.str != "corpus-marked") {
                 allOk = false;
                 break;
             }
