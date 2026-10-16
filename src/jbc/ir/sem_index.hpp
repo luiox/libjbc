@@ -65,6 +65,17 @@ public:
             case core::CpTag::InvokeDynamic:
                 ref.emplace(packRefKey(e.tag, e.a, e.b), i);
                 break;
+            case core::CpTag::Float:
+                // Float 位按 u32 存 ival（addFloatBits 的存储形态）。
+                floatConst.emplace(static_cast<ca::u32>(e.ival), i);
+                break;
+            case core::CpTag::Long:
+                longConst.emplace(e.lval, i);
+                break;
+            case core::CpTag::Double:
+                // Double 位经 i64 存储（appendWide 的存储形态）。
+                doubleConst.emplace(static_cast<ca::u64>(e.lval), i);
+                break;
             default:
                 break;
             }
@@ -77,6 +88,10 @@ public:
     std::unordered_map<ca::u32, ca::u32> strConst;           // utf8Idx → String 索引
     std::unordered_map<ca::i32, ca::u32> intConst;           // 值 → Integer 索引
     std::unordered_map<ca::u64, ca::u32> ref;                // (tag,a,b) → ref 索引
+    // 注解族合成基座（attr_build 挂载面）：常量去重三件。
+    std::unordered_map<ca::u32, ca::u32> floatConst;         // 位模式 → Float 索引
+    std::unordered_map<ca::i64, ca::u32> longConst;          // 值 → Long 索引
+    std::unordered_map<ca::u64, ca::u32> doubleConst;        // 位模式 → Double 索引
 };
 
 }   // namespace jbc::ir

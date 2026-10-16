@@ -40,6 +40,9 @@ const char* to_string(LowerError e) noexcept
     case LowerError::InvalidHandle: return "invalid handle";
     case LowerError::InvalidSeed: return "invalid seed";
     case LowerError::NotModeled: return "not modeled";
+    case LowerError::AlreadyMounted: return "already mounted";
+    case LowerError::BadMount: return "bad mount";
+    case LowerError::DomainOverflow: return "domain overflow";
     }
     return "?";
 }

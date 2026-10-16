@@ -10,6 +10,7 @@
 
 #include <cstddef>
 #include <memory>
+#include <optional>
 #include <string_view>
 #include <vector>
 
@@ -412,6 +413,81 @@ struct FieldSeed
     ca::u32 access = 0;
 };
 
+// ---------------------------------------------------------------------------
+// 类构建挂载面的合成规格模型（attr_build 批 1：注解族 + 简单注解 + 通用挂载）。
+//
+// 与 MethodSeed/FieldSeed 同一输入形态：全部 string_view + 值语义，CP 落位由
+// 会话语义 intern 完成（命中既有池不膨胀）。规格树由调用方构造，合成期被完整
+// 消化进 typed 属性体——接口不返回 CP 索引视图，规格本身不需要跨调用存活。
+// ---------------------------------------------------------------------------
+
+/// @brief ConstantValue 的值规格：常态十族经 classfile 常量池同化后 map 到
+///        五种 CP 形态（bool/byte/char/short → Integer，JVMS 4.7.2）。
+struct ConstValueSpec
+{
+    enum class Kind : ca::u8 {
+        Int, Bool, Byte, Char, Short,   // → CP Integer（num）
+        Long,                           // → CP Long（num）
+        Float,                          // → CP Float（fbits，位模式）
+        Double,                         // → CP Double（dbits，位模式）
+        String,                         // → CP String（str）
+    };
+
+    Kind kind = Kind::Int;
+    ca::i64 num = 0;          ///< Int 数族 / Long 的值（Bool 0/1）
+    ca::u32 fbits = 0;        ///< Float 位模式
+    ca::u64 dbits = 0;        ///< Double 位模式
+    std::string_view str;     ///< String 内容
+};
+
+/// @brief MethodParameters 的一行：参数名（空串 = 合成参数不指名，name_index 0）
+///        与旗语位集（ACC_FINAL/SYNTHETIC/MANDATED，不透明 u16 原样承载）。
+struct ParamNameRow
+{
+    std::string_view name;
+    ca::u16 flags = 0;
+};
+
+struct SemAnnotation;   // 前置声明：ElemValue 的 '@' 槽引用（定义见下）
+
+/// @brief 注解元素值的合成规格：JVMS 4.7.16.1 全 forms（const 十态 + 枚举 +
+///        类字面量 + 嵌套注解 + 数组）。数值族按 JVM 语义窄化为 32/16/8 位
+///        后落 CP Integer（与 @ref ConstValueSpec 同化口径），double 位模式
+///        原样承接（JVMS 注解无 64 位整型截断问题——'J'/'D' 各走 Long/Double）。
+struct SemElemValue
+{
+    enum class Form : ca::u8 {
+        Int, Bool, Byte, Char, Short,   // 'B' 'C' 'I' 'S' 'Z'（'Z' → Integer 0/1）
+        Long, Float, Double,            // 'J' 'F'(fbits) 'D'(dbits)
+        String,                         // 's'
+        Class,                          // 'c'（str = 类型描述符形态：基本类型/void
+                                        //      用 "I"/"V"，类类型用 "Ljava/lang/String;"；
+                                        //      落位是 Utf8 直索引，javac 同形——
+                                        //      非 CONSTANT_Class 条目）
+        Enum,                           // 'e'（enumType = 字段描述符形态 "Lx/Y;"
+                                        //      str = 枚举常量名）
+        Nested,                         // '@'（nested）
+        Array,                          // '['（array）
+    };
+
+    Form form = Form::Int;
+    ca::i64 num = 0;          ///< Int 数族 / Long 的值
+    ca::u32 fbits = 0;        ///< Float 位模式
+    ca::u64 dbits = 0;        ///< Double 位模式
+    std::string_view str;     ///< String 内容 / 'c' 类型描述符 / 枚举常量名
+    std::string_view enumType;          ///< 'e' 的 type_name（描述符形态，原样承接）
+    std::shared_ptr<SemAnnotation> nested;   ///< '@'
+    std::vector<SemElemValue> array;         ///< '['
+};
+
+/// @brief 一条注解的合成规格：类型描述符 + 元素对表（与 low-level
+///        AnnotationsAttr::Annotation 同构，CP 槽经合成面 intern）。
+struct SemAnnotation
+{
+    std::string_view typeDesc;   ///< 注解类型的字段描述符形态（"Lx/Y;"）
+    std::vector<std::pair<std::string_view, SemElemValue>> values;
+};
+
 /// @brief 从零建类的种子（A5）：空类起步的头四件 + 接口表。
 ///
 /// 名字一律内部名（'/' 分隔）。version 打包同 ClassUnit::version：
@@ -537,6 +613,15 @@ public:
     ca::u32 internInterfaceMethodRef(std::string_view owner, std::string_view name,
                                      std::string_view desc);
 
+    // ---- 合成基座补充（attr_build 类构建挂载面）：同一 intern 纪律 ----
+
+    /// @brief 裸 Utf8 intern：属性名/注解类型描述符/枚举名等合成面的基座。
+    ca::u32 internUtf8(std::string_view s);
+    /// @brief 常量四件：Long/Float/Double 无去重 intern（位模式原样承载）。
+    ca::u32 internLong(ca::i64 v);
+    ca::u32 internFloatBits(ca::u32 bits);
+    ca::u32 internDoubleBits(ca::u64 bits);
+
     /// @brief 将指定方法的 IR 元数据提交到 backing 的 method_info。
     ///
     /// 方法名、描述符和访问标志属于 ClassUnit 的高层状态；提交入口负责把
@@ -611,6 +696,55 @@ public:
     /// Err(CpAppendFailed)，先预检后写入，不留半截追加。
     Result<void, LowerError> commitClassMetadata();
 
+    // ---- 类构建挂载面（attr_build 批 1：注解族合成 + 通用挂载，A7 定形）----
+    //
+    // 挂载语义（全 API 一致）：
+    // - **只挂不改**：槽上已有同名属性时 Err(AlreadyMounted)——替换语义走
+    //   既有 decodeAttr + mutate() 通路，本家族不造第二条修改通道。
+    // - **单例规则**：LNT/LVT/LVTT 允许多条；其余（含未知名）至多一条。
+    // - **域宽/容量先算后写**：u1 行数域、CP 追加数在触碰模型前预检，失败
+    //   不留半截挂载（CP 无新增、属性表无新增）。
+    // - **记入 ChangeSet**：成员级挂载记 MemberMetadata，类级记 ClassMetadata。
+
+    /// @brief 字段恒值（JVMS 4.7.2，字段级单例）。值按 @ref ConstValueSpec
+    ///        同化进 CP 五形态；类型层一致性（槽形态 vs 字段描述符）归上层
+    ///        语义，本面只承载。
+    Result<void, LowerError> attachConstantValue(FieldId field, const ConstValueSpec& v);
+
+    /// @brief 方法参数名/旗语表（JVMS 4.7.24，方法级单例）。行数超 u1 域
+    ///        Err(DomainOverflow)；名字 intern，空串行 name_index 0。
+    Result<void, LowerError> attachMethodParameters(MethodId method,
+                                                    const std::vector<ParamNameRow>& rows);
+
+    /// @brief 方法参数注解（JVMS 4.7.18/4.7.19，方法级；visible/invisible 各
+    ///        至多一条）。外层下标 = 参数槽位，空内层表 = 无注解参数。
+    Result<void, LowerError> attachParameterAnnotations(
+        MethodId method, bool visible, const std::vector<std::vector<SemAnnotation>>& params);
+
+    /// @brief 注解默认值（JVMS 4.7.22，方法级单例，@interface 方法专用）。
+    Result<void, LowerError> attachAnnotationDefault(MethodId method, const SemElemValue& v);
+
+    /// @brief 简单注解（JVMS 4.7.16/4.7.17；方法级；visible/invisible 各至多
+    ///        一条）。类/字段级同名重载照挂载点语义同构。
+    Result<void, LowerError> attachAnnotations(MethodId method, bool visible,
+                                               const std::vector<SemAnnotation>& annos);
+    Result<void, LowerError> attachAnnotations(FieldId field, bool visible,
+                                               const std::vector<SemAnnotation>& annos);
+    Result<void, LowerError> attachClassAnnotations(bool visible,
+                                                    const std::vector<SemAnnotation>& annos);
+
+    /// @brief 通用挂载（A7 定形）：给成员挂一个**调用方已构造**的 typed 体。
+    ///
+    /// 体上的 CP 槽由调用方先经语义 intern 家族落位；本面负责挂载点校验
+    /// （Code 一律拒绝——方法体归 promote/lower 管径）、单例规则、属性名
+    /// intern 与容量预检。带手写体的下面三条是注解族合成 API 的展开形态。
+    Result<void, LowerError> attachAttr(MethodId method, std::string_view attrName,
+                                        std::unique_ptr<core::AttrBody> body);
+    Result<void, LowerError> attachAttr(FieldId field, std::string_view attrName,
+                                        std::unique_ptr<core::AttrBody> body);
+    Result<void, LowerError> attachClassAttr(std::string_view attrName,
+                                             std::unique_ptr<core::AttrBody> body);
+
 private:
     // CP 压缩（A8，design.md §36）需要重建语义 intern 索引并把换池前的旧池
     // 移入退居存储（§35.2 文本视图存活期契约），是会话内部的通道。
@@ -626,6 +760,34 @@ private:
     ca::u32 internUtf8Sem(std::string_view s);
     ca::u32 internRef(core::CpTag tag, std::string_view owner, std::string_view name,
                       std::string_view desc);
+
+    // ---- attr_build.cpp 的合成/挂载内核（成员实现文件见该文件头注）----
+
+    /// @brief 挂载预检：名字合法性 + Code 拒收 + 槽位域宽 + 单例规则 + 属性
+    ///        名容量。不触碰模型（CP/属性表零效应），所有 attach 入口在任
+    ///        何合成之前先过本闸，保证失败不留半截。
+    Result<void, LowerError> mountPrecheck(std::vector<core::AttrSlot>& table,
+                                           std::string_view attrName);
+    /// @brief 挂载落位：属性名 intern + AttrSlot::makeNew 追加。预检通过后
+    ///        调用，此处不再失败（makeNew 追加是纯构造）。
+    Result<void, LowerError> mountAttr(std::vector<core::AttrSlot>& table,
+                                       std::string_view attrName,
+                                       std::unique_ptr<core::AttrBody> body);
+    /// @brief attachAnnotations 三重载的共同底座：合成 + 挂载 + 记账。rec
+    ///        为空表示类级无身份视图之外的记账（类级记录由入口构造）。
+    Result<void, LowerError>
+        attachAnnotationsToTable(std::vector<core::AttrSlot>& table, bool visible,
+                                 const std::vector<SemAnnotation>& annos,
+                                 std::optional<ChangeRecord> rec);
+    /// @brief 注解规格 → low-level Annotation（元素递归合成，CP 经语义 intern）。
+    Result<core::AnnotationsAttr::Annotation, LowerError>
+        synthAnnotation(const SemAnnotation& a, int depth);
+    /// @brief 元素规格 → low-level ElemValue（同上递归）。
+    Result<core::AnnotationsAttr::ElemValue, LowerError> synthElem(const SemElemValue& e,
+                                                                   int depth);
+    /// @brief 规格树将产生的 CP 追加数（miss 才计数的预检遍历，build 前跑）。
+    Result<ca::u32, LowerError> countAnnoAdditions(const SemAnnotation& a, int depth);
+    Result<ca::u32, LowerError> countElemAdditions(const SemElemValue& e, int depth);
 
     std::unique_ptr<core::ClassFile> backing_;
     ClassUnit unit_;

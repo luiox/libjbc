@@ -323,6 +323,50 @@ ca::u32 ClassSession::internInteger(ca::i32 v)
     return idx;
 }
 
+// ---- 合成基座补充（attr_build 类构建挂载面；ReadError 到 Index 的语义与
+// ---- 上方 interns 同一条 intern 纪律：命中既有池不膨胀，miss 才追加）----
+
+ca::u32 ClassSession::internUtf8(std::string_view s)
+{
+    return internUtf8Sem(s);
+}
+
+ca::u32 ClassSession::internLong(ca::i64 v)
+{
+    SemIndex& ix  = sem();
+    const auto it = ix.longConst.find(v);
+    if (it != ix.longConst.end()) {
+        return it->second;
+    }
+    const ca::u32 idx = backing_->cp.addLong(v);
+    ix.longConst.emplace(v, idx);
+    return idx;
+}
+
+ca::u32 ClassSession::internFloatBits(ca::u32 bits)
+{
+    SemIndex& ix  = sem();
+    const auto it = ix.floatConst.find(bits);
+    if (it != ix.floatConst.end()) {
+        return it->second;
+    }
+    const ca::u32 idx = backing_->cp.addFloatBits(bits);
+    ix.floatConst.emplace(bits, idx);
+    return idx;
+}
+
+ca::u32 ClassSession::internDoubleBits(ca::u64 bits)
+{
+    SemIndex& ix  = sem();
+    const auto it = ix.doubleConst.find(bits);
+    if (it != ix.doubleConst.end()) {
+        return it->second;
+    }
+    const ca::u32 idx = backing_->cp.addDoubleBits(bits);
+    ix.doubleConst.emplace(bits, idx);
+    return idx;
+}
+
 ca::u32 ClassSession::internRef(core::CpTag tag, std::string_view owner,
                                 std::string_view name, std::string_view desc)
 {

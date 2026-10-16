@@ -38,6 +38,11 @@ enum class LowerError {
     InvalidHandle,     ///< 成员身份句柄无效（已删除或来自另一会话）
     InvalidSeed,       ///< 新增成员的种子不合法（空名字/描述符、重名等）
     NotModeled,        ///< 搬移/挂入涉及本版本不建模的结构（indy、宽常量等）
+
+    // ---- 类构建挂载面（attr_build：注解族合成/挂载，dev_plan 批 1）----
+    AlreadyMounted,    ///< 单例属性重复挂载（替换走 decode + mutate 既有面）
+    BadMount,          ///< 挂载点不接受该属性（如挂 Code 属性）或合成规格不合法
+    DomainOverflow,    ///< 合成规格的行数域写不下（u1/u16 域宽，§27.2 同源）
 };
 
 const char* to_string(EditError e) noexcept;
