@@ -488,6 +488,45 @@ struct SemAnnotation
     std::vector<std::pair<std::string_view, SemElemValue>> values;
 };
 
+/// @brief 方法句柄合成规格（JVMS 4.4.8）：reference_kind 1..9，目标成员
+///        owner（内部名 '/' 分隔）/name/desc。类型层一致性（kind 与成员
+///        形态的匹配，如 invokeStatic 对 <init>）归上层并归 JVM 运行时证伪，
+///        结构面只做 kind 值域闸（1..9 是 JVM 类解析即拒的垃圾）。
+struct MethodHandleSpec
+{
+    ca::u16 referenceKind = 0;   ///< 1..9；域外 → Err(InvalidSeed)
+    std::string_view owner;
+    std::string_view name;
+    std::string_view desc;
+};
+
+/// @brief BSM 静态参数合成规格（JVMS 4.7.23 bootstrap_arguments，loadable
+///        十族）。整型一律 CP Integer（bootstrap 参数无窄化语义，与注解
+///        元素族的窄化不同账）；Dynamic 形态绑定既有 BSM 条目 + 名/型
+///        （叶子平挂，无嵌套规格树——嵌套条件常量在池层经同形重用互达），
+///        下标锚点校验与显式 internDynamic 同规则。
+struct BsmArg
+{
+    enum class Kind : ca::u8 {
+        Int, Long, Float, Double,   ///< num / fbits / dbits（同 ConstValueSpec 口径）
+        String,                     ///< str 内容 → CONSTANT_String
+        Class,                      ///< str 内部名 → CONSTANT_Class
+        MethodType,                 ///< str 方法描述符 → CONSTANT_MethodType
+        MethodHandle,               ///< handle
+        Dynamic,                    ///< 条件常量（bsm + name + desc）
+    };
+
+    Kind kind = Kind::Int;
+    ca::i64 num    = 0; ///< Int / Long 的值
+    ca::u32 fbits  = 0; ///< Float 位模式
+    ca::u64 dbits  = 0; ///< Double 位模式
+    std::string_view str;      ///< String 内容 / Class 内部名 / MethodType 描述符
+    MethodHandleSpec handle;   ///< Kind::MethodHandle
+    ca::u32 bsm  = 0;          ///< Kind::Dynamic 的 bootstrap 条目下标
+    std::string_view name;     ///< Kind::Dynamic 的 NameAndType 名
+    std::string_view desc;     ///< Kind::Dynamic 的 NameAndType 描述符
+};
+
 /// @brief 从零建类的种子（A5）：空类起步的头四件 + 接口表。
 ///
 /// 名字一律内部名（'/' 分隔）。version 打包同 ClassUnit::version：
@@ -622,6 +661,24 @@ public:
     ca::u32 internFloatBits(ca::u32 bits);
     ca::u32 internDoubleBits(ca::u64 bits);
 
+    // ---- BSM/条件常量族（批 2）：同一条去重纪律，带域校验的返回 Result ----
+
+    /// @brief 方法句柄 intern（JVMS 4.4.8）：reference_kind 1..9 按 kind 分流
+    ///        Fieldref/Methodref/InterfaceMethodref 三形态 + NameAndType。
+    ///        命中既有句柄（kind+目标元）不追加；kind 域外 Err(InvalidSeed)。
+    Result<ca::u32, LowerError> internMethodHandle(const MethodHandleSpec& h);
+    /// @brief MethodType intern：方法描述符 → CONSTANT_MethodType 条目。
+    ca::u32 internMethodType(std::string_view desc);
+    /// @brief Module/Package intern（JVMS 4.4.12/4.4.11）。两者只在
+    ///        module-info 类面合法——成员性约束归上层，本面只承载。
+    ca::u32 internModule(std::string_view name);
+    ca::u32 internPackage(std::string_view name);
+    /// @brief 条件常量 intern（JVMS 4.4.10 CONSTANT_Dynamic）：绑定既有
+    ///        BSM 条目下标 + NameAndType(name, desc)。BSM 属性缺位或下标
+    ///        越界（JVM 类解析即拒 BSM-dependent 形态）一律 Err(InvalidSeed)。
+    Result<ca::u32, LowerError> internDynamic(ca::u32 bsmIndex, std::string_view name,
+                                              std::string_view desc);
+
     /// @brief 将指定方法的 IR 元数据提交到 backing 的 method_info。
     ///
     /// 方法名、描述符和访问标志属于 ClassUnit 的高层状态；提交入口负责把
@@ -744,6 +801,21 @@ public:
                                         std::unique_ptr<core::AttrBody> body);
     Result<void, LowerError> attachClassAttr(std::string_view attrName,
                                              std::unique_ptr<core::AttrBody> body);
+
+    // ---- BSM 属性面（批 2）：类级 BootstrapMethods 的语义构建 ----
+    //
+    // - **条目复用**：methodRef + 静态参数组全字段一致的既有条目直接命中
+    //   复用（JVMS 对同形条目无可辨差异，javac/ASM 同思路合并）；
+    // - **类级单例**：BootstrapMethods 至多一条，缺则建（"先算后写"纪律
+    //   与注解族同一执行序）；
+    // - **记入 ChangeSet**：实改（新建属性/追加条目）记 ClassMetadata，
+    //   纯命中复用不记账。
+
+    /// @brief 追加/复用一条 bootstrap 方法条目：句柄经 @ref internMethodHandle，
+    ///        静态参数逐个按 loadable 族落位；属性缺则建、条目同形则复用。
+    ///        返回条目下标（0 基，即 invokedynamic/condy 的 bootstrap 索引）。
+    Result<ca::u32, LowerError> appendBootstrapMethod(const MethodHandleSpec& handle,
+                                                      const std::vector<BsmArg>& args);
 
 private:
     // CP 压缩（A8，design.md §36）需要重建语义 intern 索引并把换池前的旧池

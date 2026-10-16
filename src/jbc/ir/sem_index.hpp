@@ -27,6 +27,18 @@ constexpr ca::u64 packNatKey(ca::u32 nameCp, ca::u32 descCp) noexcept
 {
     return (static_cast<ca::u64>(nameCp) << 16) | static_cast<ca::u64>(descCp);
 }
+/// MethodHandle 键：(reference_kind, 句柄目标索引)。kind 是 JVMS 4.4.8 的
+/// 1..9 槽，不在 u16 之内也不与其他 tag 系键共用表。
+constexpr ca::u64 packMhKey(ca::u32 kind, ca::u32 refCp) noexcept
+{
+    return (static_cast<ca::u64>(kind) << 32) | static_cast<ca::u64>(refCp);
+}
+/// Module/Package 键：(tag, 名字索引)。两个 tag 共用一张表，键内带 tag 分流。
+constexpr ca::u64 packNamedKey(core::CpTag tag, ca::u32 nameCp) noexcept
+{
+    return (static_cast<ca::u64>(static_cast<ca::u16>(tag)) << 32) |
+           static_cast<ca::u64>(nameCp);
+}
 
 }   // namespace
 
@@ -63,7 +75,18 @@ public:
             case core::CpTag::Methodref:
             case core::CpTag::InterfaceMethodref:
             case core::CpTag::InvokeDynamic:
+            case core::CpTag::Dynamic:
                 ref.emplace(packRefKey(e.tag, e.a, e.b), i);
+                break;
+            case core::CpTag::MethodType:
+                mtConst.emplace(e.a, i);
+                break;
+            case core::CpTag::MethodHandle:
+                mhConst.emplace(packMhKey(e.a, e.b), i);
+                break;
+            case core::CpTag::Module:
+            case core::CpTag::Package:
+                namedConst.emplace(packNamedKey(e.tag, e.a), i);
                 break;
             case core::CpTag::Float:
                 // Float 位按 u32 存 ival（addFloatBits 的存储形态）。
@@ -92,6 +115,11 @@ public:
     std::unordered_map<ca::u32, ca::u32> floatConst;         // 位模式 → Float 索引
     std::unordered_map<ca::i64, ca::u32> longConst;          // 值 → Long 索引
     std::unordered_map<ca::u64, ca::u32> doubleConst;        // 位模式 → Double 索引
+    // BSM/条件常量族（批 2）：句柄看 kind+目标；MethodType 看描述符；
+    // Module/Package 共表看 (tag, 名字)；Dynamic 并入 ref 表（bsm 下标占 a 槽）。
+    std::unordered_map<ca::u64, ca::u32> mhConst;            // (kind, ref) → MethodHandle 索引
+    std::unordered_map<ca::u32, ca::u32> mtConst;            // descIdx → MethodType 索引
+    std::unordered_map<ca::u64, ca::u32> namedConst;         // (tag, name) → Module/Package 索引
 };
 
 }   // namespace jbc::ir
