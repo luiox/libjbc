@@ -447,7 +447,7 @@ struct RunnerSpec
     std::vector<std::pair<std::string, std::vector<std::uint8_t>>> classes;
     std::string                     runnerBody;
     std::vector<std::string>        arguments;      ///< 传给 Runner 的命令行参数
-    std::vector<std::string>        jvmArgs;        ///< 额外 JVM 参数（如 -Dmjt.literal.native=<dll>）
+    std::vector<std::string>        jvmArgs;        ///< 额外 JVM 参数（如 -D<name>.literal.native=<dll> 形式的系统属性注入）
     std::vector<fs::path>           extraJavaSources;   ///< 额外一起编译的 .java 绝对路径（如 indy bootstrap）
     bool                            verify = true;   ///< true=-Xverify:all，false=-noverify
     std::string                     scratchPrefix = "libjbc_jvm_";
