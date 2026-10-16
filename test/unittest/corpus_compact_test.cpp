@@ -5,6 +5,8 @@
 /// 1. 拒绝诚实性：每个 AttrNotModeled 拒绝点名的属性在原类上 decodeAttr
 ///    必须是 Raw 形（拒绝只落在真正未建模的属性上，不诬陷建模属性）；
 ///    MalformedAttr 在 javac 级语料上必须为零（命中即查格式知识）；
+///    拒收面清零：封闭集收编完成后 javac 级语料两种来源模式均不得出现
+///    AttrNotModeled；
 /// 2. 确定性：同一原始字节两次独立压缩写出逐字节一致；
 /// 3. 保真：产物重读 → 全解码 → 再写逐字节一致；类名/方法表字符串恒等；
 ///    产物尺寸不大于原类（池单调缩，u2 引用面等宽）。
@@ -95,6 +97,15 @@ TEST(CorpusCompact, CompactionScanHonestAndDeterministic)
     if (moduleC.stage == jbc::test::corpus::Stage::SelfProduced) {
         const auto moduleFiles = jbc::test::corpus::collectClassFiles(moduleC.dir);
         files.insert(files.end(), moduleFiles.begin(), moduleFiles.end());
+    }
+    // annot 语料（-parameters）并入压缩扫：注解族四件（ParameterAnnotations/
+    // AnnotationDefault/MethodParameters/ConstantValue）进封闭集后，自产模式
+    // 下参数名表/注解默认值/参数注解的压缩行为也过门（env 注入主语料的
+    // MethodParameters 拒收面重测经主语料生效）。
+    const auto annot = jbc::test::corpus::resolveAnnotCorpus();
+    if (annot.stage == jbc::test::corpus::Stage::SelfProduced) {
+        const auto annotFiles = jbc::test::corpus::collectClassFiles(annot.dir);
+        files.insert(files.end(), annotFiles.begin(), annotFiles.end());
     }
     ASSERT_FALSE(files.empty());
 
@@ -203,4 +214,9 @@ TEST(CorpusCompact, CompactionScanHonestAndDeterministic)
     }
     EXPECT_EQ(dishonest, 0) << "拒绝面不诚实：建模属性被诬拒或点名属性失踪";
     EXPECT_EQ(malformed, 0) << "javac 级语料出现 MalformedAttr：压缩侧格式知识有误";
+    // 拒收面清零：注解族四件（ParameterAnnotations/AnnotationDefault/
+    // MethodParameters/ConstantValue）收编进封闭集后，javac 级语料构造上
+    // 无名单外属性——批前自产 5（全是 AnnotationDefault）/env 注入 54（全是
+    // MethodParameters）的拒收归零，两种模式同门生效。
+    EXPECT_EQ(rejected, 0) << "压缩拒收面未清零（见上方 reject 明细）";
 }

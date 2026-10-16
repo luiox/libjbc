@@ -650,4 +650,134 @@ inline CorpusSource resolveModuleCorpus()
     return out;
 }
 
+/// @brief annot 语料根：注解族属性（AnnotationDefault/参数注解双保留）+
+///        MethodParameters（javac -parameters 旗语产物；主语料的 --release 8
+///        基础旗语不产参数名表），另立小语料现场编译（源同样入仓内
+///        test_resource，产物属生成物）。
+inline fs::path annotSourcesDir()
+{
+    return fs::path("test_resource") / "java" / "jbc_corpus_annot";
+}
+
+inline fs::path annotProducedDir()
+{
+    return fs::path("test") / "libjbc_corpus_annot" / "classes";
+}
+
+inline fs::path annotManifestPath()
+{
+    return fs::path("test") / "libjbc_corpus_annot" / "annot_manifest.txt";
+}
+
+/// @brief annot 语料编译旗语指纹（manifest 标记行）：旗语升级即整批重编。
+///        -parameters 产出 MethodParameters——注解族语料门需要它在自产模式
+///        下可复现（env 注入模式的分布另计）。
+constexpr const char* kAnnotCompileFlagsMark = "flags=-g -parameters --release 8";
+
+inline std::vector<fs::path> collectAnnotSources()
+{
+    std::vector<fs::path> out;
+    std::error_code ec;
+    for (fs::directory_iterator it(annotSourcesDir(), ec), end; it != end && !ec;
+         it.increment(ec)) {
+        if (it->is_regular_file() && it->path().extension() == ".java") {
+            out.push_back(it->path());
+        }
+    }
+    std::sort(out.begin(), out.end());
+    return out;
+}
+
+/// @brief annot 语料是否缺失或比样本源旧（语义同 buildNeeded）。
+inline bool annotBuildNeeded()
+{
+    std::error_code ec;
+    if (!fs::exists(annotManifestPath(), ec) || ec) {
+        return true;
+    }
+    {
+        std::ifstream in(annotManifestPath());
+        std::string line;
+        bool hasMark = false;
+        while (std::getline(in, line)) {
+            if (line == kAnnotCompileFlagsMark) {
+                hasMark = true;
+            }
+        }
+        if (!hasMark) {
+            return true;
+        }
+    }
+    const auto marker = fs::last_write_time(annotManifestPath(), ec);
+    if (ec) {
+        return true;
+    }
+    for (const fs::path& src : collectAnnotSources()) {
+        const auto t = fs::last_write_time(src, ec);
+        if (!ec && t > marker) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// @brief 现场编译 annot 语料。--release 8 与主语料同一能力下界（javac 在位
+///        即可编，不单设 release 探测）；javac 缺席返回 false（调用方降级，
+///        不失败）；源存在且编译失败是仓内缺陷，直接 ADD_FAILURE（红）。
+inline bool produceAnnotCorpus()
+{
+    const std::vector<fs::path> sources = collectAnnotSources();
+    if (sources.empty()) {
+        return false;   // 不在仓库根运行或样本被删：按缺席降级
+    }
+    if (!javacPresent()) {
+        return false;
+    }
+    std::error_code ec;
+    fs::remove_all(annotProducedDir(), ec);
+    fs::create_directories(annotProducedDir(), ec);
+    std::string files;
+    for (const fs::path& src : sources) {
+        files += " \"";
+        files += src.string();
+        files += "\"";
+    }
+    const std::string cmd = "javac --release 8 -g -parameters -encoding UTF-8 -d \""
+        + annotProducedDir().string() + "\"" + files;
+    const fs::path log = fs::path("test") / "libjbc_corpus_annot" / "javac.log";
+    fs::create_directories(log.parent_path(), ec);
+    const int rc = runQuiet(cmd, log);
+    if (rc != 0) {
+        ADD_FAILURE() << "annot corpus javac failed (rc=" << rc << "), log: "
+                      << log.string();
+        return false;
+    }
+    ca::usize classes = 0;
+    for (fs::recursive_directory_iterator it(annotProducedDir(), ec), end; it != end && !ec;
+         it.increment(ec)) {
+        if (!ec && it->is_regular_file() && it->path().extension() == ".class") {
+            ++classes;
+        }
+    }
+    std::ofstream manifest(annotManifestPath(), std::ios::binary | std::ios::trunc);
+    manifest << "classes=" << classes << "\n" << kAnnotCompileFlagsMark << "\n";
+    return classes > 0;
+}
+
+/// @brief annot 语料解析：命中 = 自产模式产物根（Stage::SelfProduced）；缺席
+///        返回 stage == None（调用方按需降级）。本根不消费 env 注入（参数名
+///        表/注解默认值的分布由注入语料自带，自产侧另设硬断言）。
+inline CorpusSource resolveAnnotCorpus()
+{
+    CorpusSource out;
+    if (annotBuildNeeded() || !dirHasClassFiles(annotProducedDir())) {
+        produceAnnotCorpus();
+    }
+    if (dirHasClassFiles(annotProducedDir())) {
+        out.dir   = annotProducedDir().string();
+        out.stage = Stage::SelfProduced;
+    }
+    return out;
+}
+
 }   // namespace jbc::test::corpus
