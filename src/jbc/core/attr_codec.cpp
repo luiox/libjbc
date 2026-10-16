@@ -33,6 +33,11 @@ constexpr std::string_view kRecordName              = "Record";
 constexpr std::string_view kModuleName              = "Module";
 constexpr std::string_view kModulePackagesName      = "ModulePackages";
 constexpr std::string_view kModuleMainClassName     = "ModuleMainClass";
+constexpr std::string_view kRvpaName          = "RuntimeVisibleParameterAnnotations";
+constexpr std::string_view kRipaName          = "RuntimeInvisibleParameterAnnotations";
+constexpr std::string_view kAnnotationDefaultName = "AnnotationDefault";
+constexpr std::string_view kMethodParametersName  = "MethodParameters";
+constexpr std::string_view kConstantValueName     = "ConstantValue";
 
 /// @brief u16 域宽检查：编码闸门的基础谓词（design.md §27.2——超界显式
 ///        Err，禁止 static_cast 静默截断）。
@@ -998,6 +1003,104 @@ Result<std::unique_ptr<AttrBody>, ReadError> decodeModuleMainClassBody(ClassFile
     return Ok(std::unique_ptr<AttrBody>(std::move(b)));
 }
 
+/// @brief 注解族四件（ParameterAnnotations/AnnotationDefault/MethodParameters/
+///        ConstantValue）typed 解码族，形状与既有 typed 解码同铁律（半截体
+///        Err、trailing 保留）。注解体与 Runtime{Visible,Invisible}Annotations
+///        共用 readAnnotation/readElemValue（同一模型不造第二套）；四件均已接
+///        decodeAttrBody 分派；公开入口保留为直接解码面（不触碰槽状态）。
+Result<std::unique_ptr<AttrBody>, ReadError> decodeParameterAnnotationsBody(
+    ClassFile& cf, const AttrSlot& slot)
+{
+    bool spanOk = false;
+    Ard r = makeReader(cf, slot, spanOk);
+    if (!spanOk) {
+        return Err(ReadError::Truncated);
+    }
+    auto b = std::make_unique<ParameterAnnotationsAttr>();
+    const ca::u32 nparams = r.u1();
+    b->parameters.reserve(nparams);
+    for (ca::u32 p = 0; p < nparams; ++p) {
+        const ca::u32 n = r.u2();
+        std::vector<AnnotationsAttr::Annotation> group;
+        group.reserve(n > 16 ? 16 : n);
+        for (ca::u32 i = 0; i < n; ++i) {
+            auto a = readAnnotation(r);
+            if (a == nullptr) {
+                return Err(r.err());
+            }
+            group.push_back(std::move(*a));
+        }
+        b->parameters.push_back(std::move(group));
+    }
+    if (!r.ok()) {
+        return Err(r.err());
+    }
+    keepBodyTrailing(cf, slot, b->trailing, r);
+    return Ok(std::unique_ptr<AttrBody>(std::move(b)));
+}
+
+Result<std::unique_ptr<AttrBody>, ReadError> decodeAnnotationDefaultBody(ClassFile& cf,
+                                                                         const AttrSlot& slot)
+{
+    bool spanOk = false;
+    Ard r = makeReader(cf, slot, spanOk);
+    if (!spanOk) {
+        return Err(ReadError::Truncated);
+    }
+    auto b = std::make_unique<AnnotationDefaultAttr>();
+    auto v = readElemValue(r);
+    if (v == nullptr) {
+        return Err(r.err());
+    }
+    b->defaultValue = std::move(*v);
+    if (!r.ok()) {
+        return Err(r.err());
+    }
+    keepBodyTrailing(cf, slot, b->trailing, r);
+    return Ok(std::unique_ptr<AttrBody>(std::move(b)));
+}
+
+Result<std::unique_ptr<AttrBody>, ReadError> decodeMethodParametersBody(ClassFile& cf,
+                                                                        const AttrSlot& slot)
+{
+    bool spanOk = false;
+    Ard r = makeReader(cf, slot, spanOk);
+    if (!spanOk) {
+        return Err(ReadError::Truncated);
+    }
+    auto b = std::make_unique<MethodParametersAttr>();
+    const ca::u32 n = r.u1();
+    b->rows.reserve(n);
+    for (ca::u32 i = 0; i < n; ++i) {
+        MethodParametersAttr::Row row;
+        row.nameCp      = r.u2();
+        row.accessFlags = static_cast<ca::u16>(r.u2());
+        b->rows.push_back(row);
+    }
+    if (!r.ok()) {
+        return Err(r.err());
+    }
+    keepBodyTrailing(cf, slot, b->trailing, r);
+    return Ok(std::unique_ptr<AttrBody>(std::move(b)));
+}
+
+Result<std::unique_ptr<AttrBody>, ReadError> decodeConstantValueBody(ClassFile& cf,
+                                                                     const AttrSlot& slot)
+{
+    bool spanOk = false;
+    Ard r = makeReader(cf, slot, spanOk);
+    if (!spanOk) {
+        return Err(ReadError::Truncated);
+    }
+    auto b = std::make_unique<ConstantValueAttr>();
+    b->constantValueCp = r.u2();
+    if (!r.ok()) {
+        return Err(r.err());
+    }
+    keepBodyTrailing(cf, slot, b->trailing, r);
+    return Ok(std::unique_ptr<AttrBody>(std::move(b)));
+}
+
 /// @brief type_path 读取（JVMS 4.7.20.2）：path_length + 若干 (kind,
 ///        type_argument_index) 对；kind > 3 属非法，显式拒绝。
 Result<std::vector<TypeAnnotationsAttr::TypePathEntry>, ReadError>
@@ -1471,6 +1574,26 @@ Result<AttrBody*, ReadError> decodeAttrBody(ClassFile& cf, AttrSlot& slot)
     }
     if (name == kModuleMainClassName) {
         auto r = decodeModuleMainClassBody(cf, slot);
+        if (r.is_err()) return Err(r.unwrap_err());
+        return attach(std::move(r).unwrap());
+    }
+    if (name == kRvpaName || name == kRipaName) {
+        auto r = decodeParameterAnnotationsBody(cf, slot);
+        if (r.is_err()) return Err(r.unwrap_err());
+        return attach(std::move(r).unwrap());
+    }
+    if (name == kAnnotationDefaultName) {
+        auto r = decodeAnnotationDefaultBody(cf, slot);
+        if (r.is_err()) return Err(r.unwrap_err());
+        return attach(std::move(r).unwrap());
+    }
+    if (name == kMethodParametersName) {
+        auto r = decodeMethodParametersBody(cf, slot);
+        if (r.is_err()) return Err(r.unwrap_err());
+        return attach(std::move(r).unwrap());
+    }
+    if (name == kConstantValueName) {
+        auto r = decodeConstantValueBody(cf, slot);
         if (r.is_err()) return Err(r.unwrap_err());
         return attach(std::move(r).unwrap());
     }
@@ -1994,6 +2117,73 @@ Result<void, WriteError> encodeAttr(const ClassFile& cf,
                 return Err(WriteError::Unencodable);
             }
             body.u16(static_cast<ca::u16>(b.mainClassCp));
+            body.raw(ByteView{b.trailing});
+            break;
+        }
+        case AttrKind::ParameterAnnotations: {
+            // u1 参数数 + 逐参数 u2 注解数（§27.2 闸门：外层超 u8、内层超
+            // u16 显式 Err）；注解体写面与 Runtime{Visible,Invisible}-
+            // Annotations 共用 writeAnnotation（同一模型不造第二套）。
+            const auto& b = static_cast<const ParameterAnnotationsAttr&>(*slot.body);
+            if (b.parameters.size() > std::numeric_limits<ca::u8>::max()) {
+                return Err(WriteError::Unencodable);
+            }
+            for (const auto& group : b.parameters) {
+                if (group.size() > std::numeric_limits<ca::u16>::max()) {
+                    return Err(WriteError::Unencodable);
+                }
+            }
+            body.u8(static_cast<ca::u8>(b.parameters.size()));
+            for (const auto& group : b.parameters) {
+                body.u16(static_cast<ca::u16>(group.size()));
+                for (const auto& a : group) {
+                    const Result<void, WriteError> ra = writeAnnotation(body, a);
+                    if (ra.is_err()) {
+                        return Err(ra.unwrap_err());
+                    }
+                }
+            }
+            body.raw(ByteView{b.trailing});
+            break;
+        }
+        case AttrKind::AnnotationDefault: {
+            // 体 = 单 element_value，写面与 Runtime{Visible,Invisible}-
+            // Annotations 共用 writeElemValue（全 tag 形态逐一过闸）。
+            const auto& b = static_cast<const AnnotationDefaultAttr&>(*slot.body);
+            const Result<void, WriteError> rv = writeElemValue(body, b.defaultValue);
+            if (rv.is_err()) {
+                return Err(rv.unwrap_err());
+            }
+            body.raw(ByteView{b.trailing});
+            break;
+        }
+        case AttrKind::MethodParameters: {
+            // u1 行数（§27.2 闸门）+ 每行 {name（0 = 无名）, flags}；行字段
+            // 超界显式 Err，旗语按不透明 u16 原样写出。
+            const auto& b = static_cast<const MethodParametersAttr&>(*slot.body);
+            if (b.rows.size() > std::numeric_limits<ca::u8>::max()) {
+                return Err(WriteError::Unencodable);
+            }
+            for (const auto& row : b.rows) {
+                if (!fitsU16(row.nameCp)) {
+                    return Err(WriteError::Unencodable);
+                }
+            }
+            body.u8(static_cast<ca::u8>(b.rows.size()));
+            for (const auto& row : b.rows) {
+                body.u16(static_cast<ca::u16>(row.nameCp));
+                body.u16(row.accessFlags);
+            }
+            body.raw(ByteView{b.trailing});
+            break;
+        }
+        case AttrKind::ConstantValue: {
+            // u2 域宽闸门（§27.2）：constantvalue_index 超 u16 显式 Err。
+            const auto& b = static_cast<const ConstantValueAttr&>(*slot.body);
+            if (!fitsU16(b.constantValueCp)) {
+                return Err(WriteError::Unencodable);
+            }
+            body.u16(static_cast<ca::u16>(b.constantValueCp));
             body.raw(ByteView{b.trailing});
             break;
         }

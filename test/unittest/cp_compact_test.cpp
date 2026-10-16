@@ -6,9 +6,11 @@
 /// 形态不收缩）、压缩侧五件（SourceFile/EnclosingMethod/InnerClasses/
 /// Exceptions/ConstantValue）、零长透传、Raw 残留显式拒绝（带属性名定位）、
 /// 五件畸形拒绝、SMT Object 载荷与 TA 非 CP 字段不误重映射、typed 注解与
-/// Signature 面、会话一致性（升格体同步、语义 intern 重建、ChangeSet 记账、
-/// no-op 不记账）、无变化早退字节恒等、失败不留半截模型、确定性（两次压缩
-/// 逐字节一致）、膨胀后压缩回到规范形、NewClassSeed 无源类适用。
+/// Signature 面、注解族四件（ParameterAnnotations/AnnotationDefault/
+/// MethodParameters/ConstantValue）闭包与重映射去重、会话一致性（升格体同
+/// 步、语义 intern 重建、ChangeSet 记账、no-op 不记账）、无变化早退字节恒
+/// 等、失败不留半截模型、确定性（两次压缩逐字节一致）、膨胀后压缩回到规范
+/// 形、NewClassSeed 无源类适用。
 #include <gtest/gtest.h>
 
 #include <memory>
@@ -468,18 +470,17 @@ TEST(CpCompact, CompactClosedSetSideAttrsRemapped)
     // 去重面：组件描述符与嵌套签名串压缩后同条目。
     EXPECT_EQ(recAttr.components[0].descriptorCp, recSig.signatureCp);
 
-    // ConstantValue：字段上的 Integer 42。
+    // ConstantValue：字段上的 Integer 42。ConstantValue 接 typed 分派后为
+    // typed 体（Raw 形不可达），直接按 typed 模型读索引。
     ASSERT_EQ(cf.fields.size(), 1u);
     const AttrSlot* cv = ClassFile::findAttrByCp(cf.fields[0].attrs,
                                                  cf.fields[0].attrs[0].nameCp);
     ASSERT_NE(cv, nullptr);
     ASSERT_TRUE(cf.decodeAttr(const_cast<AttrSlot&>(*cv)).is_ok());
-    const auto& rawCv = static_cast<const RawAttr&>(*cv->body);
-    ASSERT_EQ(rawCv.bytes().size(), 2u);
-    const ca::u32 cvIdx = (ca::u32(rawCv.bytes()[0]) << 8) | rawCv.bytes()[1];
-    ASSERT_TRUE(cf.cp.valid(cvIdx));
-    EXPECT_EQ(cf.cp.tagOf(cvIdx), CpTag::Integer);
-    EXPECT_EQ(cf.cp.at(cvIdx).ival, 42);
+    const auto& cvAttr = static_cast<const ConstantValueAttr&>(*cv->body);
+    ASSERT_TRUE(cf.cp.valid(cvAttr.constantValueCp));
+    EXPECT_EQ(cf.cp.tagOf(cvAttr.constantValueCp), CpTag::Integer);
+    EXPECT_EQ(cf.cp.at(cvAttr.constantValueCp).ival, 42);
 
     // Deprecated：零长体透传，属性保留。
     EXPECT_NE(cf.findClassAttr("Deprecated"), nullptr);
@@ -732,6 +733,168 @@ TEST(CpCompact, TypedAnnotationAndSignatureFacesRemapped)
     ASSERT_TRUE(cf.cp.valid(sIdx));
     EXPECT_EQ(cf.cp.tagOf(sIdx), CpTag::String);
     EXPECT_EQ(cf.utf8(cf.cp.at(sIdx).a), "X");
+}
+
+TEST(CpCompact, AnnotFamilyCompactFacesRemappedAndDeduped)
+{
+    // 注解族四件进封闭集：类级 RVA 与方法级 RVPA/AnnotationDefault/
+    // MethodParameters/ConstantValue 的 CP 槽全走闭包标记 + 重映射；跨条目
+    // 等价内容（同名描述符/元素名/参数名/共享 Integer）按 (tag, content)
+    // 并类（与 Module 族先例同口径）。死条目与重复内容驱动索引移动。
+    jbc::test::ClassBuilder cb;
+    const ca::u16 u1 = cb.utf8("p/T");
+    const ca::u16 u2 = cb.utf8("java/lang/Object");
+    const ca::u16 uRva = cb.utf8("RuntimeVisibleAnnotations");
+    const ca::u16 uRvpa = cb.utf8("RuntimeVisibleParameterAnnotations");
+    const ca::u16 uAD = cb.utf8("AnnotationDefault");
+    const ca::u16 uMP = cb.utf8("MethodParameters");
+    const ca::u16 uCV = cb.utf8("ConstantValue");
+    const ca::u16 uAnno  = cb.utf8("Lp/Anno;");
+    const ca::u16 uAnnoDup = cb.utf8("Lp/Anno;");       // 内容重复 → 压缩去重
+    const ca::u16 uName  = cb.utf8("value");
+    const ca::u16 uNameDup = cb.utf8("value");          // 内容重复 → 压缩去重
+    const ca::u16 uS = cb.utf8("x");
+    const ca::u16 strX = cb.stringConst(uS);
+    const ca::u16 uEnumT = cb.utf8("Lp/Color;");
+    const ca::u16 uEnumV = cb.utf8("RED");
+    const ca::u16 uRun = cb.utf8("run");
+    const ca::u16 uRunDup = cb.utf8("run");             // 内容重复 → 压缩去重
+    const ca::u16 int42 = cb.integer(42);
+    const ca::u16 uM = cb.utf8("m");
+    const ca::u16 uMdesc = cb.utf8("(II)I");
+    const ca::u16 uV = cb.utf8("v");
+    const ca::u16 uVdesc = cb.utf8("I");
+    static_cast<void>(cb.utf8("dead-pad"));             // 死条目：驱动索引移动
+    static_cast<void>(cb.integer(99));                  // 死条目
+    const ca::u16 c1 = cb.classRef(u1);
+    const ca::u16 c2 = cb.classRef(u2);
+    cb.setThis(c1).setSuper(c2);
+
+    // 字段：ConstantValue → Integer 42。
+    Bytes cvBody;
+    jbc::test::detail::putU16(cvBody, int42);
+    cb.addField(0x0018, uV, uVdesc, {jbc::test::AttrSpec{uCV, cvBody}});
+
+    // 方法：RVPA（参数 0 一条注解 's' 值，参数 1 空组）+ MethodParameters
+    // （两行参数名，内容跨条目重复）+ AnnotationDefault（'e' 枚举）。
+    Bytes rvpa;
+    rvpa.push_back(0x02);                               // num_parameters = 2（u1）
+    jbc::test::detail::putU16(rvpa, 1);                 // 参数 0：1 条注解
+    jbc::test::detail::putU16(rvpa, uAnnoDup);          // type（与 uAnno 去重面）
+    jbc::test::detail::putU16(rvpa, 1);                 // 1 个元素值
+    jbc::test::detail::putU16(rvpa, uNameDup);          // 元素名（与 uName 去重面）
+    rvpa.push_back(static_cast<ca::u8>('s'));
+    jbc::test::detail::putU16(rvpa, strX);
+    jbc::test::detail::putU16(rvpa, 0);                 // 参数 1：空组
+    Bytes mp;
+    mp.push_back(2);                                    // parameters_count = 2（u1）
+    jbc::test::detail::putU16(mp, uRun);
+    jbc::test::detail::putU16(mp, 0x0010);              // ACC_FINAL
+    jbc::test::detail::putU16(mp, uRunDup);
+    jbc::test::detail::putU16(mp, 0x0000);
+    Bytes ad;
+    ad.push_back(static_cast<ca::u8>('e'));
+    jbc::test::detail::putU16(ad, uEnumT);
+    jbc::test::detail::putU16(ad, uEnumV);
+    cb.addMethod(0x0001, uM, uMdesc,
+                 {jbc::test::AttrSpec{uRvpa, rvpa},
+                  jbc::test::AttrSpec{uMP, mp},
+                  jbc::test::AttrSpec{uAD, ad}});
+
+    // 类级 RVA：type = uAnno（与 RVPA 的 uAnnoDup 去重面）、'I' 值 =
+    // int42（与 ConstantValue 共享同一 Integer 条目 → 去重面）。
+    Bytes rva;
+    jbc::test::detail::putU16(rva, 1);
+    jbc::test::detail::putU16(rva, uAnno);
+    jbc::test::detail::putU16(rva, 1);
+    jbc::test::detail::putU16(rva, uName);
+    rva.push_back(static_cast<ca::u8>('I'));
+    jbc::test::detail::putU16(rva, int42);
+    cb.addClassAttr(uRva, rva);
+    const Bytes bytes = cb.build();
+
+    auto sess = sessionOf(bytes);
+    ASSERT_NE(sess, nullptr);
+    const ca::usize before = sess->backing().cp.size();
+    ASSERT_TRUE(compactConstantPool(*sess).is_ok());
+    const ClassFile& cf = sess->backing();
+    EXPECT_LT(cf.cp.size(), before);   // 死条目清除 + 重复并类：池收缩
+
+    const Bytes out = jbc::test::writeOk(cf);
+    auto rr = readClass(ByteView{out});
+    ASSERT_TRUE(rr.is_ok());
+    auto rd = std::move(rr).unwrap();
+    auto& cf2 = *rd.file;
+
+    // RVA：type 与 'I' 值重映射后语义恒等；'I' 值与字段 ConstantValue 同槽
+    // （跨条目去重）。
+    const AttrSlot* rvaSlot = cf2.findClassAttr("RuntimeVisibleAnnotations");
+    ASSERT_NE(rvaSlot, nullptr);
+    ASSERT_TRUE(cf2.decodeAttr(const_cast<AttrSlot&>(*rvaSlot)).is_ok());
+    const auto& rvaAttr = static_cast<const AnnotationsAttr&>(*rvaSlot->body);
+    ASSERT_EQ(rvaAttr.annos.size(), 1u);
+    EXPECT_EQ(cf2.utf8(rvaAttr.annos[0].typeCp), "Lp/Anno;");
+    ASSERT_EQ(rvaAttr.annos[0].values.size(), 1u);
+    EXPECT_EQ(cf2.utf8(rvaAttr.annos[0].values[0].first), "value");
+    EXPECT_EQ(rvaAttr.annos[0].values[0].second.tag, 'I');
+
+    // 字段 ConstantValue：Integer 42 语义恒等，且与 RVA 的 'I' 值同槽。
+    ASSERT_EQ(cf2.fields.size(), 1u);
+    const AttrSlot* cvSlot = ClassFile::findAttrByCp(cf2.fields[0].attrs,
+                                                     cf2.fields[0].attrs[0].nameCp);
+    ASSERT_NE(cvSlot, nullptr);
+    ASSERT_TRUE(cf2.decodeAttr(const_cast<AttrSlot&>(*cvSlot)).is_ok());
+    const auto& cvAttr = static_cast<const ConstantValueAttr&>(*cvSlot->body);
+    EXPECT_EQ(cf2.cp.tagOf(cvAttr.constantValueCp), CpTag::Integer);
+    EXPECT_EQ(cf2.cp.at(cvAttr.constantValueCp).ival, 42);
+    EXPECT_EQ(rvaAttr.annos[0].values[0].second.cp, cvAttr.constantValueCp);
+
+    // 方法 RVPA：注解 type 与类级 RVA 同槽（uAnno/uAnnoDup 并类）、元素名与
+    // RVA 同槽（uName/uNameDup 并类）、's' 值语义恒等、空组保留。
+    ASSERT_EQ(cf2.methods.size(), 1u);
+    const AttrSlot* rvpaSlot = ClassFile::findAttrByCp(cf2.methods[0].attrs,
+                                                       cf2.methods[0].attrs[0].nameCp);
+    ASSERT_NE(rvpaSlot, nullptr);
+    ASSERT_TRUE(cf2.decodeAttr(const_cast<AttrSlot&>(*rvpaSlot)).is_ok());
+    const auto& rvpaAttr = static_cast<const ParameterAnnotationsAttr&>(*rvpaSlot->body);
+    ASSERT_EQ(rvpaAttr.parameters.size(), 2u);
+    ASSERT_EQ(rvpaAttr.parameters[0].size(), 1u);
+    EXPECT_EQ(rvpaAttr.parameters[0][0].typeCp, rvaAttr.annos[0].typeCp);
+    ASSERT_EQ(rvpaAttr.parameters[0][0].values.size(), 1u);
+    EXPECT_EQ(rvpaAttr.parameters[0][0].values[0].first, rvaAttr.annos[0].values[0].first);
+    EXPECT_EQ(rvpaAttr.parameters[0][0].values[0].second.tag, 's');
+    const ca::u32 sIdx = rvpaAttr.parameters[0][0].values[0].second.cp;
+    ASSERT_TRUE(cf2.cp.valid(sIdx));
+    EXPECT_EQ(cf2.cp.tagOf(sIdx), CpTag::String);
+    EXPECT_EQ(cf2.utf8(cf2.cp.at(sIdx).a), "x");
+    EXPECT_EQ(rvpaAttr.parameters[1].size(), 0u);
+
+    // MethodParameters：两行参数名去重同槽、旗语位原样保留。
+    const AttrSlot* mpSlot = ClassFile::findAttrByCp(cf2.methods[0].attrs,
+                                                     cf2.methods[0].attrs[1].nameCp);
+    ASSERT_NE(mpSlot, nullptr);
+    ASSERT_TRUE(cf2.decodeAttr(const_cast<AttrSlot&>(*mpSlot)).is_ok());
+    const auto& mpAttr = static_cast<const MethodParametersAttr&>(*mpSlot->body);
+    ASSERT_EQ(mpAttr.rows.size(), 2u);
+    EXPECT_EQ(cf2.utf8(mpAttr.rows[0].nameCp), "run");
+    EXPECT_EQ(mpAttr.rows[0].accessFlags, 0x0010u);
+    EXPECT_EQ(cf2.utf8(mpAttr.rows[1].nameCp), "run");
+    EXPECT_EQ(mpAttr.rows[1].accessFlags, 0x0000u);
+    EXPECT_EQ(mpAttr.rows[0].nameCp, mpAttr.rows[1].nameCp) << "重复参数名应并类";
+
+    // AnnotationDefault：枚举双槽语义恒等。
+    const AttrSlot* adSlot = ClassFile::findAttrByCp(cf2.methods[0].attrs,
+                                                     cf2.methods[0].attrs[2].nameCp);
+    ASSERT_NE(adSlot, nullptr);
+    ASSERT_TRUE(cf2.decodeAttr(const_cast<AttrSlot&>(*adSlot)).is_ok());
+    const auto& adAttr = static_cast<const AnnotationDefaultAttr&>(*adSlot->body);
+    EXPECT_EQ(adAttr.defaultValue.tag, 'e');
+    EXPECT_EQ(cf2.utf8(adAttr.defaultValue.typeNameCp), "Lp/Color;");
+    EXPECT_EQ(cf2.utf8(adAttr.defaultValue.constNameCp), "RED");
+
+    // 保真：产物重读 → 全解码 → 再写逐字节一致。
+    ASSERT_TRUE(decodeAllAttrs(*rd.file).is_ok()) << "decodeAll failed";
+    EXPECT_EQ(jbc::test::writeOk(*rd.file), out) << "roundtrip";
 }
 
 TEST(CpCompact, PromotedCodeUnitStaysInSync)

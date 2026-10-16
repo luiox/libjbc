@@ -100,6 +100,31 @@ Result<std::unique_ptr<AttrBody>, ReadError> decodeModulePackagesBody(ClassFile&
 Result<std::unique_ptr<AttrBody>, ReadError> decodeModuleMainClassBody(ClassFile& cf,
                                                                        const AttrSlot& slot);
 
+/// @brief Runtime{Visible,Invisible}ParameterAnnotations 属性体的 typed 解码
+///        （契约同 @ref decodeInnerClassesBody）。
+///
+/// 逐参数注解表全解出（空参数表/空注解表均合法）；半截表显式 Err。
+Result<std::unique_ptr<AttrBody>, ReadError> decodeParameterAnnotationsBody(ClassFile& cf,
+                                                                            const AttrSlot& slot);
+
+/// @brief AnnotationDefault 属性体的 typed 解码（契约同
+///        @ref decodeInnerClassesBody）。
+///
+/// 单 element_value 全形态（const/'e'/'c'/'@'/'['）解出；半截显式 Err。
+Result<std::unique_ptr<AttrBody>, ReadError> decodeAnnotationDefaultBody(ClassFile& cf,
+                                                                         const AttrSlot& slot);
+
+/// @brief MethodParameters 属性体的 typed 解码（契约同
+///        @ref decodeInnerClassesBody）。
+///
+/// 行表全解出（name_index==0 合法承载）；半截行显式 Err。
+Result<std::unique_ptr<AttrBody>, ReadError> decodeMethodParametersBody(ClassFile& cf,
+                                                                        const AttrSlot& slot);
+
+/// @brief ConstantValue 属性体的 typed 解码（契约同 @ref decodeInnerClassesBody）。
+Result<std::unique_ptr<AttrBody>, ReadError> decodeConstantValueBody(ClassFile& cf,
+                                                                     const AttrSlot& slot);
+
 /// @brief 编码一个属性槽（含 name_index 与 length）。
 ///
 /// - `state ∈ {Untouched, Decoded}` → 原样 copy 源 span（保真路径）

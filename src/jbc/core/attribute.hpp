@@ -51,6 +51,13 @@ enum class AttrKind : int {
     Module = 18,               ///< Module（JVMS 4.7.25，类级，module-info 专挂）
     ModulePackages = 19,       ///< ModulePackages（JVMS 4.7.26，类级）
     ModuleMainClass = 20,      ///< ModuleMainClass（JVMS 4.7.27，类级）
+    ParameterAnnotations = 21, ///< Runtime{Visible,Invisible}ParameterAnnotations
+                               ///< （JVMS 4.7.18/4.7.19，方法级，参数下标维注解表）
+    AnnotationDefault = 22,    ///< AnnotationDefault（JVMS 4.7.22，方法级，
+                               ///< 注解类型方法的单元素值默认值）
+    MethodParameters = 23,     ///< MethodParameters（JVMS 4.7.24，方法级，
+                               ///< 参数名/旗语表，javac -parameters 产物）
+    ConstantValue = 24,        ///< ConstantValue（JVMS 4.7.2，字段级，单 CP 槽）
 };
 
 /// @brief 属性体基类：一切已解码属性内容的共同祖先。
@@ -838,6 +845,101 @@ public:
     std::vector<ca::u8> trailing;
 };
 
+/// @brief Runtime{Visible,Invisible}ParameterAnnotations 属性（JVMS
+///        4.7.18/4.7.19）：方法参数维的注解表（方法级挂载）。
+///
+/// 体是 `u1 num_parameters + { u2 num_annotations + annotation[] }*`——与
+/// @ref AnnotationsAttr 的差异只在多了一层参数下标维（第 i 个内层表对应方法
+/// 第 i 个参数槽，含无注解参数的空表）；注解体（type_index + element_value
+/// 表）与 @ref AnnotationsAttr::Annotation 完全同构，直接复用同一模型，不造
+/// 第二套。可见性只差属性名（AttrSlot::nameCp 承载，体不感知），两个属性名
+/// 共用本模型。
+class ParameterAnnotationsAttr : public AttrBody
+{
+public:
+    static constexpr AttrKind kKind = AttrKind::ParameterAnnotations;
+
+    ParameterAnnotationsAttr() noexcept : AttrBody(kKind) {}
+
+    /// @brief 逐参数的注解表：外层下标 = 方法参数槽位（MethodParameters 的
+    ///        行序一一对应），空内层表 = 该参数无注解（合法且常见）。
+    std::vector<std::vector<AnnotationsAttr::Annotation>> parameters;
+
+    /// @brief 声明结构之后的非标准尾部字节（trailing 同族，design.md §27.1）。
+    std::vector<ca::u8> trailing;
+};
+
+/// @brief AnnotationDefault 属性（JVMS 4.7.22）：注解类型方法的默认值
+///        （方法级挂载，仅 @interface 的带默认值方法携带）。
+///
+/// 体是单个 element_value，与 @ref AnnotationsAttr::ElemValue 完全同构（全
+/// tag 形态：const/'e' 枚举/'c' 类字面量/'@' 嵌套注解/'[' 数组），直接复用
+/// 同一模型。
+class AnnotationDefaultAttr : public AttrBody
+{
+public:
+    static constexpr AttrKind kKind = AttrKind::AnnotationDefault;
+
+    AnnotationDefaultAttr() noexcept : AttrBody(kKind) {}
+
+    AnnotationsAttr::ElemValue defaultValue;   ///< 默认值元素（单 element_value）
+
+    /// @brief 声明结构之后的非标准尾部字节（trailing 同族，design.md §27.1）。
+    std::vector<ca::u8> trailing;
+};
+
+/// @brief MethodParameters 属性（JVMS 4.7.24）：方法参数名与访问旗语表
+///        （方法级挂载）。
+///
+/// 体是 `u1 parameters_count + { u2 name_index, u2 access_flags }*`，行序与
+/// 参数槽位一致（含 synthetic/mandated 参数行，与
+/// @ref ParameterAnnotationsAttr 的外层下标同坐标系）。name_index 指向 CP
+/// Utf8，**0 合法**——无源码名可用的参数（编译器合成等）不指名；access_flags
+/// 是 ACC_FINAL(0x0010)/ACC_SYNTHETIC(0x1000)/ACC_MANDATED(0x8000) 位集，
+/// 按不透明 u16 保真（与 InnerClasses 的 access_flags 同款）。参数名即手术
+/// 面（改名 = 单 u2 Utf8 重指向）。
+class MethodParametersAttr : public AttrBody
+{
+public:
+    static constexpr AttrKind kKind = AttrKind::MethodParameters;
+
+    MethodParametersAttr() noexcept : AttrBody(kKind) {}
+
+    struct Row
+    {
+        ca::u32 nameCp = 0;       ///< CP Utf8（参数名）；0 = 无名
+        ca::u16 accessFlags = 0;  ///< FINAL/SYNTHETIC/MANDATED 位集（u2）
+    };
+
+    std::vector<Row> rows;
+
+    /// @brief 声明结构之后的非标准尾部字节（trailing 同族，design.md §27.1）。
+    std::vector<ca::u8> trailing;
+};
+
+/// @brief ConstantValue 属性（JVMS 4.7.2）：static final 字段的常量值
+///        （字段级挂载）。
+///
+/// 体是单 `u2 constantvalue_index`，指向 CP 的 Integer/Float/Long/Double/
+/// String 五形态之一（boolean/byte/char/short 在 CP 里同 Integer）。单 CP
+/// 槽即手术面（值改写 = 换槽重指向）；类型层一致性（槽 tag 与字段描述符
+/// 匹配）归上层语义，结构保真层原样承载。
+class ConstantValueAttr : public AttrBody
+{
+public:
+    static constexpr AttrKind kKind = AttrKind::ConstantValue;
+
+    ConstantValueAttr() noexcept : AttrBody(kKind) {}
+
+    ca::u32 constantValueCp = 0;   ///< CP 常量槽（Integer/Float/Long/Double/String）
+
+    /// @brief 声明结构之后的非标准尾部字节（trailing 同族，design.md §27.1）。
+    ///
+    /// 合法 ConstantValue 体恰为 2 字节；超长输入的尾字节奏此保留，重编码
+    /// 原样写回，不静默丢弃。
+    std::vector<ca::u8> trailing;
+};
+
 }   // namespace jbc::core
 
 // tag_cast 接入：TypeOf 特化值必须等于运行期 getType()（libca 约定）。
@@ -967,6 +1069,30 @@ template <>
 struct TypeOf<jbc::core::ModuleMainClassAttr>
 {
     static constexpr int value = static_cast<int>(jbc::core::AttrKind::ModuleMainClass);
+};
+
+template <>
+struct TypeOf<jbc::core::ParameterAnnotationsAttr>
+{
+    static constexpr int value = static_cast<int>(jbc::core::AttrKind::ParameterAnnotations);
+};
+
+template <>
+struct TypeOf<jbc::core::AnnotationDefaultAttr>
+{
+    static constexpr int value = static_cast<int>(jbc::core::AttrKind::AnnotationDefault);
+};
+
+template <>
+struct TypeOf<jbc::core::MethodParametersAttr>
+{
+    static constexpr int value = static_cast<int>(jbc::core::AttrKind::MethodParameters);
+};
+
+template <>
+struct TypeOf<jbc::core::ConstantValueAttr>
+{
+    static constexpr int value = static_cast<int>(jbc::core::AttrKind::ConstantValue);
 };
 
 }   // namespace ca::core::tag_cast

@@ -28,13 +28,10 @@ using core::CodeAttr;
 using core::ConstantPool;
 
 // ---- 压缩侧结构化属性（§36.1 第 2 层）--------------------------------
-// B3 四件（SourceFile/InnerClasses/EnclosingMethod/Exceptions）已立 typed
-// 模型并收编进两相 switch 的 typed 分支，Raw 名字分派的本地解析按 §36.5
-// 挂账退役（SourceFile 分支随其接线批保留为不可达兜底）。仍走 Raw 名单
-// 分派的只剩 ConstantValue。
-
-constexpr std::string_view kConstantValueName  = "ConstantValue";
-constexpr std::string_view kSourceFileName     = "SourceFile";
+// 封闭集属性已全部立 typed 模型并收编进两相 switch 的 typed 分支（B3 四件
+// → Nest 族/Record/Module 族 → 注解族四件 + ConstantValue）；Raw 名字分派
+// 的本地解析随 ConstantValue 接线批整体退役（§36.5 收口）——Raw 体只剩零
+// 长透传，非零长一律显式拒绝（属性名定位）。
 
 /// @brief 指令是否携带 CP 操作数（CP1/CP2/CP2Count/CP2Zero2/CP2Dims 五形）。
 bool insnHasCpOperand(core::Op op) noexcept
@@ -860,6 +857,49 @@ private:
                 }
                 return Ok();
             }
+            case AttrKind::ParameterAnnotations: {
+                // 逐参数逐注解全槽闭包（type/元素名/'e' 双槽/'@' 嵌套/'['
+                // 递归/常量与类字面量）——与 Annotations 分支同一注解体遍历，
+                // 参数下标维不携带 CP 引用。
+                auto& b = static_cast<core::ParameterAnnotationsAttr&>(body);
+                for (auto& group : b.parameters) {
+                    for (core::AnnotationsAttr::Annotation& a : group) {
+                        const Result<void, CompactFailure> r = planAnnotation(a);
+                        if (r.is_err()) {
+                            return Err(r.unwrap_err());
+                        }
+                    }
+                }
+                return Ok();
+            }
+            case AttrKind::AnnotationDefault: {
+                // 单元素值全槽闭包（注解类型方法默认值；全 tag 形态由
+                // planElemValue 分派）。
+                auto& b = static_cast<core::AnnotationDefaultAttr&>(body);
+                return planElemValue(b.defaultValue);
+            }
+            case AttrKind::MethodParameters: {
+                // name_index（0 = 无名，markCp 放行）标记；access_flags 是
+                // 访问位不是索引；trailing 不含 CP 引用。
+                auto& b = static_cast<core::MethodParametersAttr&>(body);
+                for (core::MethodParametersAttr::Row& row : b.rows) {
+                    const Result<void, CompactFailure> r = markCp(row.nameCp);
+                    if (r.is_err()) {
+                        return Err(r.unwrap_err());
+                    }
+                }
+                return Ok();
+            }
+            case AttrKind::ConstantValue: {
+                // 单 u2 常量槽（Integer/Float/Long/Double/String 五形态；
+                // 复合条目的子引用由 markCp 递归闭包随行）。
+                auto& b = static_cast<core::ConstantValueAttr&>(body);
+                const Result<void, CompactFailure> r = markCp(b.constantValueCp);
+                if (r.is_err()) {
+                    return Err(r.unwrap_err());
+                }
+                return Ok();
+            }
             case AttrKind::LineNumberTable:
             case AttrKind::CharacterRangeTable:
                 return Ok();   // 体不含 CP 引用
@@ -969,67 +1009,13 @@ private:
     Result<void, CompactFailure> planRaw(AttrSlot& slot)
     {
         const auto& raw = static_cast<const core::RawAttr&>(*slot.body);
-        const std::string_view name = attrNameOf(slot);
         if (raw.bytes().empty()) {
             // 零长体构造上不可能携带 CP 引用（无字节）：透传放行（§36.1 第 3 层）。
             return Ok();
         }
-        const Result<std::vector<ca::u8>, CompactFailure> r =
-            transcodeRawBody(name, ByteView{raw.bytes()},
-                             [this](ca::u32 i) -> Result<ca::u32, CompactFailure> {
-                                 // 标记相：只验形与闭包，值原样穿透（产物丢弃）。
-                                 const Result<void, CompactFailure> m = markCp(i);
-                                 if (m.is_err()) {
-                                     return Err(m.unwrap_err());
-                                 }
-                                 return Ok(i);
-                             });
-        if (r.is_err()) {
-            return Err(r.unwrap_err());
-        }
-        return Ok();
-    }
-
-    // ---- 压缩侧五件的结构遍历（计划/应用共用同一形状知识）----
-
-    template <typename Act>
-    Result<std::vector<ca::u8>, CompactFailure>
-    transcodeRawBody(std::string_view name, ByteView body, Act&& act)
-    {
-        core::Cursor cur{body};
-        core::ByteSink out;
-        const auto rd = [&]() -> Result<ca::u32, CompactFailure> {
-            const Result<ca::u16, core::ReadError> r = cur.u16();
-            if (r.is_err()) {
-                return Err(failOf(CompactError::MalformedAttr, name));
-            }
-            return Ok(ca::u32{r.unwrap()});
-        };
-        const auto wr = [&out](ca::u32 v) { out.u16(static_cast<ca::u16>(v)); };
-        const auto cp = [&](ca::u32 oldIdx) -> Result<ca::u32, CompactFailure> {
-            return act(oldIdx);
-        };
-
-        if (name == kSourceFileName || name == kConstantValueName) {
-            const Result<ca::u32, CompactFailure> v = rd();
-            if (v.is_err()) {
-                return Err(v.unwrap_err());
-            }
-            const Result<ca::u32, CompactFailure> m = cp(v.unwrap());
-            if (m.is_err()) {
-                return Err(m.unwrap_err());
-            }
-            wr(m.unwrap());
-        } else {
-            // InnerClasses/EnclosingMethod/Exceptions 已收编 typed 分支，
-            // Raw 形名单分派退役（§36.5）；名单外其余名字显式拒绝。
-            return Err(failOf(CompactError::AttrNotModeled, name));
-        }
-        if (!cur.eof()) {
-            // 声明结构之外还有剩余字节：五件都是定长形状，属畸形（§36.1）。
-            return Err(failOf(CompactError::MalformedAttr, name));
-        }
-        return Ok(out.bytes());
+        // 封闭集收编完成后 Raw 名单分派整体退役（§36.5 收口）：名单外非零长
+        // Raw 体显式拒绝，属性名定位。
+        return Err(failOf(CompactError::AttrNotModeled, attrNameOf(slot)));
     }
 
     // ---- 应用相：引用面重写（返回该槽是否被触碰）----
@@ -1093,8 +1079,6 @@ private:
     bool applyAttr(AttrSlot& slot, const bool staleCode = false)
     {
         bool touched = false;
-        // 属性名先于重映射解析（applyRaw 的格式分派按旧名查表）。
-        const std::string_view rawName = attrNameOf(slot);
         const ca::u32 newName = remap(slot.nameCp);
         if (newName != slot.nameCp) {
             slot.nameCp = newName;
@@ -1420,9 +1404,46 @@ private:
                 }
                 break;
             }
-            case AttrKind::Raw:
-                touched |= applyRaw(slot, rawName);
+            case AttrKind::ParameterAnnotations: {
+                // 逐参数逐注解全槽重映射（与 Annotations 分支同一注解体遍历）。
+                auto& b = static_cast<core::ParameterAnnotationsAttr&>(body);
+                for (auto& group : b.parameters) {
+                    for (core::AnnotationsAttr::Annotation& a : group) {
+                        applyAnnotation(a, touched, *this);
+                    }
+                }
                 break;
+            }
+            case AttrKind::AnnotationDefault: {
+                // 单元素值全槽重映射。
+                auto& b = static_cast<core::AnnotationDefaultAttr&>(body);
+                applyElemValue(b.defaultValue, touched, *this);
+                break;
+            }
+            case AttrKind::MethodParameters: {
+                // name_index 重映射（0 哨兵穿透）；access_flags 不动。
+                auto& b = static_cast<core::MethodParametersAttr&>(body);
+                for (core::MethodParametersAttr::Row& row : b.rows) {
+                    const ca::u32 n = remap(row.nameCp);
+                    if (n != row.nameCp) {
+                        row.nameCp = n;
+                        touched    = true;
+                    }
+                }
+                break;
+            }
+            case AttrKind::ConstantValue: {
+                // 单 u2 常量槽重映射。
+                auto& b = static_cast<core::ConstantValueAttr&>(body);
+                const ca::u32 n = remap(b.constantValueCp);
+                if (n != b.constantValueCp) {
+                    b.constantValueCp = n;
+                    touched           = true;
+                }
+                break;
+            }
+            case AttrKind::Raw:
+                break;   // 计划相只放行零长 Raw 体（无 CP 引用）：应用相无槽可动
             case AttrKind::LineNumberTable:
             case AttrKind::CharacterRangeTable:
                 break;   // 体不含 CP 引用
@@ -1433,27 +1454,6 @@ private:
             slot.mutate();
         }
         return touched;
-    }
-
-    bool applyRaw(AttrSlot& slot, std::string_view name)
-    {
-        auto& raw = static_cast<core::RawAttr&>(*slot.body);
-        if (raw.bytes().empty()) {
-            return false;   // 零长透传：体不动
-        }
-        const Result<std::vector<ca::u8>, CompactFailure> r =
-            transcodeRawBody(name, ByteView{raw.bytes()},
-                             [this](ca::u32 i) -> Result<ca::u32, CompactFailure> {
-                                 return Ok(remap(i));
-                             });
-        if (r.is_err()) {
-            return false;   // 计划相已校验；不可达
-        }
-        if (r.unwrap() == raw.bytes()) {
-            return false;
-        }
-        raw.bytes() = std::move(r).unwrap();
-        return true;
     }
 
     // ---- 状态 ----
