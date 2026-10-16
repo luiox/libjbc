@@ -106,6 +106,24 @@ inline fs::path recordManifestPath()
     return fs::path("test") / "libjbc_corpus_record" / "record_manifest.txt";
 }
 
+/// @brief module 语料根：Module 属性自 class file v53（Java 9）事实可用，
+///        module-info 只有 --release 9+ 的 javac 才产；主语料的 --release 8
+///        产物不带，另立小语料现场编译（源同样入仓内 test_resource，产物属生成物）。
+inline fs::path moduleSourcesDir()
+{
+    return fs::path("test_resource") / "java" / "jbc_corpus_module";
+}
+
+inline fs::path moduleProducedDir()
+{
+    return fs::path("test") / "libjbc_corpus_module" / "classes";
+}
+
+inline fs::path moduleManifestPath()
+{
+    return fs::path("test") / "libjbc_corpus_module" / "module_manifest.txt";
+}
+
 /// @brief 编译旗语指纹（manifest 标记行）：旗语升级即整批重编。
 ///
 /// `-g` 产出 LVT/LVTT 调试属性——LVTT 签名列是泛型签名的第二处宿主，
@@ -514,6 +532,119 @@ inline CorpusSource resolveRecordCorpus()
     }
     if (dirHasClassFiles(recordProducedDir())) {
         out.dir   = recordProducedDir().string();
+        out.stage = Stage::SelfProduced;
+    }
+    return out;
+}
+
+/// @brief module 语料编译旗语指纹（manifest 标记行）：旗语升级即整批重编。
+///        与 nest 语料同为 --release 17（module-info 指令形态的事实下界远低
+///        于 17，取与 nest 同一能力探针，不再单设 release 探测）。
+constexpr const char* kModuleCompileFlagsMark = "flags=-g --release 17";
+
+inline std::vector<fs::path> collectModuleSources()
+{
+    std::vector<fs::path> out;
+    std::error_code ec;
+    for (fs::directory_iterator it(moduleSourcesDir(), ec), end; it != end && !ec;
+         it.increment(ec)) {
+        if (it->is_regular_file() && it->path().extension() == ".java") {
+            out.push_back(it->path());
+        }
+    }
+    std::sort(out.begin(), out.end());
+    return out;
+}
+
+/// @brief module 语料是否缺失或比样本源旧（语义同 buildNeeded）。
+inline bool moduleBuildNeeded()
+{
+    std::error_code ec;
+    if (!fs::exists(moduleManifestPath(), ec) || ec) {
+        return true;
+    }
+    {
+        std::ifstream in(moduleManifestPath());
+        std::string line;
+        bool hasMark = false;
+        while (std::getline(in, line)) {
+            if (line == kModuleCompileFlagsMark) {
+                hasMark = true;
+            }
+        }
+        if (!hasMark) {
+            return true;
+        }
+    }
+    const auto marker = fs::last_write_time(moduleManifestPath(), ec);
+    if (ec) {
+        return true;
+    }
+    for (const fs::path& src : collectModuleSources()) {
+        const auto t = fs::last_write_time(src, ec);
+        if (!ec && t > marker) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// @brief 现场编译 module 语料。样本全部平铺在语料根（包名写在源内，产物
+///        布局由 -d 展开），module-info.java 与全部类源同一次 javac 调用编
+///        译——module 指令只对同调用的类生效。返回 false = 语料缺席（能力
+///        或源缺失，调用方降级）；javac 能力具备但样本源编译失败是仓内缺
+///        陷，直接 ADD_FAILURE。
+inline bool produceModuleCorpus()
+{
+    const std::vector<fs::path> sources = collectModuleSources();
+    if (sources.empty()) {
+        return false;   // 不在仓库根运行或样本被删：按缺席降级
+    }
+    if (!javacSupportsRelease17()) {
+        return false;   // JDK 能力不足（<17）：环境问题，降级不硬红
+    }
+    std::error_code ec;
+    fs::remove_all(moduleProducedDir(), ec);
+    fs::create_directories(moduleProducedDir(), ec);
+    std::string files;
+    for (const fs::path& src : sources) {
+        files += " \"";
+        files += src.string();
+        files += "\"";
+    }
+    const std::string cmd = "javac --release 17 -g -encoding UTF-8 -d \""
+        + moduleProducedDir().string() + "\"" + files;
+    const fs::path log = fs::path("test") / "libjbc_corpus_module" / "javac.log";
+    fs::create_directories(log.parent_path(), ec);
+    const int rc = runQuiet(cmd, log);
+    if (rc != 0) {
+        ADD_FAILURE() << "module corpus javac failed (rc=" << rc << "), log: "
+                      << log.string();
+        return false;
+    }
+    ca::usize classes = 0;
+    for (fs::recursive_directory_iterator it(moduleProducedDir(), ec), end;
+         it != end && !ec; it.increment(ec)) {
+        if (!ec && it->is_regular_file() && it->path().extension() == ".class") {
+            ++classes;
+        }
+    }
+    std::ofstream manifest(moduleManifestPath(), std::ios::binary | std::ios::trunc);
+    manifest << "classes=" << classes << "\n" << kModuleCompileFlagsMark << "\n";
+    return classes > 0;
+}
+
+/// @brief module 语料解析：命中 = 自产模式产物根（Stage::SelfProduced）；缺席
+///        返回 stage == None（调用方按需降级）。module-info 类不在 env 注入
+///        主语料的分布内（注入语料无模块面），本根只服务自产侧。
+inline CorpusSource resolveModuleCorpus()
+{
+    CorpusSource out;
+    if (moduleBuildNeeded() || !dirHasClassFiles(moduleProducedDir())) {
+        produceModuleCorpus();
+    }
+    if (dirHasClassFiles(moduleProducedDir())) {
+        out.dir   = moduleProducedDir().string();
         out.stage = Stage::SelfProduced;
     }
     return out;

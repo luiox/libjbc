@@ -128,6 +128,26 @@ public:
         return i;
     }
 
+    /// @brief CONSTANT_Module 条目（JVMS 4.4.21，tag 19）：Module 属性的模块名形态。
+    ca::u16 moduleRef(ca::u16 nameIdx)
+    {
+        const ca::u16 i = next_;
+        next_ += 1;
+        detail::putU8(cp_, 19);
+        detail::putU16(cp_, nameIdx);
+        return i;
+    }
+
+    /// @brief CONSTANT_Package 条目（JVMS 4.4.22，tag 20）：Module 属性的包名形态。
+    ca::u16 packageRef(ca::u16 nameIdx)
+    {
+        const ca::u16 i = next_;
+        next_ += 1;
+        detail::putU8(cp_, 20);
+        detail::putU16(cp_, nameIdx);
+        return i;
+    }
+
     ca::u16 nameAndType(ca::u16 nameIdx, ca::u16 descIdx)
     {
         const ca::u16 i = next_;

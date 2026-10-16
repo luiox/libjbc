@@ -48,6 +48,9 @@ enum class AttrKind : int {
     NestMembers = 15,          ///< NestMembers（JVMS 4.7.28）
     PermittedSubclasses = 16,  ///< PermittedSubclasses（JVMS 4.7.31）
     Record = 17,               ///< Record（JVMS 4.7.30，类级，组件带嵌套属性表）
+    Module = 18,               ///< Module（JVMS 4.7.25，类级，module-info 专挂）
+    ModulePackages = 19,       ///< ModulePackages（JVMS 4.7.26，类级）
+    ModuleMainClass = 20,      ///< ModuleMainClass（JVMS 4.7.27，类级）
 };
 
 /// @brief 属性体基类：一切已解码属性内容的共同祖先。
@@ -717,6 +720,124 @@ public:
     std::vector<ca::u8> trailing;
 };
 
+/// @brief Module 属性（JVMS 4.7.25）：模块声明的全部指令表（类级挂载，
+///        仅 module-info 类携带，access_flags = ACC_MODULE）。
+///
+/// 体是 `u2 module_name（CP Module）+ u2 module_flags + u2 module_version
+/// （CP Utf8）+ requires[] + exports[] + opens[] + uses[] + provides[]`；
+/// requires 行是 `{模块索引（CP Module）, flags, 版本索引（CP Utf8，0 = 无）}`，
+/// exports/opens 行是 `{包索引（CP Package）, flags, to[]（CP Module）}`（to
+/// 空 = 未限定导出/开放），uses 全为 CP Class，provides 行是
+/// `{服务索引（CP Class）, with[]（CP Class）}`。与 @ref ModuleMainClassAttr
+/// 的边界：JVMS 4.7.25 的体**不含**主类索引段——主类由独立的
+/// ModuleMainClass（4.7.27）承载，javac 17.0.8 实测产物体恰在 provides 后
+/// 结束（体尾多出的 2 字节属 trailing，同族保留）。
+///
+/// 与 Nest 族/Record 同边界：只挂类级属性表、不 Code 嵌套、载荷全为 CP
+/// 索引与访问位、无 pc 偏移——§33 relocation 封闭集不涉及。段旗语
+/// （ACC_TRANSITIVE=0x0020 / ACC_STATIC_PHASE=0x0040 / ACC_OPEN=0x0020 /
+/// ACC_SYNTHETIC=0x1000 / ACC_MANDATED=0x8000）按不透明 u16 保真，与
+/// InnerClasses 的 access_flags 同款处理。
+///
+/// ModuleHashes/ModuleResolution/ModuleTarget（JDK 内部件，jlink/jmod 侧产
+/// 物，非 JVMS 条目、javac 语料构造上不可产）不建模，保持 Raw 透传。
+class ModuleAttr : public AttrBody
+{
+public:
+    static constexpr AttrKind kKind = AttrKind::Module;
+
+    ModuleAttr() noexcept : AttrBody(kKind) {}
+
+    /// @brief requires 指令行。
+    struct Require
+    {
+        ca::u32 moduleCp = 0;    ///< CP Module（被依赖模块）
+        ca::u16 flags = 0;       ///< 旗语位集（TRANSITIVE/STATIC_PHASE/...）
+        ca::u32 versionCp = 0;   ///< CP Utf8（模块版本）；0 = 无版本
+    };
+
+    /// @brief exports 指令行（to 空表 = 未限定导出）。
+    struct Export
+    {
+        ca::u32 packageCp = 0;        ///< CP Package（导出包）
+        ca::u16 flags = 0;            ///< 旗语位集（SYNTHETIC/MANDATED）
+        std::vector<ca::u32> toCps;   ///< CP Module（限定目标）
+    };
+
+    /// @brief opens 指令行（与 exports 布局同构，typed 面各归各——开放与
+    ///        导出语义不同，消费方按各自类型分派）。
+    struct Open
+    {
+        ca::u32 packageCp = 0;        ///< CP Package（开放包）
+        ca::u16 flags = 0;            ///< 旗语位集（SYNTHETIC/MANDATED）
+        std::vector<ca::u32> toCps;   ///< CP Module（限定目标）
+    };
+
+    /// @brief provides 指令行。
+    struct Provide
+    {
+        ca::u32 serviceCp = 0;        ///< CP Class（服务接口）
+        std::vector<ca::u32> withCps; ///< CP Class（服务实现）
+    };
+
+    ca::u32 moduleNameCp = 0;     ///< CP Module（模块名）
+    ca::u16 moduleFlags = 0;      ///< 模块旗语位集（OPEN/SYNTHETIC/MANDATED）
+    ca::u32 moduleVersionCp = 0;  ///< CP Utf8（模块版本）；0 = 无版本
+
+    /// @brief requires 指令表（`requires` 是 C++20 关键字，成员名缀 Entries）。
+    std::vector<Require> requiresEntries;
+    std::vector<Export> exports;
+    std::vector<Open> opens;
+    std::vector<ca::u32> usesCps;   ///< CP Class（uses 指令服务表）
+    std::vector<Provide> provides;
+
+    /// @brief 声明结构之后的非标准尾部字节（trailing 同族，design.md §27.1）。
+    ///
+    /// 合法 Module 体在 provides 之后正好结束；超长输入的尾字节奏此保留，
+    /// 重编码原样写回，不静默丢弃。
+    std::vector<ca::u8> trailing;
+};
+
+/// @brief ModulePackages 属性（JVMS 4.7.26）：模块全部包名表（类级挂载）。
+///
+/// 体是 `u2 package_count + u2 packages[]`，条目全为 CP Package。形状与
+/// NestMembers 同构而条目类型不同（Package 非 Class）；javac 对已知包集合
+/// 才写出本属性（单源单模块直译模式实测不产），typed 面照常承载。包名
+/// 手术面 = 逐条目 CP Package 重指向。
+class ModulePackagesAttr : public AttrBody
+{
+public:
+    static constexpr AttrKind kKind = AttrKind::ModulePackages;
+
+    ModulePackagesAttr() noexcept : AttrBody(kKind) {}
+
+    std::vector<ca::u32> packageCps;  ///< CP Package 索引表（模块包名）
+
+    /// @brief 声明结构之后的非标准尾部字节（trailing 同族，design.md §27.1）。
+    std::vector<ca::u8> trailing;
+};
+
+/// @brief ModuleMainClass 属性（JVMS 4.7.27）：模块主类（类级挂载）。
+///
+/// 体是单 `u2 main_class_index`（CP Class），与 NestHost 同形状。写入方是
+/// jlink/jar 工具链（javac 不产——module-info 源语言无主类指令）；主类名
+/// 即手术面（重映射 = 单 CP Class 重指向）。
+class ModuleMainClassAttr : public AttrBody
+{
+public:
+    static constexpr AttrKind kKind = AttrKind::ModuleMainClass;
+
+    ModuleMainClassAttr() noexcept : AttrBody(kKind) {}
+
+    ca::u32 mainClassCp = 0;   ///< CP Class（模块主类）
+
+    /// @brief 声明结构之后的非标准尾部字节（trailing 同族，design.md §27.1）。
+    ///
+    /// 合法 ModuleMainClass 体恰为 2 字节；超长输入的尾字节奏此保留，
+    /// 重编码原样写回，不静默丢弃。
+    std::vector<ca::u8> trailing;
+};
+
 }   // namespace jbc::core
 
 // tag_cast 接入：TypeOf 特化值必须等于运行期 getType()（libca 约定）。
@@ -828,6 +949,24 @@ template <>
 struct TypeOf<jbc::core::RecordAttr>
 {
     static constexpr int value = static_cast<int>(jbc::core::AttrKind::Record);
+};
+
+template <>
+struct TypeOf<jbc::core::ModuleAttr>
+{
+    static constexpr int value = static_cast<int>(jbc::core::AttrKind::Module);
+};
+
+template <>
+struct TypeOf<jbc::core::ModulePackagesAttr>
+{
+    static constexpr int value = static_cast<int>(jbc::core::AttrKind::ModulePackages);
+};
+
+template <>
+struct TypeOf<jbc::core::ModuleMainClassAttr>
+{
+    static constexpr int value = static_cast<int>(jbc::core::AttrKind::ModuleMainClass);
 };
 
 }   // namespace ca::core::tag_cast

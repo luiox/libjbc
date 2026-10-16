@@ -30,6 +30,9 @@ constexpr std::string_view kNestHostName           = "NestHost";
 constexpr std::string_view kNestMembersName        = "NestMembers";
 constexpr std::string_view kPermittedSubclassesName = "PermittedSubclasses";
 constexpr std::string_view kRecordName              = "Record";
+constexpr std::string_view kModuleName              = "Module";
+constexpr std::string_view kModulePackagesName      = "ModulePackages";
+constexpr std::string_view kModuleMainClassName     = "ModuleMainClass";
 
 /// @brief u16 域宽检查：编码闸门的基础谓词（design.md §27.2——超界显式
 ///        Err，禁止 static_cast 静默截断）。
@@ -879,6 +882,122 @@ Result<std::unique_ptr<AttrBody>, ReadError> decodeRecordBody(ClassFile& cf,
     return Ok(std::unique_ptr<AttrBody>(std::move(b)));
 }
 
+/// @brief exports/opens 二段读取（布局同构：u2 组数 + {u2, u2, u2 to 数 +
+///        to[]}*，Row 区分 Export/Open，typed 面各归各）。段任一半截走
+///        Ard 的 Truncated 聚合失败。
+template <typename Row>
+void readTargetGroups(Ard& r, std::vector<Row>& out)
+{
+    const ca::u32 groupCount = r.u2();
+    out.reserve(groupCount > 100 ? 100 : groupCount);
+    for (ca::u32 g = 0; g < groupCount; ++g) {
+        Row row;
+        row.packageCp = r.u2();
+        row.flags     = static_cast<ca::u16>(r.u2());
+        const ca::u32 toCount = r.u2();
+        row.toCps.reserve(toCount > 100 ? 100 : toCount);
+        for (ca::u32 t = 0; t < toCount; ++t) {
+            row.toCps.push_back(r.u2());
+        }
+        out.push_back(std::move(row));
+    }
+}
+
+/// @brief Module typed 解码（公开直读入口，不触碰槽状态；分派面走
+///        decodeAttrBody）。形状：u2 名/旗语/版本三槽 + requires/exports/
+///        opens/uses/provides 五段逐个落表（JVMS 4.7.25，体在 provides 后
+///        结束——主类走独立 ModuleMainClass）。半截体 Err，trailing 保留。
+Result<std::unique_ptr<AttrBody>, ReadError> decodeModuleBody(ClassFile& cf,
+                                                              const AttrSlot& slot)
+{
+    bool spanOk = false;
+    Ard r = makeReader(cf, slot, spanOk);
+    if (!spanOk) {
+        return Err(ReadError::Truncated);
+    }
+    auto b = std::make_unique<ModuleAttr>();
+    b->moduleNameCp    = r.u2();
+    b->moduleFlags     = static_cast<ca::u16>(r.u2());
+    b->moduleVersionCp = r.u2();
+
+    const ca::u32 requiresCount = r.u2();
+    b->requiresEntries.reserve(requiresCount > 100 ? 100 : requiresCount);
+    for (ca::u32 i = 0; i < requiresCount; ++i) {
+        ModuleAttr::Require e;
+        e.moduleCp   = r.u2();
+        e.flags      = static_cast<ca::u16>(r.u2());
+        e.versionCp  = r.u2();
+        b->requiresEntries.push_back(e);
+    }
+
+    // exports/opens 二段同构，共用目标组读取模板。
+    readTargetGroups(r, b->exports);
+    readTargetGroups(r, b->opens);
+
+    const ca::u32 usesCount = r.u2();
+    b->usesCps.reserve(usesCount > 100 ? 100 : usesCount);
+    for (ca::u32 i = 0; i < usesCount; ++i) {
+        b->usesCps.push_back(r.u2());
+    }
+
+    const ca::u32 providesCount = r.u2();
+    b->provides.reserve(providesCount > 100 ? 100 : providesCount);
+    for (ca::u32 i = 0; i < providesCount; ++i) {
+        ModuleAttr::Provide p;
+        p.serviceCp = r.u2();
+        const ca::u32 withCount = r.u2();
+        p.withCps.reserve(withCount > 100 ? 100 : withCount);
+        for (ca::u32 w = 0; w < withCount; ++w) {
+            p.withCps.push_back(r.u2());
+        }
+        b->provides.push_back(std::move(p));
+    }
+
+    if (!r.ok()) {
+        return Err(r.err());
+    }
+    keepBodyTrailing(cf, slot, b->trailing, r);
+    return Ok(std::unique_ptr<AttrBody>(std::move(b)));
+}
+
+Result<std::unique_ptr<AttrBody>, ReadError> decodeModulePackagesBody(ClassFile& cf,
+                                                                      const AttrSlot& slot)
+{
+    bool spanOk = false;
+    Ard r = makeReader(cf, slot, spanOk);
+    if (!spanOk) {
+        return Err(ReadError::Truncated);
+    }
+    auto b = std::make_unique<ModulePackagesAttr>();
+    const ca::u32 n = r.u2();
+    b->packageCps.reserve(n > 100 ? 100 : n);
+    for (ca::u32 i = 0; i < n; ++i) {
+        b->packageCps.push_back(r.u2());
+    }
+    if (!r.ok()) {
+        return Err(r.err());
+    }
+    keepBodyTrailing(cf, slot, b->trailing, r);
+    return Ok(std::unique_ptr<AttrBody>(std::move(b)));
+}
+
+Result<std::unique_ptr<AttrBody>, ReadError> decodeModuleMainClassBody(ClassFile& cf,
+                                                                       const AttrSlot& slot)
+{
+    bool spanOk = false;
+    Ard r = makeReader(cf, slot, spanOk);
+    if (!spanOk) {
+        return Err(ReadError::Truncated);
+    }
+    auto b = std::make_unique<ModuleMainClassAttr>();
+    b->mainClassCp = r.u2();
+    if (!r.ok()) {
+        return Err(r.err());
+    }
+    keepBodyTrailing(cf, slot, b->trailing, r);
+    return Ok(std::unique_ptr<AttrBody>(std::move(b)));
+}
+
 /// @brief type_path 读取（JVMS 4.7.20.2）：path_length + 若干 (kind,
 ///        type_argument_index) 对；kind > 3 属非法，显式拒绝。
 Result<std::vector<TypeAnnotationsAttr::TypePathEntry>, ReadError>
@@ -1340,6 +1459,21 @@ Result<AttrBody*, ReadError> decodeAttrBody(ClassFile& cf, AttrSlot& slot)
         if (r.is_err()) return Err(r.unwrap_err());
         return attach(std::move(r).unwrap());
     }
+    if (name == kModuleName) {
+        auto r = decodeModuleBody(cf, slot);
+        if (r.is_err()) return Err(r.unwrap_err());
+        return attach(std::move(r).unwrap());
+    }
+    if (name == kModulePackagesName) {
+        auto r = decodeModulePackagesBody(cf, slot);
+        if (r.is_err()) return Err(r.unwrap_err());
+        return attach(std::move(r).unwrap());
+    }
+    if (name == kModuleMainClassName) {
+        auto r = decodeModuleMainClassBody(cf, slot);
+        if (r.is_err()) return Err(r.unwrap_err());
+        return attach(std::move(r).unwrap());
+    }
 
     // 未建模属性：原样保留字节（保真的兜底形态）。
     const ByteView data = cf.source().spanOrEmpty(slot.data);
@@ -1741,6 +1875,126 @@ Result<void, WriteError> encodeAttr(const ClassFile& cf,
             if (rb.is_err()) {
                 return Err(rb.unwrap_err());
             }
+            break;
+        }
+        case AttrKind::Module: {
+            // u2 域宽闸门（§27.2）：名/版本索引、段旗语、段计数与全部条目
+            // 索引超界显式 Err。exports/opens 共用写出模板（与解码同构）。
+            const auto& b = static_cast<const ModuleAttr&>(*slot.body);
+            if (!fitsU16(b.moduleNameCp) || !fitsU16(b.moduleVersionCp) ||
+                b.requiresEntries.size() > std::numeric_limits<ca::u16>::max() ||
+                b.exports.size() > std::numeric_limits<ca::u16>::max() ||
+                b.opens.size() > std::numeric_limits<ca::u16>::max() ||
+                b.usesCps.size() > std::numeric_limits<ca::u16>::max() ||
+                b.provides.size() > std::numeric_limits<ca::u16>::max()) {
+                return Err(WriteError::Unencodable);
+            }
+            for (const ModuleAttr::Require& e : b.requiresEntries) {
+                if (!fitsU16(e.moduleCp) || !fitsU16(e.versionCp)) {
+                    return Err(WriteError::Unencodable);
+                }
+            }
+            for (const ModuleAttr::Export& e : b.exports) {
+                if (!fitsU16(e.packageCp) ||
+                    e.toCps.size() > std::numeric_limits<ca::u16>::max()) {
+                    return Err(WriteError::Unencodable);
+                }
+                for (const ca::u32 to : e.toCps) {
+                    if (!fitsU16(to)) {
+                        return Err(WriteError::Unencodable);
+                    }
+                }
+            }
+            for (const ModuleAttr::Open& e : b.opens) {
+                if (!fitsU16(e.packageCp) ||
+                    e.toCps.size() > std::numeric_limits<ca::u16>::max()) {
+                    return Err(WriteError::Unencodable);
+                }
+                for (const ca::u32 to : e.toCps) {
+                    if (!fitsU16(to)) {
+                        return Err(WriteError::Unencodable);
+                    }
+                }
+            }
+            for (const ca::u32 use : b.usesCps) {
+                if (!fitsU16(use)) {
+                    return Err(WriteError::Unencodable);
+                }
+            }
+            for (const ModuleAttr::Provide& p : b.provides) {
+                if (!fitsU16(p.serviceCp) ||
+                    p.withCps.size() > std::numeric_limits<ca::u16>::max()) {
+                    return Err(WriteError::Unencodable);
+                }
+                for (const ca::u32 with : p.withCps) {
+                    if (!fitsU16(with)) {
+                        return Err(WriteError::Unencodable);
+                    }
+                }
+            }
+            body.u16(static_cast<ca::u16>(b.moduleNameCp));
+            body.u16(b.moduleFlags);
+            body.u16(static_cast<ca::u16>(b.moduleVersionCp));
+            body.u16(static_cast<ca::u16>(b.requiresEntries.size()));
+            for (const ModuleAttr::Require& e : b.requiresEntries) {
+                body.u16(static_cast<ca::u16>(e.moduleCp));
+                body.u16(e.flags);
+                body.u16(static_cast<ca::u16>(e.versionCp));
+            }
+            const auto writeTargetGroups = [&body](const auto& rows) {
+                body.u16(static_cast<ca::u16>(rows.size()));
+                for (const auto& row : rows) {
+                    body.u16(static_cast<ca::u16>(row.packageCp));
+                    body.u16(row.flags);
+                    body.u16(static_cast<ca::u16>(row.toCps.size()));
+                    for (const ca::u32 to : row.toCps) {
+                        body.u16(static_cast<ca::u16>(to));
+                    }
+                }
+            };
+            writeTargetGroups(b.exports);
+            writeTargetGroups(b.opens);
+            body.u16(static_cast<ca::u16>(b.usesCps.size()));
+            for (const ca::u32 use : b.usesCps) {
+                body.u16(static_cast<ca::u16>(use));
+            }
+            body.u16(static_cast<ca::u16>(b.provides.size()));
+            for (const ModuleAttr::Provide& p : b.provides) {
+                body.u16(static_cast<ca::u16>(p.serviceCp));
+                body.u16(static_cast<ca::u16>(p.withCps.size()));
+                for (const ca::u32 with : p.withCps) {
+                    body.u16(static_cast<ca::u16>(with));
+                }
+            }
+            body.raw(ByteView{b.trailing});
+            break;
+        }
+        case AttrKind::ModulePackages: {
+            // u2 域宽闸门（§27.2）：条目数与每条目索引超界显式 Err。
+            const auto& b = static_cast<const ModulePackagesAttr&>(*slot.body);
+            if (b.packageCps.size() > std::numeric_limits<ca::u16>::max()) {
+                return Err(WriteError::Unencodable);
+            }
+            for (const ca::u32 cp : b.packageCps) {
+                if (!fitsU16(cp)) {
+                    return Err(WriteError::Unencodable);
+                }
+            }
+            body.u16(static_cast<ca::u16>(b.packageCps.size()));
+            for (const ca::u32 cp : b.packageCps) {
+                body.u16(static_cast<ca::u16>(cp));
+            }
+            body.raw(ByteView{b.trailing});
+            break;
+        }
+        case AttrKind::ModuleMainClass: {
+            // u2 域宽闸门（§27.2）：main_class_index 超 u16 显式 Err。
+            const auto& b = static_cast<const ModuleMainClassAttr&>(*slot.body);
+            if (!fitsU16(b.mainClassCp)) {
+                return Err(WriteError::Unencodable);
+            }
+            body.u16(static_cast<ca::u16>(b.mainClassCp));
+            body.raw(ByteView{b.trailing});
             break;
         }
         case AttrKind::Raw: {

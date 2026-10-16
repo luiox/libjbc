@@ -86,6 +86,20 @@ Result<std::unique_ptr<AttrBody>, ReadError> decodePermittedSubclassesBody(
 Result<std::unique_ptr<AttrBody>, ReadError> decodeRecordBody(ClassFile& cf,
                                                               const AttrSlot& slot);
 
+/// @brief Module 属性体的 typed 解码（契约同 @ref decodeInnerClassesBody）。
+///
+/// requires/exports/opens/uses/provides 全段解出；段表任一半截显式 Err。
+Result<std::unique_ptr<AttrBody>, ReadError> decodeModuleBody(ClassFile& cf,
+                                                              const AttrSlot& slot);
+
+/// @brief ModulePackages 属性体的 typed 解码（契约同 @ref decodeInnerClassesBody）。
+Result<std::unique_ptr<AttrBody>, ReadError> decodeModulePackagesBody(ClassFile& cf,
+                                                                      const AttrSlot& slot);
+
+/// @brief ModuleMainClass 属性体的 typed 解码（契约同 @ref decodeInnerClassesBody）。
+Result<std::unique_ptr<AttrBody>, ReadError> decodeModuleMainClassBody(ClassFile& cf,
+                                                                       const AttrSlot& slot);
+
 /// @brief 编码一个属性槽（含 name_index 与 length）。
 ///
 /// - `state ∈ {Untouched, Decoded}` → 原样 copy 源 span（保真路径）

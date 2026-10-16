@@ -751,6 +751,93 @@ private:
                 }
                 return Ok();
             }
+            case AttrKind::Module: {
+                // 全段闭包：名（CP Module）/版本（CP Utf8）+ requires 的模块
+                // /版本槽 + exports/opens 的包/to 槽 + uses 的 Class 槽 +
+                // provides 的服务/实现槽；旗语位与 trailing 不含 CP 引用。
+                auto& b = static_cast<core::ModuleAttr&>(body);
+                const auto markTargets = [this](const auto& rows)
+                    -> Result<void, CompactFailure> {
+                    for (const auto& row : rows) {
+                        const Result<void, CompactFailure> rp = markCp(row.packageCp);
+                        if (rp.is_err()) {
+                            return Err(rp.unwrap_err());
+                        }
+                        for (const ca::u32 to : row.toCps) {
+                            const Result<void, CompactFailure> rt = markCp(to);
+                            if (rt.is_err()) {
+                                return Err(rt.unwrap_err());
+                            }
+                        }
+                    }
+                    return Ok();
+                };
+                const Result<void, CompactFailure> r0 = markCp(b.moduleNameCp);
+                if (r0.is_err()) {
+                    return Err(r0.unwrap_err());
+                }
+                const Result<void, CompactFailure> rv = markCp(b.moduleVersionCp);
+                if (rv.is_err()) {
+                    return Err(rv.unwrap_err());
+                }
+                for (const core::ModuleAttr::Require& e : b.requiresEntries) {
+                    const Result<void, CompactFailure> r1 = markCp(e.moduleCp);
+                    if (r1.is_err()) {
+                        return Err(r1.unwrap_err());
+                    }
+                    const Result<void, CompactFailure> r2 = markCp(e.versionCp);
+                    if (r2.is_err()) {
+                        return Err(r2.unwrap_err());
+                    }
+                }
+                if (const Result<void, CompactFailure> r = markTargets(b.exports);
+                    r.is_err()) {
+                    return Err(r.unwrap_err());
+                }
+                if (const Result<void, CompactFailure> r = markTargets(b.opens);
+                    r.is_err()) {
+                    return Err(r.unwrap_err());
+                }
+                for (const ca::u32 use : b.usesCps) {
+                    const Result<void, CompactFailure> r = markCp(use);
+                    if (r.is_err()) {
+                        return Err(r.unwrap_err());
+                    }
+                }
+                for (const core::ModuleAttr::Provide& p : b.provides) {
+                    const Result<void, CompactFailure> r1 = markCp(p.serviceCp);
+                    if (r1.is_err()) {
+                        return Err(r1.unwrap_err());
+                    }
+                    for (const ca::u32 with : p.withCps) {
+                        const Result<void, CompactFailure> r2 = markCp(with);
+                        if (r2.is_err()) {
+                            return Err(r2.unwrap_err());
+                        }
+                    }
+                }
+                return Ok();
+            }
+            case AttrKind::ModulePackages: {
+                // 全槽是 CP Package 索引。
+                auto& b = static_cast<core::ModulePackagesAttr&>(body);
+                for (const ca::u32 cp : b.packageCps) {
+                    const Result<void, CompactFailure> r = markCp(cp);
+                    if (r.is_err()) {
+                        return Err(r.unwrap_err());
+                    }
+                }
+                return Ok();
+            }
+            case AttrKind::ModuleMainClass: {
+                // 单 u2 Class 槽直接标记；trailing 不含 CP 引用。
+                auto& b = static_cast<core::ModuleMainClassAttr&>(body);
+                const Result<void, CompactFailure> r = markCp(b.mainClassCp);
+                if (r.is_err()) {
+                    return Err(r.unwrap_err());
+                }
+                return Ok();
+            }
             case AttrKind::TypeAnnotations: {
                 auto& b = static_cast<core::TypeAnnotationsAttr&>(body);
                 for (core::TypeAnnotationsAttr::Annotation& a : b.annotations) {
@@ -1221,6 +1308,96 @@ private:
                     for (AttrSlot& nested : c.attrs) {
                         applyAttr(nested);
                     }
+                }
+                break;
+            }
+            case AttrKind::Module: {
+                // 全段重映射（与计划相同一槽面）：名（CP Module）/版本（CP
+                // Utf8）+ requires 的模块/版本槽 + exports/opens 的包/to 槽 +
+                // uses 的 Class 槽 + provides 的服务/实现槽。
+                auto& b = static_cast<core::ModuleAttr&>(body);
+                const auto remapTargets = [this, &touched](auto& rows) {
+                    for (auto& row : rows) {
+                        const ca::u32 np = remap(row.packageCp);
+                        if (np != row.packageCp) {
+                            row.packageCp = np;
+                            touched       = true;
+                        }
+                        for (ca::u32& to : row.toCps) {
+                            const ca::u32 nt = remap(to);
+                            if (nt != to) {
+                                to      = nt;
+                                touched = true;
+                            }
+                        }
+                    }
+                };
+                const ca::u32 nm = remap(b.moduleNameCp);
+                if (nm != b.moduleNameCp) {
+                    b.moduleNameCp = nm;
+                    touched        = true;
+                }
+                const ca::u32 nv = remap(b.moduleVersionCp);
+                if (nv != b.moduleVersionCp) {
+                    b.moduleVersionCp = nv;
+                    touched           = true;
+                }
+                for (core::ModuleAttr::Require& e : b.requiresEntries) {
+                    const ca::u32 n1 = remap(e.moduleCp);
+                    if (n1 != e.moduleCp) {
+                        e.moduleCp = n1;
+                        touched    = true;
+                    }
+                    const ca::u32 n2 = remap(e.versionCp);
+                    if (n2 != e.versionCp) {
+                        e.versionCp = n2;
+                        touched     = true;
+                    }
+                }
+                remapTargets(b.exports);
+                remapTargets(b.opens);
+                for (ca::u32& use : b.usesCps) {
+                    const ca::u32 n = remap(use);
+                    if (n != use) {
+                        use     = n;
+                        touched = true;
+                    }
+                }
+                for (core::ModuleAttr::Provide& p : b.provides) {
+                    const ca::u32 n1 = remap(p.serviceCp);
+                    if (n1 != p.serviceCp) {
+                        p.serviceCp = n1;
+                        touched     = true;
+                    }
+                    for (ca::u32& with : p.withCps) {
+                        const ca::u32 n2 = remap(with);
+                        if (n2 != with) {
+                            with    = n2;
+                            touched = true;
+                        }
+                    }
+                }
+                break;
+            }
+            case AttrKind::ModulePackages: {
+                // 全槽 CP Package 重映射。
+                auto& b = static_cast<core::ModulePackagesAttr&>(body);
+                for (ca::u32& cp : b.packageCps) {
+                    const ca::u32 n = remap(cp);
+                    if (n != cp) {
+                        cp      = n;
+                        touched = true;
+                    }
+                }
+                break;
+            }
+            case AttrKind::ModuleMainClass: {
+                // 单 u2 Class 槽重映射。
+                auto& b = static_cast<core::ModuleMainClassAttr&>(body);
+                const ca::u32 n = remap(b.mainClassCp);
+                if (n != b.mainClassCp) {
+                    b.mainClassCp = n;
+                    touched       = true;
                 }
                 break;
             }
