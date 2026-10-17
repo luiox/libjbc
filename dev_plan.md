@@ -10,7 +10,38 @@
 - 发版触发条件（里程碑）：注解族属性面齐（已完成，见下）+ 类构建能力面齐
   （未完成）。两者齐后一次性 bump 发版。
 
-## 已堆叠批次
+# dev_plan.md
+
+里程碑前的批次堆叠账：版本号不发、tag 不打，全部补丁式开发堆叠在当前版本
+之上，到里程碑一次发版。
+
+## 版本口径（堆叠期纪律）
+
+- ~~当前版本 `0.4.15`：堆叠期内 **不 bump**——`get_lib_version` 返回值、
+  xmake `set_version`、库版本测试期望均不动，不新增 tag，不动包仓条目。~~
+- **v0.4.16 已发版（2026-10-17）**：触发条件两条皆齐（注解族属性面 + 类
+  构建能力面 + 消费者协议面）。堆叠批次随发版说明见下「v0.4.16 发版
+  说明」一节。</think><tool_call>edit<arg_key>newString</arg_key><arg_value>## v0.4.16 发版说明（2026-10-17）
+
+自 `0.4.15` 一次性 bump，堆叠批次并入本版：
+
+1. **类构建挂载面（批 0+1）**：注解/常量/参数名/注解默认值族的语义规格
+   → typed 属性合成挂载（attach 家族），full-jvm 反射读回门；
+2. **BSM 语义 intern 家族（批 2）**：五件去重 intern + BootstrapMethods
+   条目面（append/复用/loadable 参数落位 + 锚点闸）；
+3. **E-track 消费者协议面（批 3）**：`jbc::consumer` 模块——E3 源/骨架、
+   E1 引用事实、rename 分族应用 + 注入 resolver + fail-closed 跨类驱动，
+   BSM 载体成员规则 fail-loud 闸；
+4. **文档归位（批 4a）**：`docs/design.md` 全量拓扑真源 + 兄弟文档，§37
+   落地记录；
+5. **Grunt 实语料验证（批 4b）**：boar-main/origin 双 jar 五支 pass 编组
+   （字节恒等/骨架/引用/全语料改名/fail-loud 实证），语料门 env 注入。
+
+包仓条目同步更新（luiox-repo）。已知未竟（下里程碑）：rename v1 的
+BSM/indy 改写通道、StackMapTable Object 载荷的类名族覆盖等 §37.3 明示
+的封口，与 JVM 级语料 define-sweep（需 JDK17 语料环境）。
+
+## 已堆叠批次（封账）
 
 ### BSM 语义 intern 家族（本批，已完成）
 
@@ -111,5 +142,6 @@
       `LIBJBC_GRUNT_JAR`[-`_ORIGIN`] 注入 + 缺席 skip（CI 无注入即跳）。
       已知界限：JVM 级载入扫描（defineClass sweep）需 JDK17 语料环境，
       本机 JDK8 未跑——词法字节域的等强核查已由重扫断言收接。
-- [ ] 里程碑发版：一次 bump 版本号 + tag + 包仓条目更新（堆叠批次随发版说
-      明一并列出）。
+- [x] 里程碑发版：一次 bump 版本号 + tag + 包仓条目更新（堆叠批次随发版说
+      明一并列出）——v0.4.16 bump 已提交，tag 在 PR 合并后于 main 打
+      （`v0.4.16`），包仓条目随发版同步。
