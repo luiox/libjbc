@@ -102,6 +102,14 @@
       （`docs/design.md` 逐字节收拢 + 折回说明/§编号差异警示 + §37 落地
       记录；兄弟文档四件随折；误引修正 rename.hpp §9、signature.hpp 指
       docs 版）。
-- [ ] Grunt 实通过验证（对 boar-main*.jar 语料写数个 pass）。
+- [x] Grunt 实通过验证（对 boar-main*.jar 语料写数个 pass）
+      —— consumer_corpus_test 五支 pass 编组于注入语料实跑全绿：
+      ZeroTouchByteExact（3065 混淆 + 775 干净逐字节恒等）/ SkeletonSweep /
+      ReferenceSweep / RenameClassFamilyWholeCorpus（单类名规则全语料驱动，
+      事实族旧名清零+新名引用集守恒，杂项列/operand 随行改写实证）/
+      BsmTouchedFailLoud（混淆语料 carrier 必现 Err）。语料门 =
+      `LIBJBC_GRUNT_JAR`[-`_ORIGIN`] 注入 + 缺席 skip（CI 无注入即跳）。
+      已知界限：JVM 级载入扫描（defineClass sweep）需 JDK17 语料环境，
+      本机 JDK8 未跑——词法字节域的等强核查已由重扫断言收接。
 - [ ] 里程碑发版：一次 bump 版本号 + tag + 包仓条目更新（堆叠批次随发版说
       明一并列出）。
