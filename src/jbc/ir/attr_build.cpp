@@ -1,6 +1,7 @@
 /// @file        attr_build.cpp
-/// @brief       类构建挂载面（A7 定形 + dev_plan 批 1）：注解族/简单注解的
-///              语义合成与 typed 属性挂载（ClassSession 成员实现文件）。
+/// @brief       类构建挂载面（A7 定形 + dev_plan 批 1/批 2）：注解族/简单
+///              注解的语义合成与 typed 属性挂载 + BSM 语义 intern 家族
+///              （ClassSession 成员实现文件）。
 //
 // 挂载规则封闭表（单一知识源，勿在调用点散写）：
 //   - "Code" 一律拒绝——方法体的唯一管径是 promote → CodeEditor → lower，
@@ -137,6 +138,181 @@ ca::u32 countScalarElem(const SemElemValue& e, SemIndex& ix)
     default:
         return 0;
     }
+}
+
+/// @brief reference_kind → 目标成员条目 tag（JVMS 4.4.8 封闭表）：1..4 字段
+///        形（0..3 get/put field/static → Fieldref）、5..8 方法形（virtual/
+///        static/special/newInvokeSpecial → Methodref）、9 接口形（Interface-
+///        Methodref）。域外即 null（JVM 类解析对 kind ∉ 1..9 直接拒）。
+std::optional<core::CpTag> mhRefTagOf(ca::u16 kind) noexcept
+{
+    switch (kind) {
+    case 1:
+    case 2:
+    case 3:
+    case 4:
+        return core::CpTag::Fieldref;
+    case 5:
+    case 6:
+    case 7:
+    case 8:
+        return core::CpTag::Methodref;
+    case 9:
+        return core::CpTag::InterfaceMethodref;
+    default:
+        return std::nullopt;
+    }
+}
+
+/// @brief utf8 视图的既有索引解析：miss ⇒ 下游所有以该索引为键的映射
+///        （byName/nat/ref/mh/mt…）必然 miss（池只追加，既有条目不可能
+///        引用尚不存在的下标）——计数链据此剪枝，与 intern 实现同构。
+struct Utf8Known
+{
+    ca::u32 idx = 0;
+    bool known = false;
+};
+
+Utf8Known resolveUtf8(const SemIndex& ix, std::string_view s)
+{
+    const auto it = ix.utf8.find(s);
+    return it == ix.utf8.end() ? Utf8Known{} : Utf8Known{it->second, true};
+}
+
+/// @brief BSM 编目计数器（miss 才计、保守超计可行、漏计不可——与批 1
+///        countScalarElem 同一纪律）。与带去重 intern 的查找序列严格同构：
+///        utf8→下游键；utf8 命中才查二级表，miss 直接按全链计加。
+ca::u32 countHandleAdditions(const SemIndex& ix, core::CpTag refTag,
+                             const MethodHandleSpec& h)
+{
+    const Utf8Known o = resolveUtf8(ix, h.owner);
+    const Utf8Known n = resolveUtf8(ix, h.name);
+    const Utf8Known d = resolveUtf8(ix, h.desc);
+    // 三件 utf8 各自的 miss。
+    ca::u32 nAdds = (o.known ? 0 : 1) + (n.known ? 0 : 1) + (d.known ? 0 : 1);
+
+    // Class（owner）：utf8 已在才查 byName；否则必随建。
+    ca::u32 classIdx = 0;
+    bool classKnown = false;
+    if (o.known) {
+        const auto it = ix.byName.find(o.idx);
+        if (it != ix.byName.end()) {
+            classKnown = true;
+            classIdx   = it->second;
+        } else {
+            ++nAdds;
+        }
+    } else {
+        ++nAdds;
+    }
+
+    // NameAndType(name, desc)：两端 utf8 都已在才查；否则必随建。
+    ca::u32 natIdx = 0;
+    bool natKnown  = false;
+    if (n.known && d.known) {
+        const auto it = ix.nat.find(packNatKey(n.idx, d.idx));
+        if (it != ix.nat.end()) {
+            natKnown = true;
+            natIdx   = it->second;
+        } else {
+            ++nAdds;
+        }
+    } else {
+        ++nAdds;
+    }
+
+    // 成员引用：上游都已在才查；否则必随建。
+    ca::u32 refIdx = 0;
+    bool refKnown  = false;
+    if (classKnown && natKnown) {
+        const auto it = ix.ref.find(packRefKey(refTag, classIdx, natIdx));
+        if (it != ix.ref.end()) {
+            refKnown = true;
+            refIdx   = it->second;
+        } else {
+            ++nAdds;
+        }
+    } else {
+        ++nAdds;
+    }
+
+    // 处理条目（MethodHandle 壳）：ref 已在才查；否则必随建。
+    if (refKnown) {
+        if (ix.mhConst.find(packMhKey(h.referenceKind, refIdx)) == ix.mhConst.end()) {
+            ++nAdds;
+        }
+    } else {
+        ++nAdds;
+    }
+    return nAdds;
+}
+
+/// @brief 单个静态参数的追加计数（Dynamic 叶子绑定既有条目，无嵌套规格树）。
+ca::u32 countBsmArgAdditions(const SemIndex& ix, const BsmArg& a)
+{
+    auto miss = [](auto& map, const auto& key) {
+        return map.find(key) == map.end() ? ca::u32{1} : ca::u32{0};
+    };
+    auto utf8Miss = [&](std::string_view s) {
+        return ix.utf8.find(s) == ix.utf8.end() ? ca::u32{1} : ca::u32{0};
+    };
+    switch (a.kind) {
+    case BsmArg::Kind::Int:
+        return miss(ix.intConst, static_cast<ca::i32>(a.num));
+    case BsmArg::Kind::Long:
+        return miss(ix.longConst, a.num);
+    case BsmArg::Kind::Float:
+        return miss(ix.floatConst, a.fbits);
+    case BsmArg::Kind::Double:
+        return miss(ix.doubleConst, a.dbits);
+    case BsmArg::Kind::String:
+        if (!utf8Miss(a.str)) {
+            return miss(ix.strConst, resolveUtf8(ix, a.str).idx);
+        }
+        return 2;   // utf8 与 String 壳必同名随建
+    case BsmArg::Kind::Class:
+        if (!utf8Miss(a.str)) {
+            return ix.byName.find(resolveUtf8(ix, a.str).idx) == ix.byName.end() ? 1 : 0;
+        }
+        return 2;   // utf8 与 Class 壳必随建
+    case BsmArg::Kind::MethodType:
+        if (!utf8Miss(a.str)) {
+            return miss(ix.mtConst, resolveUtf8(ix, a.str).idx);
+        }
+        return 2;   // utf8 与 MethodType 壳必随建
+    case BsmArg::Kind::MethodHandle: {
+        const std::optional<core::CpTag> tag = mhRefTagOf(a.handle.referenceKind);
+        if (!tag.has_value()) {
+            return 0;   // 域外 kind 在合法性预检已拒（计数不可能到达此处）
+        }
+        return countHandleAdditions(ix, *tag, a.handle);
+    }
+    case BsmArg::Kind::Dynamic: {
+        const Utf8Known n = resolveUtf8(ix, a.name);
+        const Utf8Known d = resolveUtf8(ix, a.desc);
+        ca::u32 nn = (n.known ? 0 : 1) + (d.known ? 0 : 1);
+        ca::u32 natIdx = 0;
+        bool natKnown  = false;
+        if (n.known && d.known) {
+            const auto it = ix.nat.find(packNatKey(n.idx, d.idx));
+            if (it != ix.nat.end()) {
+                natKnown = true;
+                natIdx   = it->second;
+            } else {
+                ++nn;
+            }
+        } else {
+            ++nn;
+        }
+        if (natKnown) {
+            nn += miss(ix.ref, packRefKey(core::CpTag::Dynamic, a.bsm, natIdx));
+        } else {
+            ++nn;   // ref 必随建
+        }
+        return nn;
+    }
+    }
+    return 0;   // 不可达（Kind 封闭枚举）
 }
 
 }   // namespace
@@ -863,6 +1039,270 @@ Result<void, LowerError> ClassSession::attachClassAttr(std::string_view attrName
     rec.member = MemberKind::None;
     noteChange(rec);
     return Ok();
+}
+
+// ---------------------------------------------------------------------------
+// BSM 语义 intern 家族（批 2）：句柄/MethodType/Module/Package/Dynamic 的
+// 去重 intern（命中既有池不膨胀，miss 才追加）+ BootstrapMethods 条目面。
+// ---------------------------------------------------------------------------
+
+Result<core::BootstrapMethodsAttr*, LowerError> seekBsmAttr(ClassSession& s)
+{
+    core::ClassFile& cf = s.backing();
+    for (core::AttrSlot& slot : cf.attrs) {
+        if (!cf.cp.utf8Equals(slot.nameCp, "BootstrapMethods")) {
+            continue;
+        }
+        if (!slot.decoded()) {
+            const Result<core::AttrBody*, core::ReadError> d = cf.decodeAttr(slot);
+            if (d.is_err()) {
+                return Err(LowerError::MalformedAttr);
+            }
+        }
+        if (slot.peek()->kind() != core::AttrKind::BootstrapMethods) {
+            return Err(LowerError::MalformedAttr);
+        }
+        return Ok(static_cast<core::BootstrapMethodsAttr*>(slot.body.get()));
+    }
+    return Ok(static_cast<core::BootstrapMethodsAttr*>(nullptr));
+}
+
+Result<ca::u32, LowerError> ClassSession::internMethodHandle(const MethodHandleSpec& h)
+{
+    const std::optional<core::CpTag> tag = mhRefTagOf(h.referenceKind);
+    if (!tag.has_value()) {
+        return Err(LowerError::InvalidSeed);
+    }
+    ca::u32 refIdx = 0;
+    switch (*tag) {
+    case core::CpTag::Fieldref:
+        refIdx = internFieldRef(h.owner, h.name, h.desc);
+        break;
+    case core::CpTag::Methodref:
+        refIdx = internMethodRef(h.owner, h.name, h.desc);
+        break;
+    default:
+        refIdx = internInterfaceMethodRef(h.owner, h.name, h.desc);
+        break;
+    }
+    SemIndex& ix = sem();
+    const ca::u64 key = packMhKey(h.referenceKind, refIdx);
+    const auto it = ix.mhConst.find(key);
+    if (it != ix.mhConst.end()) {
+        return Ok(it->second);
+    }
+    const ca::u32 idx = backing_->cp.addMethodHandle(h.referenceKind, refIdx);
+    ix.mhConst.emplace(key, idx);
+    return Ok(idx);
+}
+
+ca::u32 ClassSession::internMethodType(std::string_view desc)
+{
+    const ca::u32 descIdx = internUtf8Sem(desc);
+    SemIndex& ix = sem();
+    const auto it = ix.mtConst.find(descIdx);
+    if (it != ix.mtConst.end()) {
+        return it->second;
+    }
+    const ca::u32 idx = backing_->cp.addMethodType(descIdx);
+    ix.mtConst.emplace(descIdx, idx);
+    return idx;
+}
+
+ca::u32 ClassSession::internModule(std::string_view name)
+{
+    const ca::u32 nameIdx = internUtf8Sem(name);
+    SemIndex& ix = sem();
+    const ca::u64 key = packNamedKey(core::CpTag::Module, nameIdx);
+    const auto it = ix.namedConst.find(key);
+    if (it != ix.namedConst.end()) {
+        return it->second;
+    }
+    const ca::u32 idx = backing_->cp.addModule(nameIdx);
+    ix.namedConst.emplace(key, idx);
+    return idx;
+}
+
+ca::u32 ClassSession::internPackage(std::string_view name)
+{
+    const ca::u32 nameIdx = internUtf8Sem(name);
+    SemIndex& ix = sem();
+    const ca::u64 key = packNamedKey(core::CpTag::Package, nameIdx);
+    const auto it = ix.namedConst.find(key);
+    if (it != ix.namedConst.end()) {
+        return it->second;
+    }
+    const ca::u32 idx = backing_->cp.addPackage(nameIdx);
+    ix.namedConst.emplace(key, idx);
+    return idx;
+}
+
+Result<ca::u32, LowerError> ClassSession::internDynamic(ca::u32 bsmIndex,
+                                                        std::string_view name,
+                                                        std::string_view desc)
+{
+    // BSM 依赖锚点存在性：条目下标必须绑定在既有 BootstrapMethods 属性上
+    // （JVM 类解析对无锚 BSM 引用直接拒——condy/indy 共用条目空间）。
+    const Result<core::BootstrapMethodsAttr*, LowerError> rb = seekBsmAttr(*this);
+    if (rb.is_err()) {
+        return Err(rb.unwrap_err());
+    }
+    const core::BootstrapMethodsAttr* body = rb.unwrap();
+    if (body == nullptr || bsmIndex >= body->entries.size()) {
+        return Err(LowerError::InvalidSeed);
+    }
+    const ca::u32 nameIdx = internUtf8Sem(name);
+    const ca::u32 descIdx = internUtf8Sem(desc);
+    SemIndex& ix = sem();
+    ca::u32 natIdx;
+    const auto nit = ix.nat.find(packNatKey(nameIdx, descIdx));
+    if (nit != ix.nat.end()) {
+        natIdx = nit->second;
+    } else {
+        natIdx = backing_->cp.addNameAndType(nameIdx, descIdx);
+        ix.nat.emplace(packNatKey(nameIdx, descIdx), natIdx);
+    }
+    // Dynamic 并入 ref 表：键 = (tag, bsm 下标占 a 槽, nat)。
+    const ca::u64 key = packRefKey(core::CpTag::Dynamic, bsmIndex, natIdx);
+    const auto it = ix.ref.find(key);
+    if (it != ix.ref.end()) {
+        return Ok(it->second);
+    }
+    const ca::u32 idx = backing_->cp.addDynamic(bsmIndex, natIdx);
+    ix.ref.emplace(key, idx);
+    return Ok(idx);
+}
+
+/// @brief 静态参数落位（预检之后的合成步）。
+Result<ca::u32, LowerError> internBsmArg(ClassSession& s, const BsmArg& a)
+{
+    switch (a.kind) {
+    case BsmArg::Kind::Int:
+        return Ok(s.internInteger(static_cast<ca::i32>(a.num)));
+    case BsmArg::Kind::Long:
+        return Ok(s.internLong(a.num));
+    case BsmArg::Kind::Float:
+        return Ok(s.internFloatBits(a.fbits));
+    case BsmArg::Kind::Double:
+        return Ok(s.internDoubleBits(a.dbits));
+    case BsmArg::Kind::String:
+        return Ok(s.internString(a.str));
+    case BsmArg::Kind::Class:
+        return Ok(s.internClass(a.str));
+    case BsmArg::Kind::MethodType:
+        return Ok(s.internMethodType(a.str));
+    case BsmArg::Kind::MethodHandle:
+        return s.internMethodHandle(a.handle);
+    case BsmArg::Kind::Dynamic:
+        return s.internDynamic(a.bsm, a.name, a.desc);
+    }
+    return Err(LowerError::InvalidSeed);
+}
+
+Result<ca::u32, LowerError> ClassSession::appendBootstrapMethod(
+    const MethodHandleSpec& handle, const std::vector<BsmArg>& args)
+{
+    // (1) 句柄域闸：kind ∉ 1..9 是 JVM 类解析即拒的形态。
+    if (!mhRefTagOf(handle.referenceKind).has_value()) {
+        return Err(LowerError::InvalidSeed);
+    }
+    // (2) 域宽预检：bootstrap_arguments 是 u2。
+    if (args.size() > 0xFFFFu) {
+        return Err(LowerError::DomainOverflow);
+    }
+    // (3) 条目形状/合法性预检：既有槽先解码（MalformedAttr = 模型侧损坏）；
+    //     条目数 u2 闸 + 条件参数的下标锚点检查（attr 缺位而引 Dynamic 是
+    //     与 JVM 解析同拒的形态）。
+    const Result<core::BootstrapMethodsAttr*, LowerError> rb = seekBsmAttr(*this);
+    if (rb.is_err()) {
+        return Err(rb.unwrap_err());
+    }
+    core::BootstrapMethodsAttr* body = rb.unwrap();
+    if (body != nullptr && body->entries.size() >= 0xFFFFu) {
+        return Err(LowerError::DomainOverflow);   // num_bootstrap_methods u2
+    }
+    auto checkArg = [&](const BsmArg& a) -> Result<void, LowerError> {
+        switch (a.kind) {
+        case BsmArg::Kind::String:
+        case BsmArg::Kind::Class:
+        case BsmArg::Kind::MethodType:
+            if (a.str.empty()) {
+                return Err(LowerError::InvalidSeed);
+            }
+            break;
+        case BsmArg::Kind::Dynamic:
+            if (body == nullptr || a.bsm >= body->entries.size()) {
+                return Err(LowerError::InvalidSeed);
+            }
+            break;
+        default:
+            break;
+        }
+        return Ok();
+    };
+    for (const BsmArg& a : args) {
+        const Result<void, LowerError> ra = checkArg(a);
+        if (ra.is_err()) {
+            return Err(ra.unwrap_err());
+        }
+    }
+    // (4) 规格容量预检（CP 追加数：attr 名 + 句柄族 + 各参数；miss 才计）。
+    {
+        SemIndex& ix = sem();
+        const core::CpTag tag = mhRefTagOf(handle.referenceKind).value();
+        ca::u32 additions = countHandleAdditions(ix, tag, handle);
+        for (const BsmArg& a : args) {
+            additions += countBsmArgAdditions(ix, a);
+        }
+        additions += ix.utf8.find("BootstrapMethods") == ix.utf8.end() ? 1 : 0;
+        if (backing_->cp.size() + additions > 0xFFFFu) {
+            return Err(LowerError::CpAppendFailed);
+        }
+    }
+    // (5) 合成（CP 追加；条件参数此刻必命中 (3) 的锚点闸——预检与合成之间
+    //     条目数只增不减）。
+    const Result<ca::u32, LowerError> rh = internMethodHandle(handle);
+    if (rh.is_err()) {
+        return Err(rh.unwrap_err());
+    }
+    const ca::u32 handleRef = rh.unwrap();
+    std::vector<ca::u32> argCp(args.size());
+    for (size_t i = 0; i < args.size(); ++i) {
+        const Result<ca::u32, LowerError> ra = internBsmArg(*this, args[i]);
+        if (ra.is_err()) {
+            return Err(ra.unwrap_err());
+        }
+        argCp[i] = ra.unwrap();
+    }
+    // (6) 落位：同形条目命中复用——但仅在计数为 0（纯命中）时可能成立：
+    //     计数 > 0 必有真追加，追加下标 ≥ 池既有容量，不可能与既有条目同值。
+    if (body != nullptr) {
+        for (ca::u32 i = 0; i < body->entries.size(); ++i) {
+            const core::BootstrapMethodsAttr::Entry& e = body->entries[i];
+            if (e.methodRef == handleRef && e.args == argCp) {
+                return Ok(i);   // 纯命中：无实改，不记账
+            }
+        }
+    }
+    // 条目落位：attr 缺则建（类级单例；attributes_count 域已在此前闸）。
+    if (body == nullptr) {
+        if (backing_->attrs.size() >= 0xFFFFu) {
+            return Err(LowerError::CpAppendFailed);   // attributes_count u16 域
+        }
+        auto born = std::make_unique<core::BootstrapMethodsAttr>();
+        body = born.get();
+        const Result<void, LowerError> rm = mountAttr(backing_->attrs, "BootstrapMethods",
+                                                      std::move(born));
+        if (rm.is_err()) {
+            return Err(rm.unwrap_err());
+        }
+    }
+    body->entries.push_back(core::BootstrapMethodsAttr::Entry{handleRef, std::move(argCp)});
+    ChangeRecord rec;
+    rec.kind   = ChangeKind::ClassMetadata;
+    rec.member = MemberKind::None;
+    noteChange(rec);
+    return Ok(static_cast<ca::u32>(body->entries.size() - 1));
 }
 
 }   // namespace jbc::ir

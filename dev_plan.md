@@ -12,6 +12,37 @@
 
 ## 已堆叠批次
 
+### BSM 语义 intern 家族（本批，已完成）
+
+- CP 语义 intern 增量：internMethodHandle / internMethodType / internModule /
+  internPackage / internDynamic——「命中既有池不膨胀，miss 才追加」同一纪律，
+  SemIndex 扩 mhConst（kind+目标）/ mtConst（描述符）/ namedConst（tag+名）
+  三张去重表，Dynamic 并入 ref 表（bsm 下标占 a 槽）。
+- MethodHandle 域闸：reference_kind 1..9 封闭表按 kind 分流 Fieldref/
+  Methodref/InterfaceMethodref（JVM 类解析对域外即拒，合成面提前闸下
+  Err(InvalidSeed)）；type 层一致性（kind 与成员形态匹配）归上层并归运行时。
+- BootstrapMethods 属性面 appendBootstrapMethod：attr 缺则建（类级单例）、
+  条目同形全字段一致命中复用（同形条目对 JVM 无可辨差异；ASM 同思路合并）、
+  静态
+  参数按 loadable 十族规格落位（BsmArg：整型一律 Integer 无窄化语义 +
+  String/Class/MethodType/MethodHandle/Dynamic）。Dynamic 参数与孤立
+  internDynamic 均要求 BSM 锚点在位（attr 在、下标在条目数内）——JVM 对
+  无锚 BSM 引用类解析即拒。
+- 全链「先算后写」不变：句柄域闸 → 域宽（条目数/参数数 u2）→ 解码既有槽
+  （MalformedAttr = 模型侧损坏，新增 LowerError 码）→ 锚点/规格合法性 →
+  规格容量预检（miss 才计、保守超计不漏计，utf8-hypothetical 剪枝与 intern
+  实现同构）→ 合成 → 同形命中短路 → 条目推送；CP 容量边界拒下池与属性
+  表纹丝不动。
+- ChangeSet：实改（属性诞生/条目追加）记 ClassMetadata，纯命中复用不记账。
+- 压缩协同：新四 tag（MethodHandle/MethodType/Module/Package/Dynamic）的
+  markCp 闭包与重排收编既有封闭集覆盖（markCp 对 MH/Dynamic/indy 只标 b）；
+  BSM 条目间同引用去重（两个条目共享同一句柄条目、同一 condy）在压缩后
+  经 SemIndex 重建依旧命中；无消费者的孤件常量按死常量消除语义收掉。
+- 测试 `test/unittest/bsm_intern_test.cpp` 九件：纯模型门（去重/形态逐跳/
+  错误族/容量边界/压缩两态/记账）+ JVM 真跑门（BSM+句柄条目类 v52 全域
+  可载；condy 类 v55 按 java.version 分判——JDK8 解析器不识 tag 17，拒收
+  记环境事实）。本地 JDK8 全绿；CI temurin 17 复验。
+
 ### 注解族属性 typed 建模 + cp_compact 收编（本批，已完成）
 
 - ParameterAnnotations / AnnotationDefault / MethodParameters / ConstantValue
@@ -61,8 +92,8 @@
 
 ## 待办（里程碑前）
 
-- [ ] BSM 语义 intern 家族（internMethodHandle/internDynamic/internModule/
-      internPackage + BSM 属性构建/改写面）。
+- [x] BSM 语义 intern 家族（internMethodHandle/internDynamic/internModule/
+      internPackage + BSM 属性构建/改写面）——账目见上「已堆叠批次」。
 - [ ] E-track 消费者协议边界（E1 ReferenceSite 导出面 / E3
       IClassSource/SummaryScanner 注入式只读面 / rename 跨类编排）。
 - [ ] 文档归位：morpher 侧 doc_ai/design.md 全量章节折回独立仓。

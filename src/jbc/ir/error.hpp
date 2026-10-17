@@ -43,6 +43,7 @@ enum class LowerError {
     AlreadyMounted,    ///< 单例属性重复挂载（替换走 decode + mutate 既有面）
     BadMount,          ///< 挂载点不接受该属性（如挂 Code 属性）或合成规格不合法
     DomainOverflow,    ///< 合成规格的行数域写不下（u1/u16 域宽，§27.2 同源）
+    MalformedAttr,     ///< 既有属性槽解码失败/形与名不符（模型侧结构损坏）
 };
 
 const char* to_string(EditError e) noexcept;

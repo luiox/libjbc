@@ -43,6 +43,7 @@ const char* to_string(LowerError e) noexcept
     case LowerError::AlreadyMounted: return "already mounted";
     case LowerError::BadMount: return "bad mount";
     case LowerError::DomainOverflow: return "domain overflow";
+    case LowerError::MalformedAttr: return "malformed attr";
     }
     return "?";
 }
