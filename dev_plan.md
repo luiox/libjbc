@@ -142,3 +142,17 @@ BSM/indy 改写通道、StackMapTable Object 载荷的类名族覆盖等 §37.3 
 - [x] 里程碑发版：一次 bump 版本号 + tag + 包仓条目更新（堆叠批次随发版说
       明一并列出）——v0.4.16 bump 已提交，tag 在 PR 合并后于 main 打
       （`v0.4.16`），包仓条目随发版同步。
+- [x] deobf 闭环 demo（`demo/deobf_demo.cpp` + xmake `libjbc_deobf_demo`）：
+      Grunt（renamers-only worker 作业流，JDK25）混淆 origin → obf.jar +
+      mappings.json（class/methods/fields 全量）→ libjbc 按 dumpMappings 全
+      规则组广播还原（jar 直读经 libca ZipFile，规避 Windows NTFS 大小写
+      塌缩；zlib 包消费随 libca_zip 上游契约自带）→ 三重实证：775/775 全语
+      料逐类改写、deobf 名集合与 origin 集合 775==775 双向零差、JVM
+      defineClass sweep 548 ok + 227 外部缺失豁免 0 fail（与 origin 基线同
+      分布）；`--members` 档如实呈现 v1 fail-closed 边界（BsmTouched，
+      kotlin indy 载体，归 rename v2 口径）。随行扩界：签名手术**扁平段链
+      跨形态**——Grunt 抹平嵌套段数、kotlin `$$inlined$` 连 $ 空段真名两实
+      证对原全名匹配的 shape 守卫双杀；扁平链收敛为全名逐字节比对 + 整段
+      new 原文拼接（`isValidSigInternalName` 字符集闸），'$' 部件机器只留
+      真嵌套 '.' 段链；`RenameShapeMismatch` 保留值并入不命中语义、现不再
+      产生。demo 诊断通道（失败族定位 + 规则级二分）随行落地。

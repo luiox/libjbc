@@ -440,32 +440,63 @@ bool segmentNameMatches(std::string_view seg_name, std::string_view head,
     return seg_name.empty();
 }
 
-/// @brief 类类型全名是否与 old 段部件吻合；命中时把各段改写坐标填入 patches。
+/// @brief 类类型链与 old 内部名的全名匹配；命中时把改写坐标填入 patches。
 ///
-/// 内部名在签名字节里有两种等价形态——'.' 段链（`Outer<T>.Inner`）与段名内
-/// 嵌 '$'（`Outer$Inner`，javac 常规产物）——统一按全名相等匹配：段名内的
-/// 每个 '$' 使该段多消费一个 old 部件，替换时新部件按同结构 '$' 合成，段链
-/// 结构原样保留。old 部件数多于段链可消费量不命中。
+/// 两种等价字节形态分开处理：
+///   - **扁平段链**（单段名，无 '.' 后缀段）：包前缀 + 段名与 old 全名
+///     **逐字节比对**（段名内 '$' 只是普通字符，不参与结构解读——kotlin
+///     `$$inlined$` 连 $ 空段真名的存在否决了「$ 一律是嵌套分隔」的全局
+///     假设）；命中即将本段整段替换为 new 全名原文（最简且对任意形态可
+///     靠）。替换串进签名前先经 @ref isValidSigInternalName 校验。
+///   - **真嵌套段链**（多个段名，canonical '.' 形态）：延续部件机器——
+///     段名内的每个 '$' 使该段多消费一个 old 部件，替换时新部件按同结构
+///     '$' 合成，段链结构原样保留、部件越界不命中（不做结构重排）。带空
+///     '$' 段的规则名对链模式不可达（切不出合法部件），按不命中处理。
 bool matchClassType(const SigClassType& ct, std::string_view input,
+                    std::string_view old_full, std::string_view new_full,
                     const std::vector<std::string_view>& old_parts,
                     const std::vector<std::string_view>& new_parts,
                     std::vector<RenamePatch>& patches)
 {
+    const ca::usize partBase = patches.size();
+
+    if (ct.segments.size() == 1) {
+        const SigClassSegment& seg = ct.segments[0];
+        const ca::usize pkg  = ct.package_prefix.size();
+        const ca::usize base = static_cast<ca::usize>(
+            ct.package_prefix.data() - input.data());
+        const ca::usize span = pkg + seg.name.size();
+        if (base + span > input.size() || span != old_full.size()
+            || input.substr(base, span) != old_full) {
+            return false;
+        }
+        ca::str::Utf8StringBuilder rb;
+        rb.reserve(new_full.size());
+        rb.append(new_full.data(), new_full.size());
+        patches.push_back(RenamePatch{
+            static_cast<ca::u32>(base), static_cast<ca::u32>(span),
+            rb.build()});
+        return true;
+    }
+
     ca::usize part = 0;
     for (ca::usize i = 0; i < ct.segments.size(); ++i) {
         const SigClassSegment& seg = ct.segments[i];
         const ca::usize need = dollarCount(seg.name) + 1;
-        if (part + need > old_parts.size()) {
+        if (old_parts.empty() || part + need > old_parts.size()) {
+            patches.resize(partBase);
             return false;
         }
         std::string_view head;
         if (i == 0) {
             // 首段：部件带包前缀，先对齐前缀字节（前缀与段名在输入中连续）。
             if (ct.package_prefix.size() > old_parts[part].size()) {
+                patches.resize(partBase);
                 return false;
             }
             if (ct.package_prefix
                 != old_parts[part].substr(0, ct.package_prefix.size())) {
+                patches.resize(partBase);
                 return false;
             }
             head = old_parts[part].substr(ct.package_prefix.size());
@@ -474,10 +505,15 @@ bool matchClassType(const SigClassType& ct, std::string_view input,
             head = old_parts[part];
         }
         if (!segmentNameMatches(seg.name, head, old_parts, part, need)) {
+            patches.resize(partBase);
             return false;
         }
 
-        // 段级替换串：对应新部件按同结构 '$' 合成（分配进 patch 持有）。
+        // 段级替换串：新部件按与 old 同结构 '$' 合成（真链不做结构重排）。
+        if (part + need > new_parts.size()) {
+            patches.resize(partBase);
+            return false;
+        }
         ca::str::Utf8StringBuilder rb;
         for (ca::usize k = 0; k < need; ++k) {
             if (k > 0) {
@@ -505,7 +541,13 @@ bool matchClassType(const SigClassType& ct, std::string_view input,
         }
         part += need;
     }
-    return part == old_parts.size();
+    if (part != old_parts.size()) {
+        // 段链未能吃满 old 部件：假匹配擦除本类型已挂坐标（防脏 patch
+        // 污染后续命中的升序拼装）。
+        patches.resize(partBase);
+        return false;
+    }
+    return true;
 }
 
 }   // namespace
@@ -977,20 +1019,32 @@ Result<SigRenameResult, SigError>
 renameClassInSignature(std::string_view signature, SignatureForm form,
                        std::string_view old_internal, std::string_view new_internal)
 {
-    auto old_parts_r = splitInternalName(old_internal);
-    if (old_parts_r.is_err()) {
-        return Err(std::move(old_parts_r).unwrap_err());
+    // 规则名全名 fail-loud 校验（字符集级；kotlin `$$inlined$` 连 $ 空段
+    // 真名在此放行）。违例字节定位首个偏移。
+    for (const std::string_view n : {old_internal, new_internal}) {
+        if (n.empty()) {
+            return Err(SigError{SigErrorCode::BadIdentifier, 0});
+        }
+        for (ca::usize i = 0; i < n.size(); ++i) {
+            const char c = n[i];
+            if (c != '/' && isReserved(c)) {
+                return Err(SigError{SigErrorCode::BadIdentifier,
+                                    static_cast<ca::u32>(i)});
+            }
+        }
     }
-    auto new_parts_r = splitInternalName(new_internal);
-    if (new_parts_r.is_err()) {
-        return Err(std::move(new_parts_r).unwrap_err());
-    }
-    const auto old_parts = std::move(old_parts_r).unwrap();
-    const auto new_parts = std::move(new_parts_r).unwrap();
-    if (old_parts.size() != new_parts.size()) {
-        // rename 面不做结构重排（内部类嵌套在字节码层面不可变）。
-        return Err(SigError{SigErrorCode::RenameShapeMismatch, 0});
-    }
+    // '$' 部件视图（真嵌套 '.' 段链匹配专用）：带空 $ 段的规则名切不出
+    // 合法部件——对链模式不可达，空向量即降级为该规则不命中。
+    auto        old_parts_r = splitInternalName(old_internal);
+    auto        new_parts_r = splitInternalName(new_internal);
+    static const std::vector<std::string_view> kNoParts;
+    const std::vector<std::string_view> old_parts = old_parts_r.is_ok()
+        ? std::move(old_parts_r).unwrap() : kNoParts;
+    const std::vector<std::string_view> new_parts = new_parts_r.is_ok()
+        ? std::move(new_parts_r).unwrap() : kNoParts;
+    // 形态纪律（v1 收窄到段链形态轴）：扁平段链按全名比对整段换 new 原文
+    // （跨 $ 形态，跨混淆器映射还原的载体），真嵌套段链部件越界即不命中
+    // （原字节零改写）。
 
     Signature sig;
     switch (form) {
@@ -1029,7 +1083,8 @@ renameClassInSignature(std::string_view signature, SignatureForm form,
         if (t.kind != SigType::Kind::Class) {
             return;
         }
-        if (matchClassType(t.class_type, signature, old_parts, new_parts, patches)) {
+        if (matchClassType(t.class_type, signature, old_internal, new_internal,
+                           old_parts, new_parts, patches)) {
             ++matches;
         }
         for (const SigClassSegment& seg : t.class_type.segments) {

@@ -29,6 +29,8 @@ if has_config("with_tests") then
     ca_modules = ca_modules .. ",test"          -- test_helper 的 ca::test 仅测试态需要
 end
 add_requires("libca 0.0.13", {configs = {modules = ca_modules}})
+-- libca_zip 的消费方自带 zlib（libca 包不传递声明，上游 unittest 靶同姿势）。
+add_requires("zlib")
 
 -- libca_* 目标名垫片：库内消费点写 add_deps("libca_core"/"libca_str"/
 -- "libca_test")，由这里统一转发到 libca 包。
@@ -209,6 +211,28 @@ target("libjbc_leak_check")
     add_deps("libjbc")
     binary_link_closure("libjbc", "libca_str", "libca_core")
     add_files("demo/leak_check.cpp")
+    add_includedirs("src")
+    set_rundir("$(projectdir)")
+    set_languages("cxx17")
+
+    if is_plat("windows") then
+        add_cxflags("/utf-8", {tools = "cl"})
+    end
+
+-- 闭环 demo：Grunt 混淆产物 + dumpMappings 映射 → consumer rename 还原
+-- deobf class 目录。jar 解包/回包由外部 tar 承担（binary 只管字节域）。
+-- 详见 demo/deobf_demo.cpp 头注（含 --members fail-closed 预期红口径）。
+target("libjbc_deobf_demo")
+    set_kind("binary")
+    set_group("libs/demo")
+    set_default(false)
+
+    add_deps("libjbc")
+    -- 直吃 jar：经 libca_zip 的 ZipFile（JVM ZipFile 语义，跨平台不撞
+    -- Windows 大小写不敏感的解包塌缩）。
+    binary_link_closure("libjbc", "libca_str", "libca_core", "libca_zip")
+    add_packages("zlib")
+    add_files("demo/deobf_demo.cpp")
     add_includedirs("src")
     set_rundir("$(projectdir)")
     set_languages("cxx17")

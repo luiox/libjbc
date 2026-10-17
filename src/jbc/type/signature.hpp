@@ -61,7 +61,7 @@ enum class SigErrorCode : ca::u8 {
     BadPrimitive,      ///< 裸基元出现在纯引用位置（类型实参/界/字段签名）
     BadBaseType,       ///< 类型位置出现未知字符
     NestingTooDeep,    ///< 嵌套（数组维数或类型实参深度）超过 255
-    RenameShapeMismatch, ///< rename 的 old/new 内部名 $ 段结构不一致
+    RenameShapeMismatch, ///< 形状不匹配已并入不命中语义，保留值以保持不变；当前不再产生
 };
 
 /// @brief 错误码的可读文本（诊断输出用）。
@@ -267,9 +267,12 @@ struct SigRenameResult
 /// 在签名中找内部名恰为 old_internal 的类类型改写为 new_internal。内部名在
 /// 签名字节里有两种等价形态——'.' 段链（`Outer<T>.Inner`）与段名内嵌 '$'
 /// （`Outer$Inner`，javac 常规产物）——统一按全名相等匹配（见 @ref
-/// SigClassType），段链结构与段名内 '$' 层次原样保留；两者 '$' 段结构不一
-/// 致即 Err(RenameShapeMismatch)——rename 面不做结构重排（内部类嵌套在字节
-/// 码层面不可变）。其余字节原样保留；未命中返回 hits==0 与原串。
+/// SigClassType）。形态纪律（v1 后收窄到段链形态轴）：**扁平段链**（单个
+/// 段名、无 '.' 后缀段）允许跨 '$' 段形态替换——new 内部名按 '$' 合成写
+/// 满本段（javac/kotlinc 通行非规范 $ 形式，JVM 签名词法可读），Grunt 系
+/// 混淆器把嵌套类抹平段数，跨混淆器映射还原赖此；**真嵌套段链**不做结构
+/// 重排——部件按段对齐，越界即不命中（原字节原样，零改写）。其余字节原
+/// 样保留；未命中返回 hits==0 与原串。
 Result<SigRenameResult, SigError>
 renameClassInSignature(std::string_view signature, SignatureForm form,
                        std::string_view old_internal, std::string_view new_internal);

@@ -19,7 +19,8 @@
 ///   2. **形态由挂载点决定**：类级 → Class、方法级 → Method、字段级 →
 ///      Field（§32.3 形态歧义不猜；单槽原语显式收 form 参数）。
 ///   3. **手术语义复用签名层契约**：'.' 段链与 '$' 内嵌双形态全名匹配、
-///      '$' 结构不一致 RenameShapeMismatch 显式拒绝不猜、未命中零改写。
+///      扁平段链允许跨 '$' 形态替换（跨混淆器映射还原）、真嵌套链不做
+///      结构重排（部件越界不命中）、未命中零改写。
 ///   4. **失败显式 Err，不静默跳过**；全扫入口全有或全无（先全量预检后
 ///      落位，失败不留半截改写）。
 ///   5. **CP 只追加**：新签名串经 findUtf8 去重落位（命中复用不膨胀）；
@@ -70,8 +71,9 @@ struct SigAttrRename
 /// - 未命中（签名里没有该内部名）→ 槽保持原状态（不置脏），字节零改写。
 /// - 命中 → 新签名串经 findUtf8/addUtf8 去重落位（CP 只追加），改写
 ///   sigCp 并经 @ref AttrSlot::mutate 置脏，写回走重编码。
-/// - 失败（槽解码失败 / 签名解析失败 / RenameShapeMismatch / CP 容量
-///   不足）→ 显式 @ref SigAttrError，槽保持原样（不置脏）。
+/// - 失败（槽解码失败 / 签名解析失败 / CP 容量不足）→ 显式
+///   @ref SigAttrError，槽保持原样（不置脏）。跨 '$' 形态不匹配不再产生
+///   失败：扁平段链按跨形态替换、真嵌套链不命中（见签名层契约）。
 Result<SigAttrRename, SigAttrError>
 renameClassInSignatureAttr(core::ClassFile& cf, core::AttrSlot& slot,
                            jbc::type::SignatureForm form,
@@ -110,7 +112,7 @@ struct LvttRenameSummary
 /// LVTT 的 descriptor 列承载**字段形态签名**（JVMS 4.7.9.1
 /// FieldTypeSignature）——泛型签名在类文件中的第二处宿主（§32.4 挂账的
 /// LVT 族半边）。逐行走 @ref renameClassInSignature（form 固定 Field），
-/// §32 双形态全名匹配 / RenameShapeMismatch 拒绝 / 未命中零改写逐字适用。
+/// §32 双形态全名匹配 / 扁平段链跨形态 / 真嵌套链不命中零改写逐字适用。
 ///
 /// **全有或全无**（与 @ref renameClassInSignatureAttrs 同款三阶段）：先做
 /// 解码 + 解析 + 改名全量预检（纯读；Code/LVTT 槽解码失败或任一行签名

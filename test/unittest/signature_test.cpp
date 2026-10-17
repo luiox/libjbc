@@ -582,11 +582,25 @@ TEST(SignatureTest, RenameInnerClassByInternalName)
     EXPECT_EQ(std::string_view(res2.signature.c_str(), res2.signature.byte_length()),
               "Lnp/New<TT;>.Renamed;");
 
-    // $ 段结构不一致（把内部类改成顶级名）显式拒绝——rename 面不做结构重排。
+    // 跨形态：扁平段链（单段名）把嵌套名改成顶级名——new 内部名按 '$'
+    // 合成写满本段（javac 通行非规范 $ 形态）；真嵌套段链不做结构重排，
+    // 部件越界即不命中（原串零改写）。
+    auto flat = renameClassInSignature(dollar_sig, SignatureForm::Field,
+                                       "jbcx/Outer$Inner", "np/Flat");
+    ASSERT_TRUE(flat.is_ok());
+    const SigRenameResult flatRes = std::move(flat).unwrap();
+    EXPECT_EQ(flatRes.hits, 1u);
+    EXPECT_EQ(std::string_view(flatRes.signature.c_str(), flatRes.signature.byte_length()),
+              "Ljava/util/Function<Lnp/Flat;>;");
+
+    // 真嵌套段链跨形态 → 不命中跳过（hits==0 原串，非 Err）。
     auto bad = renameClassInSignature(chain_sig, SignatureForm::Field,
                                       "pkg/Outer$Inner", "np/Flat");
-    ASSERT_TRUE(bad.is_err());
-    EXPECT_EQ(std::move(bad).unwrap_err().code, SigErrorCode::RenameShapeMismatch);
+    ASSERT_TRUE(bad.is_ok());
+    const SigRenameResult badRes = std::move(bad).unwrap();
+    EXPECT_EQ(badRes.hits, 0u);
+    EXPECT_EQ(std::string_view(badRes.signature.c_str(), badRes.signature.byte_length()),
+              chain_sig);
 }
 
 TEST(SignatureTest, RenameNoHitAndBadNames)
@@ -610,7 +624,12 @@ TEST(SignatureTest, RenameNoHitAndBadNames)
     EXPECT_TRUE(renameClassInSignature(sig, SignatureForm::Field, "a/B", "").is_err());
     EXPECT_TRUE(renameClassInSignature(sig, SignatureForm::Field, "a/B;", "x/Y").is_err());
     EXPECT_TRUE(renameClassInSignature(sig, SignatureForm::Field, "a/B", "x;Y").is_err());
-    EXPECT_TRUE(renameClassInSignature(sig, SignatureForm::Field, "a/B$", "x/Y$Z").is_err());
+    // 尾 '$' / 连 '$'（kotlin 空段真名）字符集合法——不再 Err：本扁平
+    // 签名无命中返回 hits==0；真嵌套 '.' 段链对带空 $ 段的规则名不可达
+    // （按不命中降级，见跨形态口径）。
+    auto dollarTail = renameClassInSignature(sig, SignatureForm::Field, "a/B$", "x/Y$Z");
+    ASSERT_TRUE(dollarTail.is_ok());
+    EXPECT_EQ(std::move(dollarTail).unwrap().hits, 0u);
 }
 
 TEST(SignatureTest, RenamePreservesUnrelatedBytes)
