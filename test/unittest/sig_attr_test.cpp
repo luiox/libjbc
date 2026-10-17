@@ -1,7 +1,8 @@
 /// @file        sig_attr_test.cpp
 /// @brief       Signature 属性手术的表驱动单测：无映射字节不动（硬门禁）、
-///              命中重写、RenameShapeMismatch 拒绝、未命中零改写，以及
-///              typed 模型 / trailing 保持 / 全有或全无 / 失败显式等契约。
+///              命中重写、跨形态（扁平链整段替换 / 嵌套链不命中）、未命中
+///              零改写，以及 typed 模型 / trailing 保持 / 全有或全无 / 失败
+///              显式等契约。
 ///
 /// 类名手术的两形态（'.' 段链与 '$' 内嵌）语义归 jbc::type::signature
 /// （signature_test 全产生式覆盖）；本文件钉的是**属性层接线**：定位、
@@ -228,23 +229,55 @@ TEST(SigAttrTest, DollarChainAndDotChainBothRewritten)
     }
 }
 
-// ---- RenameShapeMismatch：'$' 结构不一致显式拒绝，不猜 ----
+// ---- 跨形态：扁平段链替换 / 真嵌套链不命中跳过 ----
 
-TEST(SigAttrTest, RenameShapeMismatchRejectedAndUntouched)
+TEST(SigAttrTest, CrossShapeFlatChainRewritesAndNestedSkips)
 {
     const SigClass sc = makeSigClass();
     auto cf = jbc::test::readOk(sc.bytes);
     ASSERT_NE(cf, nullptr);
     const Bytes before = jbc::test::writeOk(*cf);
 
-    // old 两段（Outer$Inner）、new 一段：结构重排被拒。
-    auto r = renameClassInSignatureAttrs(*cf, "demo/Box$Inner", "demo/Moved");
-    ASSERT_TRUE(r.is_err());
-    const SigAttrError err = std::move(r).unwrap_err();
-    EXPECT_EQ(err.kind, SigAttrError::Kind::Signature);
-    EXPECT_EQ(err.sig.code, SigErrorCode::RenameShapeMismatch);
+    // 扁平段链（demo/Box 单段名）改为嵌套名：new 按 '$' 合成写满本段
+    // （javac 通行非规范 $ 形态，跨混淆器映射还原的落地通道）。
+    auto r = renameClassInSignatureAttrs(*cf, "demo/Box", "demo/Moved$In");
+    ASSERT_TRUE(r.is_ok());
+    const SigAttrRenameSummary st = std::move(r).unwrap();
+    EXPECT_EQ(st.attrsTotal, 3u);
+    EXPECT_EQ(st.attrsChanged, 3u);
+    EXPECT_EQ(st.hits, 3u);
+    EXPECT_EQ(sigStringOf(*cf, cf->attrs[0]),
+              "<T:Ljava/lang/Object;>Ljava/lang/Object;Ldemo/Moved$In<TT;>;");
+    EXPECT_EQ(sigStringOf(*cf, cf->methods[0].attrs[0]),
+              "(TT;)Ljava/util/List<Ldemo/Moved$In;>;");
 
-    // 全有或全无：一个槽都没被改写。
+    // 反向还原：合成的 '$' 段名按两部件匹配，单段还原为顶级名；restore
+    // 经 findUtf8 复用原条目（文案逐字节回），孤儿池条目按 append-only
+    // 契约留存（字节总数不再与改前一致，压缩逃生口另议）。
+    auto back = renameClassInSignatureAttrs(*cf, "demo/Moved$In", "demo/Box");
+    ASSERT_TRUE(back.is_ok());
+    const SigAttrRenameSummary backSt = std::move(back).unwrap();
+    EXPECT_EQ(backSt.hits, 3u);
+    EXPECT_EQ(sigStringOf(*cf, cf->attrs[0]), SigClass::kClassSig);
+    EXPECT_EQ(sigStringOf(*cf, cf->methods[0].attrs[0]), SigClass::kMethodSig);
+    EXPECT_EQ(sigStringOf(*cf, cf->fields[0].attrs[0]), SigClass::kFieldSig);
+}
+
+TEST(SigAttrTest, NestedChainCrossShapeSkipsAsNoReach)
+{
+    const SigClass sc = makeSigClass();
+    auto cf = jbc::test::readOk(sc.bytes);
+    ASSERT_NE(cf, nullptr);
+    const Bytes before = jbc::test::writeOk(*cf);
+
+    // old 两段（Outer$Inner）、new 一段：真嵌套段链不再产生 Err——部件
+    // 越界并入「不命中」族，原字节与 CP 零改写（跳过语义）。
+    auto r = renameClassInSignatureAttrs(*cf, "demo/Box$Inner", "demo/Moved");
+    ASSERT_TRUE(r.is_ok());
+    const SigAttrRenameSummary st = std::move(r).unwrap();
+    EXPECT_EQ(st.attrsTotal, 3u);
+    EXPECT_EQ(st.attrsChanged, 0u);
+    EXPECT_EQ(st.hits, 0u);
     for (int level = 0; level < 3; ++level) {
         EXPECT_NE(slotAt(*cf, level, 0).state, AttrSlot::State::Modified) << "level " << level;
     }
@@ -454,7 +487,7 @@ Bytes lvtTableContent(const std::vector<Bytes>& rows)
 /// LVTT 三行：'$' 内嵌命中行 / '.' 段链命中行（同一内部名的两等价字节
 /// 形态）/ 未命中普通引用行；LVT 一行擦除描述符（不属 LVTT 手术入口，
 /// 作邻居对照）。命中对：demo/Box$Inner → demo/Box$Renamed（同 '$' 段
-/// 结构，RenameShapeMismatch 不触发）。
+/// 结构，匹配跨 '$' 形态改动不涉足）。
 struct LvttClass
 {
     Bytes bytes;
@@ -610,9 +643,10 @@ TEST(SigAttrTest, LvttReverseRenameRestoresBytes)
     EXPECT_EQ(lvtt.rows[1].descCp, lc.hitChainIdx) << "original entry reused";
 }
 
-TEST(SigAttrTest, LvttShapeMismatchFailsAllOrNothing)
+TEST(SigAttrTest, LvttNestedChainCrossShapeSkips)
 {
-    // '$' 段结构不一致：链段 Inner 改到单段名 Renamed——显式拒绝，零改写。
+    // 真嵌套 '.' 段链跨形态：部件越界并入「不命中」族（原显式拒绝语义
+    // 并入零改写跳过，不再 Err）——行串原样，全扫零写。
     ClassBuilder cb;
     const ca::u16 thisIdx = cb.utf8("p/Use");
     const ca::u16 superIdx = cb.utf8("java/lang/Object");
@@ -636,9 +670,9 @@ TEST(SigAttrTest, LvttShapeMismatchFailsAllOrNothing)
 
     auto r = renameClassInLocalVariableTypeTables(*cf, "demo/Outer$Inner",
                                                   "demo/Renamed");
-    ASSERT_TRUE(r.is_err());
-    EXPECT_EQ(std::move(r).unwrap_err().kind, SigAttrError::Kind::Signature);
-    EXPECT_EQ(jbc::test::writeOk(*cf), bytes) << "rejected surgery must not write";
+    ASSERT_TRUE(r.is_ok());
+    EXPECT_EQ(std::move(r).unwrap().rowsChanged, 0u);
+    EXPECT_EQ(jbc::test::writeOk(*cf), bytes) << "skip must not write";
 }
 
 TEST(SigAttrTest, LvttBadRowSignatureFailsWholeScan)

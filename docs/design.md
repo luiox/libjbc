@@ -1906,8 +1906,10 @@ O(n + |ids| + labels)。契约要点：
 标（`ClassNameSpan` / `SigClassNameSpan`）与 rename 便捷面语义对齐，但签名
 层的类类型携带结构（段链/实参），rename 因此能按全名匹配两种字节形态——
 '.' 段链（`Outer<T>.Inner`）与段名内嵌 '$'（`Outer$Inner`，javac 常规产物）
-——并把 '$' 结构一致性作为显式契约（old/new 段结构不一致即
-`RenameShapeMismatch`，不做结构重排）。
+——并把形态纪律收窄到段链结构轴（2026-10-17 扩界）：**扁平段链**（单段名）
+按全名逐字节比对、整段替换为 new 原文（跨 '$' 形态自由，跨混淆器映射还原
+的载体）；**真嵌套段链**不做结构重排（部件按段对齐，越界即不命中；
+`RenameShapeMismatch` 保留值并入不命中语义，现不再产生）。
 
 ### 32.3 边界
 
@@ -1936,8 +1938,9 @@ O(n + |ids| + labels)。契约要点：
    **已升格 typed 属性（2026-10-14，§32.5）**：Signature 立为第 7 个 typed
    属性（`core::SignatureAttr`，体 `u2 signature_index`），手术面改经 typed
    体读写索引，下游消费方协同迁出 Raw 字节消费——契约详见 §32.5。
-3. **手术语义复用 §32 契约**：'.' 段链与 '$' 内嵌双形态全名匹配、
-   RenameShapeMismatch 显式拒绝不猜、未命中零改写零追加。
+3. **手术语义复用 §32 契约**：'.' 段链与 '$' 内嵌双形态全名匹配、扁平段链
+   跨形态整段替换（2026-10-17 扩界，§32.2）、真嵌套链部件越界不命中、
+   未命中零改写零追加。
 4. **失败显式 Err，不静默跳过**：失败族如实三分——`SigAttrError{Signature
    （解析/形态，带字节偏移）, SlotDecode（体半截）, CpCapacity（容量预检）}`。
    全扫**全有或全无**：先全量预检（纯读；解码只推进 Untouched→Decoded，
@@ -1966,7 +1969,8 @@ FieldTypeSignature）——泛型签名在类文件中的第二处宿主。手�
 `jbc::ir::sig_attr`，与 Signature 属性手术同模块同契约：
 
 1. **手术语义逐字复用 §32**：逐行走 `renameClassInSignature`（form 固定
-   Field），双形态全名匹配、RenameShapeMismatch 显式拒绝、未命中零改写。
+   Field），双形态全名匹配、扁平链跨形态 / 嵌套链越界不命中（2026-10-17
+   扩界同款）、未命中零改写。
 2. **全有或全无三阶段**：全量预检（Code/LVTT 槽解码失败 → SlotDecode、
    行签名解析失败 → Signature，零改写零追加）→ 统一容量预检 → intern
    落位置脏。未命中的表不置脏，写回逐字节 copy-through。
@@ -2037,8 +2041,8 @@ FieldTypeSignature）——泛型签名在类文件中的第二处宿主。手�
    `type_index`（注解自身描述符 `L...;`）与 element_value 中 tag `'c'` 的
    类字面量（`returnDescriptor` 语境，基类型 `BCDFIJSZ` 开头跳过——
    `void.class` 的 `'c'` 值是 `V`，合法不动）；描述符内命中走
-   `classNameSpans` 全名匹配 + 倒序 `replaceClassName`（§32 双形态语义经
-   描述符层 span 面承接，RenameShapeMismatch 显式拒绝同款）。
+   `classNameSpans` 全名逐字节匹配 + 倒序 `replaceClassName`（span 面按全名
+   相等命中，无 '$' 结构解读，kotlin `$$inlined$` 真名天然通过）。
 4. **全有或全无三阶段 + CP 只追加**：纯读预检（Descriptor/SlotDecode 显式
    Err）→ 容量预检（CpCapacity）→ intern 落位置脏；新串 findUtf8 查重
    复用、miss 才追加，逆向 rename 复用回原条目（§32.4.5 同款）。未触碰
