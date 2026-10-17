@@ -7,7 +7,7 @@
 -- （FrameAt / DomainEngine）、type（描述符/签名树）按层叠加。
 
 set_project("libjbc")
-set_version("0.4.15")
+set_version("0.4.16")
 set_license("MIT")
 set_languages("cxx17")
 
