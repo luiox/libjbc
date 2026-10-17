@@ -661,6 +661,24 @@ public:
     ca::u32 internFloatBits(ca::u32 bits);
     ca::u32 internDoubleBits(ca::u64 bits);
 
+    /// @brief 全池 Class 常量重指向（E-track 消费面：坐标级改名核心）。
+    ///
+    /// 把池内所有 «Utf8 内容 == oldInternal» 的 Class 条目的名字槽改指向
+    /// newInternal 的 Utf8（findUtf8 查重，miss 才追加）。语义靠「改条目
+    /// 内容而非改引用」：指令操作数、Exceptions/StackMapTable/结构元数据
+    /// 等全以索引引用 Class 条目，条目名一换全部自动跟随——免逐面走
+    /// 多处重写。String 条目按角色纪律不碰（字符串常量里的 «L名;» 文本
+    /// 是字面量事实，不是类引用）。
+    ///
+    /// 返回实际重指向的条目数；0 = 无命中（零改动，SemIndex 缓存也不需要
+    /// 失效）。有改动时使语义去重缓存失效（§36.3 同款：条目内容变了，
+    /// 缓存的键值对应随之失效，下次查询惰性重建）。
+    ///
+    /// 边界纪律：只动 Class 条目的 `a` 槽（名字索引），不改 tag/不删条目；
+    /// 数组形态（"[" 前缀）不在本入口语义里——调用方经描述符/签名族手
+    /// 术处理（consumer/rename 的分族策略）。
+    ca::u32 renameClassConstant(std::string_view oldInternal, std::string_view newInternal);
+
     // ---- BSM/条件常量族（批 2）：同一条去重纪律，带域校验的返回 Result ----
 
     /// @brief 方法句柄 intern（JVMS 4.4.8）：reference_kind 1..9 按 kind 分流
@@ -752,6 +770,15 @@ public:
     /// 失败语义：access 超 u16、this 名为空、CP 追加超容量一律
     /// Err(CpAppendFailed)，先预检后写入，不留半截追加。
     Result<void, LowerError> commitClassMetadata();
+
+    /// @brief 语义去重缓存的手工失效口（E-track 消费面配对件）。
+    ///
+    /// 规范写路径（intern 家族 / commit / setMember / renameClassConstant）
+    /// 自己维护缓存一致性；**绕开这些入口改池条目内容的手术**（消费方
+    /// 按 rename_probe 的分族策略改 NAT/MethodType 列等）必须在改完后
+    /// 调一次本口——条目 payload 变了，缓存的键值对应随之失效，下次
+    /// intern/membership 查询惰性重建。定义在 operand.cpp（SemIndex 完整处）。
+    void invalidateSemantics() noexcept;
 
     // ---- 类构建挂载面（attr_build 批 1：注解族合成 + 通用挂载，A7 定形）----
     //

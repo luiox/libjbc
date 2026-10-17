@@ -74,7 +74,7 @@ target("libjbc")
 
     add_deps("libca_core", "libca_str")
     add_files("src/jbc/core/*.cpp", "src/jbc/ir/*.cpp", "src/jbc/analysis/*.cpp",
-              "src/jbc/type/*.cpp")
+              "src/jbc/type/*.cpp", "src/jbc/consumer/*.cpp")
     add_headerfiles("src/jbc/(**.hpp)")
     add_includedirs("src", {public = true})
 
@@ -162,6 +162,8 @@ target("libjbc_unittest")
     add_files("test/unittest/struct_attrs_corpus_test.cpp")
     add_files("test/unittest/subroutine_test.cpp")
     add_files("test/unittest/type_annotation_attr_test.cpp")
+    add_files("test/unittest/consumer_scan_test.cpp")
+    add_files("test/unittest/consumer_rename_test.cpp")
     add_includedirs("src")
     set_rundir("$(projectdir)")
 
