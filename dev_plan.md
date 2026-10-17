@@ -95,7 +95,9 @@
 - [x] BSM 语义 intern 家族（internMethodHandle/internDynamic/internModule/
       internPackage + BSM 属性构建/改写面）——账目见上「已堆叠批次」。
 - [ ] E-track 消费者协议边界（E1 ReferenceSite 导出面 / E3
-      IClassSource/SummaryScanner 注入式只读面 / rename 跨类编排）。
+      IClassSource/SummaryScanner 注入式只读面 / rename 跨类编排）——实现
+      + 合成类直验已堆叠（`src/jbc/consumer/`，consumer_scan/rename_test
+      16 例全绿；JVM 闸与真实语料的 consumer 面回归待批 4 Grunt 验证）。
 - [ ] 文档归位：morpher 侧 doc_ai/design.md 全量章节折回独立仓。
 - [ ] Grunt 实通过验证（对 boar-main*.jar 语料写数个 pass）。
 - [ ] 里程碑发版：一次 bump 版本号 + tag + 包仓条目更新（堆叠批次随发版说

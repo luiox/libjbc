@@ -7,6 +7,8 @@
 /// Unit/promote/帧引擎按建造顺序推进，见 doc_ai/design.md。
 /// type 层：类型/描述符纯函数（解析/类名手术坐标/槽宽/名字换算）；泛型签名
 /// 结构化树（JVMS 4.7.9.1 三形态 + 解析/反解/类名手术）。
+/// analysis 层：域/帧引擎读面。consumer 层：E-track 消费者协议面（E1 引用
+/// 导出 / E3 源与骨架只读面 / rename 跨类编排）。
 #pragma once
 
 #include "jbc/core/attr_codec.hpp"
@@ -35,6 +37,12 @@
 #include "jbc/analysis/frame.hpp"
 #include "jbc/analysis/smt_build.hpp"
 #include "jbc/analysis/smt_read.hpp"
+
+#include "jbc/consumer/consumer.hpp"
+#include "jbc/consumer/reference.hpp"
+#include "jbc/consumer/rename.hpp"
+#include "jbc/consumer/source.hpp"
+#include "jbc/consumer/summary.hpp"
 
 #include "jbc/type/descriptor.hpp"
 #include "jbc/type/signature.hpp"

@@ -272,6 +272,13 @@ SemIndex& ClassSession::sem()
     return *sem_;
 }
 
+void ClassSession::invalidateSemantics() noexcept
+{
+    // 手工手术后的语义缓存复位口（units.hpp 声明；定义在此——SemIndex
+    // 在本文件才完整，reset 的删除面依赖完整类型）。
+    sem_.reset();
+}
+
 ca::u32 ClassSession::internUtf8Sem(std::string_view s)
 {
     SemIndex& ix  = sem();
@@ -411,6 +418,33 @@ ca::u32 ClassSession::internInterfaceMethodRef(std::string_view owner,
                                                std::string_view desc)
 {
     return internRef(core::CpTag::InterfaceMethodref, owner, name, desc);
+}
+
+ca::u32 ClassSession::renameClassConstant(const std::string_view oldInternal,
+                                          const std::string_view newInternal)
+{
+    core::ConstantPool& cp = backing_->cp;
+    // 新名 Utf8 先落位（同一 intern 纪律：查重/追加）；落位后本循环内
+    // entries_ 不再增长，条目引用全程稳定。
+    const ca::u32 newUtf8 = internUtf8(newInternal);
+    ca::u32 retargeted = 0;
+    for (ca::u32 i = 1; i < cp.size(); ++i) {
+        const core::ConstantPool::Entry& probe = cp.at(i);
+        if (probe.tag != core::CpTag::Class) {
+            continue;
+        }
+        if (!cp.isUtf8(probe.a) || !cp.utf8Equals(probe.a, oldInternal)) {
+            continue;
+        }
+        core::ConstantPool::Entry& e = cp.mutateAt(i);   // 唯一规范写入口（§30.1）
+        e.a = newUtf8;
+        ++retargeted;
+    }
+    if (retargeted > 0) {
+        // 条目内容已变更：去重缓存的键值对应全部失效，惰性重建（§36.3）。
+        sem_.reset();
+    }
+    return retargeted;
 }
 
 }   // namespace jbc::ir
