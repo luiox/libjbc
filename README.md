@@ -11,6 +11,14 @@ node-first 的 JVM 字节码 C++ 建模库：
 设计取向：模型是数据（DOM），读写是行为（codec）——visitor 事件协议锁在
 codec 内部，不进公共 API；错误走值语义（Result），不抛异常。
 
+## 文档
+
+- `docs/design.md` — 设计真源（统一拓扑 + 分批次落地记录，§入节）；代码注释
+  里的「design.md §N」引用以此为准。
+- `doc_ai/design.md` — 开源快照：属性面摘编（§ 编号与全量版大多同义，
+  §32 除外，见其前言说明）。
+- `dev_plan.md` — 滚动批次账目（堆叠期里程碑与发版纪律）。
+
 ## 构建
 
 依赖经 xmake 自动拉取（libca / libjdk_finder 来自
