@@ -2,7 +2,7 @@
 /// @brief       E-track rename 编排：计划模型 + 逐类应用 + 注入 resolver
 ///              + 跨类 fail-closed 驱动。
 ///
-/// §32.4 的分层定契在本模块落齐：**计划 formation 属消费方域**（上层从
+/// §9 的分层定契在本模块落齐：**计划 formation 属消费方域**（上层从
 /// ClassIndex/属性表产出规则组，经 @ref IRenameResolver 注入）；libjbc
 /// 只负责计划可见的逐类应用与跨类驱动——编排协议即「注入 resolver
 /// + fail-closed 驱动 + 原字节透传不动的类」。

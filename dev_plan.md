@@ -98,7 +98,10 @@
       IClassSource/SummaryScanner 注入式只读面 / rename 跨类编排）——实现
       + 合成类直验已堆叠（`src/jbc/consumer/`，consumer_scan/rename_test
       16 例全绿；JVM 闸与真实语料的 consumer 面回归待批 4 Grunt 验证）。
-- [ ] 文档归位：morpher 侧 doc_ai/design.md 全量章节折回独立仓。
+- [x] 文档归位：morpher 侧 doc_ai/design.md 全量章节折回独立仓
+      （`docs/design.md` 逐字节收拢 + 折回说明/§编号差异警示 + §37 落地
+      记录；兄弟文档四件随折；误引修正 rename.hpp §9、signature.hpp 指
+      docs 版）。
 - [ ] Grunt 实通过验证（对 boar-main*.jar 语料写数个 pass）。
 - [ ] 里程碑发版：一次 bump 版本号 + tag + 包仓条目更新（堆叠批次随发版说
       明一并列出）。
