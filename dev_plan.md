@@ -3,13 +3,6 @@
 里程碑前的批次堆叠账：版本号不发、tag 不打，全部补丁式开发堆叠在当前版本
 之上，到里程碑一次发版。
 
-## 版本口径（堆叠期纪律）
-
-- 当前版本 `0.4.15`：堆叠期内 **不 bump**——`get_lib_version` 返回值、
-  xmake `set_version`、库版本测试期望均不动，不新增 tag，不动包仓条目。
-- 发版触发条件（里程碑）：注解族属性面齐（已完成，见下）+ 类构建能力面齐
-  （未完成）。两者齐后一次性 bump 发版。
-
 # dev_plan.md
 
 里程碑前的批次堆叠账：版本号不发、tag 不打，全部补丁式开发堆叠在当前版本
@@ -39,7 +32,8 @@
 
 包仓条目同步更新（luiox-repo）。已知未竟（下里程碑）：rename v1 的
 BSM/indy 改写通道、StackMapTable Object 载荷的类名族覆盖等 §37.3 明示
-的封口，与 JVM 级语料 define-sweep（需 JDK17 语料环境）。
+的封口；JVM 级语料 define-sweep 已在发版后跟进收口
+（consumer_corpus_test.JvmDefineSweep）。
 
 ## 已堆叠批次（封账）
 
@@ -121,14 +115,14 @@ BSM/indy 改写通道、StackMapTable Object 载荷的类名族覆盖等 §37.3 
   枚举常量由真实 Java 源（bu/Op）经 extraJavaSources 同场编译——合成注解
   与 javac 产物同 classpath 混合部署互操作实证。
 
-## 待办（里程碑前）
+## 待办
 
 - [x] BSM 语义 intern 家族（internMethodHandle/internDynamic/internModule/
       internPackage + BSM 属性构建/改写面）——账目见上「已堆叠批次」。
-- [ ] E-track 消费者协议边界（E1 ReferenceSite 导出面 / E3
-      IClassSource/SummaryScanner 注入式只读面 / rename 跨类编排）——实现
-      + 合成类直验已堆叠（`src/jbc/consumer/`，consumer_scan/rename_test
-      16 例全绿；JVM 闸与真实语料的 consumer 面回归待批 4 Grunt 验证）。
+- [x] E-track 消费者协议边界（E1 ReferenceSite 导出面 / E3
+      IClassSource/SummaryScanner 注入式只读面 / rename 跨类编排）——已
+      落地并全链验收：合成直验 16 例（consumer_scan/rename_test）+
+      boar 实语料五支 pass（批 4，含 JVM defineClass 载入闸）。
 - [x] 文档归位：morpher 侧 doc_ai/design.md 全量章节折回独立仓
       （`docs/design.md` 逐字节收拢 + 折回说明/§编号差异警示 + §37 落地
       记录；兄弟文档四件随折；误引修正 rename.hpp §9、signature.hpp 指
@@ -140,8 +134,11 @@ BSM/indy 改写通道、StackMapTable Object 载荷的类名族覆盖等 §37.3 
       事实族旧名清零+新名引用集守恒，杂项列/operand 随行改写实证）/
       BsmTouchedFailLoud（混淆语料 carrier 必现 Err）。语料门 =
       `LIBJBC_GRUNT_JAR`[-`_ORIGIN`] 注入 + 缺席 skip（CI 无注入即跳）。
-      已知界限：JVM 级载入扫描（defineClass sweep）需 JDK17 语料环境，
-      本机 JDK8 未跑——词法字节域的等强核查已由重扫断言收接。
+      JVM 级载入闸（v0.4.16 已知界限第 4 项，已收口）：改名 stage 全语
+      料 defineClass 格式闸入本套件（consumer_corpus_test.JvmDefineSweep），
+      JDK 版本探针枚举——`LIBJBC_SWEEP_JAVA_HOME` 注入 > `JAVA_HOME` >
+      标准安装位 glob（Win Adoptium/Microsoft/Java/Zulu、Linux
+      /usr/lib/jvm），取最小 major>=17，缺席即 skip。
 - [x] 里程碑发版：一次 bump 版本号 + tag + 包仓条目更新（堆叠批次随发版说
       明一并列出）——v0.4.16 bump 已提交，tag 在 PR 合并后于 main 打
       （`v0.4.16`），包仓条目随发版同步。
