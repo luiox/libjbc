@@ -1,4 +1,4 @@
-# libjbc 人体工学评估（v0.3，2026-08-30）
+# libjbc 人体工学评估（v0.3 基线，2026-08-30；后续轮次追加）
 
 评估方法：不写「示例级」代码，而是把三件真实的事当外部库做完（`demo/use_case.cpp`，语料 ares 262 类 / 2603 方法），记录写代码时实际遇到的每一处别扭。摩擦点按「是否诱发错误」排序，不按美观。
 
@@ -23,39 +23,48 @@
 ## 摩擦点清单
 
 ### F0 CP 操作数是裸索引，没有高层语义（用户指出，已修——2026-08-30 第二轮）
+
 v0.3 首版评估漏了这条：demo 插的是 NOP（无 CP 操作数），用例盲区。真实插桩立刻撞墙——插一条 `invokestatic` 要手工拼 addUtf8/addClass/addNameAndType/addRef 四连并理解两跳布局；读一条 `getfield` 同样要手工走 Methodref→NaT→Utf8。**CP 知识泄漏给每个消费者**，这正是旧库时代「变换代码一半在管常量池」的延续。修复（语义层，operand.cpp）：读路径 `memberOf/classOf/constOf` 一步到语义视图；写路径 `internClass/String/Integer/FieldRef/MethodRef/InterfaceMethodRef` 按内容去重（命中既有池不膨胀，miss 才追加，守住 CP 只追加契约）。连带修掉两个陷阱：LDC 的 u1 域宽（>255 曾会静默截断，现编码器拒绝 + `loadConst` 自动选 LDC_W）；invokestatic 指 InterfaceMethodref 的混淆器交叉形态（真实语料 76 处，语义层两种都收）。实测：全语料 CP 指令 37398 条全部语义可解析（member=27003 class=4891 const=5504 unresolved=0）；带 CP 的真实插桩 2603/2603 通过。
 
 ### F1「方法有没有 Code」是错误路径（诱发错误，优先修）
+
 `promoteMethod` 对 abstract/native 返回 `Err(NoCode)`，消费者只能 `if (p.is_err()) continue;`——这会把**真正的失败**（BadInstructions/AttrNotDecoded）和「没有代码」一起吞掉。demo 里就这么写的：解码坏了的方法会被静默跳过而无任何信号。建议：`bool hasCode(methodIdx)` 查询 + 让 promote 的真失败留在错误路径，或提供 `forEachCodeUnit(session, fn)` 迭代器把两种情况分开。**已修（v0.4，2026-09-14；2026-09-27 按 design.md §26 改形态）**：两条建议都落了。`hasCode(session, idx)` 只读查询（不解码属性内容、不置脏，越界探测式 false）；`collectCodeUnits(session)` 按方法序**值返回** `CodeVisit` 序列（F1 当时落的是回调形态 `forEachCodeUnit(session, fn)`，visitor 清零后改为拉形态，语义不变），Kind 三态 NoCode/Failed/Ok 互斥，Failed 携带 PromoteError——想把 Failed 静默跳过仍必须显式写分支才做得到。已 promote 的方法在收集中直接复用现有 CodeUnit 不重建（promoteMethod 的幂等重建语义会失效既有句柄，收集场景刻意避开）。promoteMethod 文档补「先 hasCode 分流」推荐写法。测试：`ergonomics_test.cpp`（关内建字节，含 goto 跳进操作数中间的真失败用例）。
 
 ### F2 read→session 三步样板（高频，次优先）
+
 每次都是 readClass → 取 ReadResult.file → makeSession 两段 unwrap。每个消费者都会写一个 openSession 辅助函数（demo/测试里出现了 3 份）。建议：`makeSessionFromBytes(ByteView)` 一步到位；三步版保留给需要检查 ParseState/diagnostics 的场合。**已修（v0.4，2026-09-14）**：`makeSessionFromBytes(ByteView[, ReadOptions])` 落地，产物与三步版同形（shared_ptr 寿命接管，Recovered 照常建会话）。错误横跨 Read/Promote 两族的问题用 `SessionError{stage, read, session}` 如实保留「段 + 码」——不做跨族有损映射，也不新增第六套错误枚举（F3 的收敛裁决照旧）；诊断面不透出，三步版保留给需要检查 ParseState/diagnostics 的场合（与本条建议一致）。测试：ergonomics_test（一步产物等价性、坏魔数/空输入的段+码断言、ReadOptions 透传）；本测试文件的 sessionOf 样板同步被结清。
 
 ### F3 五个错误枚举（认知负担，缓修）
+
 Read/Write/Edit/Promote/Lower 五套枚举，`unwrap_err()` 各是各的类型，统一日志要写五份 switch。诚实但啰嗦。已有的 `to_string` 家族够用；后续若加通用诊断管道再收敛。
 
 ### F4 找方法要手写线性扫描（高频小摩擦）
+
 `symbols().str(m.name) == "xxx"` 循环在 demo 和测试里重复出现。建议：`ClassUnit::findMethod(name[, desc]) → 可选下标`。**已修（v0.4，2026-09-14）**：`ClassUnit::findMethod(name)` 与 `findMethod(name, desc)` 两个重载落地，逐字节比较（零分配，不做 UTF8 解码），同名重载命中下标最小者；未命中返回命名哨兵 `kNoMethod`（替代裸魔法值，与 kNoInsn 同一惯例——下标查询没有 nullptr 可用）。参数取 `std::string_view` 而非 Utf8StringRef：IR 层查询面的既有惯例是借用字节视图（SymbolPool::intern/str、语义 setter 全是 string_view），Utf8StringRef 构造要 O(n) 计码点，对热路径查询是纯开销。测试：ergonomics_test（重载分辨、字段同名不干扰、下标直接喂 promote/lower）。
 
 ### F5 空句柄哨兵是隐式约定（可读性）
+
 `InsnId{}` 当 null 用（Exc.end、demo 的 first 判断），但没有命名常量。建议：`kNoInsn` 常量 + `CodeDom::first()/last()` 便捷入口。
 
 ### F6 promote 语义是「重建」不是「缓存」（需要文档，不是 API 问题）
+
 lower 之后再 promote，拿到的是**从已写回的 backing 重建**的新 CodeUnit（句柄全换）。demo 验证逻辑第一版就在这里错了（拿编辑后的尺寸当基准）。建议：在 units.hpp 的 promoteMethod 文档里加一句显式说明。
 
 ### F7 FrameEngine 默认构造要带 resolver 对象（小）
+
 `ShapeResolver res; FrameEngine fe(cp, res);` 两步。建议：`FrameEngine(cp)` 便捷构造（内部默认 resolver），注入式保留。
 
 ### F8 方法索引用裸下标（未来风险，记录在案）
+
 promote/lower/methods[i] 全走 usize 下标。v0.3 没有增删方法的 API，下标即稳定；一旦引入方法级增删，需要 MethodId 域（同 InsnId 的 owner/slot 模式）。现在不动。
 
 ### F9 测试侧：AttrKind 覆盖计数数组手开长度（已咬过一次）
+
 attr_extra_test 的 `seen[N]` 手写数组长度，新 AttrKind=6 时越界写崩了进程（release 下静默崩溃，exit 127 无输出）。已修为 7；根修是按枚举上界定长或改 map。新增 AttrKind 时记得检查。
 
 ## 结论
 
 v0.3 的「危险面」设计（句柄、策略、relocation contract、copy-through）全部达标——消费者在最短路径上做对了危险的事。剩余摩擦集中在**查询/便捷层缺失**（F1/F2/F4/F5/F7），属增量 API，不动架构。建议 v0.4 优先落 F1（防静默吞错）与 F2（入口样板），其余随手。
-
 
 ## F10 ASM `InsnList` 对照（2026-08-30 第三轮，用户提问驱动）
 
@@ -95,7 +104,6 @@ v0.3 的「危险面」设计（句柄、策略、relocation contract、copy-thr
 **实测同时抓到的新摩擦（记 F12，已收口）**：`memberOf` 一个入口返回五族（字段/方法/接口方法/indy），统计「调用」时把 92 个字段访问混了进去——第一版 demo 与旧栈计数对不上，逐类二分 + javap 第三方裁判才定位是**自己口径错**。收口（design §31.2）：`collectCodeUnits` 增 `CodeCollectFilter`（指令族四族掩码 + 嵌套属性族掩码，两维 AND），调用侧在收集时按族取数，判别知识从每个消费者移进库；`Failed` 恒保留、`NoCode` 受 includeNoCode 管，F1 契约不回退。
 
 **场景边界（如实记录，不是 bug）**：单类 rename 的完整面还包含描述符内嵌类名（`Lcc/ares/...;` 出现在字段/方法签名与注解里）与跨类引用——两栈的 demo 都只改了指令引用面，验证也只覆盖该面；这是 obf rename 管线的真实剩余工作（需要描述符手术 + 跨类映射表）。
-
 
 ## F13 寿命接管（2026-08-30 第五轮，用户问「怎么让库接管生命周期」）
 
