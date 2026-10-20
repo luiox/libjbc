@@ -28,6 +28,7 @@
 #include "jbc/ir/code_editor.hpp"
 #include "jbc/ir/cp_compact.hpp"
 #include "jbc/ir/error.hpp"
+#include "jbc/ir/method_editor.hpp"
 #include "jbc/ir/sig_attr.hpp"
 #include "jbc/ir/symbol_pool.hpp"
 #include "jbc/ir/type_annotation_attr.hpp"
