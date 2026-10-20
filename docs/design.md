@@ -2786,3 +2786,31 @@ renameSource fail-closed 驱动）。**计划 formation 属消费方域**（§9�
 测试面：consumer_scan_test / consumer_rename_test 合成直验（源契约/
 骨架/事实族站位/分族计数/BSM 闸两侧/驱动三 fail-closed 簿帐）；
 JVM 闸与真实语料的 consumer 回归归入 Grunt 验证（待办）。
+
+## 38. 从零建方法门面（2026-10-20，issue #8 方法体部分）
+
+§34.4 的建方法链路是 addMethod → promoteMethod → CodeEditor → lowerMethod 四段接线。门面只压缩接线层数，不改变错误语法：每个可失败操作仍当场返回该段原生 Result；不引入 sticky 首错（Result 之外的第二条汇报通道，失败后静默 no-op），也不收回调（库不执行调用方业务）。
+
+### 38.1 API 面
+
+- `MethodEditor::open(session, seed)`：addMethod + promoteMethod 一次接线，返回编辑面；编辑面持 CodeUnitRef 保活会话。
+- `MethodEditor::method()`：新成员下标，可直接喂 promote/lower/removeMethod。
+- `MethodEditor::append(Insn)`：直接转发 CodeEditor::append 的 Result<InsnId, EditError>。失败不改变编辑器状态，后续 append 照常。
+- `MethodEditor::code()`：全量编辑面（标签/分支/switch/批量删除）。
+- `MethodEditor::unit()`：CodeUnit 视图；maxStack/maxLocals 可在 commit 前调整。
+- `MethodEditor::commit()`：显式 lowerMethod。析构不自动提交——析构无法汇报 LowerError，自动提交会把错误塞进第二条通道。
+- `addMethodWithBody(session, seed, body)`：直线体一步入口，内部按 addMethod → promote → append × N → lower 同步折叠，遇首个错误立即返回；body 不得携带控制流指令。
+
+### 38.2 复合错误
+
+MethodBuildError = Stage{Add, Promote, Edit, Lower} + 该段原族错误码（Edit 段另带 0 基 insnIndex），与 SessionError 同构。它只由复合入口返回一次，不驻留对象，不构成第二种错误语法。单段操作（open 之后的 append、commit）直接返回 CodeEditor / lowerMethod 的原生 Result。
+
+### 38.3 失败面
+
+1. **控制流前置拒绝按指令形状**：Branch2/Branch4/TableSwitch/LookupSwitch，以及非控制流指令上残留的 targets/keys，在挂入成员前 Err(Stage::Edit, BadOperand, insnIndex)。不能按 target 是否为空判断：未绑定分支的 target 恰是 kNoLabel，按目标判会把坏体放行到 append 阶段。
+2. **失败回滚成员**：addMethodWithBody 的 addMethod/promote/append/lower 任一步失败都摘除已挂入成员，贴合「失败不留半截」；CP 追加不回退（常量池只增语义）。这与 §34.3(6) adopt 的「调用方收尸」不同：一步入口拥有整条建体管线，失败必须自己收干净。MethodEditor::open 只在 promote 失败时回滚；open 之后的 commit 失败原样返回 LowerError，不摘成员也不回退编辑，调用方可修正后重试或 removeMethod。open 之后的放弃不是失败路径：成员已挂入，不 commit 直接析构会留下空体成员，需调用方 removeMethod 收尸。
+3. **种子闸**：open 与 addMethodWithBody 都要求 withCode = true；abstract/native 没有方法体，不属于本入口。maxes 由 seed 给定，本面不代算栈图。
+
+### 38.4 范围与测试
+
+本批只落方法体链路：类级 ClassDraft、与 test::ClassBuilder 的字节对拍、mj2x/mjt 消费面迁移不在内，现有 A4/A5/attach 签名不动。测试 method_editor_test 六件覆盖：批量建体重读、编辑器 append-commit 重读、放弃编辑器留空体成员（收尸归调用方）、append 失败不污染编辑器（无 sticky 状态）、控制流前置拒绝与下标报告、种子失败不留成员。

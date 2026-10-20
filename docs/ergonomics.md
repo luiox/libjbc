@@ -198,3 +198,7 @@ constSemRef / classSemRef）把会话寿命带在身上，消费者跨作用域�
 （显式选择借用换零开销）。FrameEngine(cp) 默认构造结清 F7。
 测试形态本身就是人体工学证明：`KeepaliveSupportsCrossScopeEditing`
 在会话变量销毁后继续编辑 + 帧计算，代码里没有任何保活样板。
+
+## F14 从零建方法体四段接线（issue #8，2026-10-20）
+
+从零建带体方法要串 addMethod → promoteMethod → CodeEditor → lowerMethod，每段各自传播 Result。收口为 Result-only 的 MethodEditor（open/append/code/commit）与 addMethodWithBody（直线体一步落盘）：门面只减接线层数，不做 sticky 首错（第二条汇报通道，失败后静默 no-op），不收回调（库不执行调用方业务）。带分支的体仍走 open 后的 code() 全量面。open 即挂入成员：不 commit 直接析构只丢弃编辑，成员以空体留在会话，需调用方 removeMethod 收尸。类级 ClassDraft、与 ClassBuilder 的字节对拍与消费面迁移未做，见 issue #8 剩余验收项与 design.md §38。
