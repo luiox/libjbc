@@ -3,18 +3,16 @@
 里程碑前的批次堆叠账：版本号不发、tag 不打，全部补丁式开发堆叠在当前版本
 之上，到里程碑一次发版。
 
-# dev_plan.md
-
-里程碑前的批次堆叠账：版本号不发、tag 不打，全部补丁式开发堆叠在当前版本
-之上，到里程碑一次发版。
-
 ## 版本口径（堆叠期纪律）
 
 - ~~当前版本 `0.4.15`：堆叠期内 **不 bump**——`get_lib_version` 返回值、
   xmake `set_version`、库版本测试期望均不动，不新增 tag，不动包仓条目。~~
 - **v0.4.16 已发版（2026-10-17）**：触发条件两条皆齐（注解族属性面 + 类
   构建能力面 + 消费者协议面）。堆叠批次随发版说明见下「v0.4.16 发版
-  说明」一节。</think><tool_call>edit<arg_key>newString</arg_key><arg_value>## v0.4.16 发版说明（2026-10-17）
+  说明」一节。
+- **v0.4.16 之后重新进入堆叠期（2026-10-20 起）**：新增批次不 bump、不打 tag，随下个里程碑一次发版。
+
+## v0.4.16 发版说明（2026-10-17）
 
 自 `0.4.15` 一次性 bump，堆叠批次并入本版：
 
@@ -37,6 +35,14 @@ BSM/indy 改写通道、StackMapTable Object 载荷的类名族覆盖等 §37.3 
 
 ## 已堆叠批次（封账）
 
+### 从零建方法门面 MethodEditor（本批，已完成）
+
+- 新文件 `src/jbc/ir/method_editor.*`：`MethodEditor`（open/append/code/unit/commit）与 `addMethodWithBody`（直线体一步落盘），把 addMethod → promoteMethod → CodeEditor → lowerMethod 四段接线压成两次调用或一次调用。只压缩接线层数，错误模型不变：每个可失败操作当场返回 Result，无 sticky 失败态、无析构自动提交、无回调。
+- 复合错误 `MethodBuildError`（Stage::Add/Promote/Edit/Lower + 原族错误码 + insnIndex）与 SessionError 同构，只作返回值载荷。批量入口按指令形状拒绝控制流（未绑定分支的 target 恰是 kNoLabel，按目标判会漏放），任一步失败回滚已挂成员；CP 追加不回退。
+- 放弃语义：open 即挂入成员，未 commit 即析构只丢弃编辑，成员以空体留在会话，收尸（removeMethod）归调用方；成员挂载与编辑落盘是两件事。
+- `MethodSeed.withCode` 必须为 true；maxStack/maxLocals 仍由 seed 给定。类级 ClassDraft、与 ClassBuilder 的字节对拍、mj2x/mjt 消费面迁移留待后续（issue #8 其余验收项）。
+- 测试 `test/unittest/method_editor_test.cpp` 六件：批量建体重读 / 编辑器 append-commit 重读 / 放弃编辑器留空体成员 / append 失败不污染编辑器 / 控制流前置拒绝与下标报告 / 种子失败不留成员。
+
 ### BSM 语义 intern 家族（本批，已完成）
 
 - CP 语义 intern 增量：internMethodHandle / internMethodType / internModule /
@@ -48,8 +54,7 @@ BSM/indy 改写通道、StackMapTable Object 载荷的类名族覆盖等 §37.3 
   Err(InvalidSeed)）；type 层一致性（kind 与成员形态匹配）归上层并归运行时。
 - BootstrapMethods 属性面 appendBootstrapMethod：attr 缺则建（类级单例）、
   条目同形全字段一致命中复用（同形条目对 JVM 无可辨差异；ASM 同思路合并）、
-  静态
-  参数按 loadable 十族规格落位（BsmArg：整型一律 Integer 无窄化语义 +
+  静态参数按 loadable 十族规格落位（BsmArg：整型一律 Integer 无窄化语义 +
   String/Class/MethodType/MethodHandle/Dynamic）。Dynamic 参数与孤立
   internDynamic 均要求 BSM 锚点在位（attr 在、下标在条目数内）——JVM 对
   无锚 BSM 引用类解析即拒。
@@ -117,6 +122,9 @@ BSM/indy 改写通道、StackMapTable Object 载荷的类名族覆盖等 §37.3 
 
 ## 待办
 
+- [x] 从零建方法门面（issue #8 方法体部分）：`MethodEditor` +
+      `addMethodWithBody`，Result-only、无 sticky；类级 ClassDraft、字节
+      对拍与消费面迁移未做。
 - [x] BSM 语义 intern 家族（internMethodHandle/internDynamic/internModule/
       internPackage + BSM 属性构建/改写面）——账目见上「已堆叠批次」。
 - [x] E-track 消费者协议边界（E1 ReferenceSite 导出面 / E3
