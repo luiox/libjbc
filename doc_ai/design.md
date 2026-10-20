@@ -36,7 +36,7 @@ Runtime{Visible,Invisible}Annotations 共用 AnnotationsAttr：`u2 注解数 + a
 
 Runtime{Visible,Invisible}TypeAnnotations 共用 TypeAnnotationsAttr：每条 type_annotation = target_type + target_info（4.7.20.1 十形态分派）+ type_path + 注解体（与 §32.1 同一 element_value 建模）。CP 槽面只含 type_index 与元素值面；throwsIndex/supertypeIndex/catchIndex 是表行下标，**不是** CP 索引，压缩不得误重映射。
 
-### 32.3 注解族（本批语义）
+### 32.3 注解族
 
 - **ParameterAnnotations(21)**：Runtime{Visible,Invisible}ParameterAnnotations（4.7.18/4.7.19）共用一体。体 = `u1 num_parameters + { u2 num_annotations + annotation[] }*`；与简单注解的差异只在多一层参数下标维（第 i 个内层表对应方法第 i 个参数槽，空内层表 = 无注解参数，合法且常见）；注解体与 §32.1 完全同构，复用同一 Annotation/ElemValue 模型与同一条读写通道，不造第二套。
 - **AnnotationDefault(22)**：注解类型方法的默认值（4.7.22，仅 @interface 的带默认值方法携带）。体 = 单个 element_value，全形态复用 §32.1 的建模。

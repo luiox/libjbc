@@ -20,9 +20,9 @@
 
 包仓条目同步更新（luiox-repo）。已知未竟（下里程碑）：rename v1 的 BSM/indy 改写通道、StackMapTable Object 载荷的类名族覆盖等 §37.3 明示的封口；JVM 级语料 define-sweep 已在发版后跟进收口（consumer_corpus_test.JvmDefineSweep）。
 
-## 已堆叠批次（封账）
+## 当前批次（feat/method-editor，未合入）
 
-### 从零建方法门面 MethodEditor（本批，已完成）
+### 从零建方法门面 MethodEditor（已完成）
 
 - 新文件 `src/jbc/ir/method_editor.*`：`MethodEditor`（open/append/code/unit/commit）与 `addMethodWithBody`（直线体一步落盘），把 addMethod → promoteMethod → CodeEditor → lowerMethod 四段接线压成两次调用或一次调用。只压缩接线层数，错误模型不变：每个可失败操作当场返回 Result，无 sticky 失败态、无析构自动提交、无回调。
 - 复合错误 `MethodBuildError`（Stage::Add/Promote/Edit/Lower + 原族错误码 + insnIndex）与 SessionError 同构，只作返回值载荷。批量入口按指令形状拒绝控制流（未绑定分支的 target 恰是 kNoLabel，按目标判会漏放），任一步失败回滚已挂成员；CP 追加不回退。
@@ -30,7 +30,9 @@
 - `MethodSeed.withCode` 必须为 true；maxStack/maxLocals 仍由 seed 给定。类级 ClassDraft、与 ClassBuilder 的字节对拍、mj2x/mjt 消费面迁移留待后续（issue #8 其余验收项）。
 - 测试 `test/unittest/method_editor_test.cpp` 六件：批量建体重读 / 编辑器 append-commit 重读 / 放弃编辑器留空体成员 / append 失败不污染编辑器 / 控制流前置拒绝与下标报告 / 种子失败不留成员。
 
-### BSM 语义 intern 家族（本批，已完成）
+## 已堆叠批次（封账）
+
+### BSM 语义 intern 家族（已完成）
 
 - CP 语义 intern 增量：internMethodHandle / internMethodType / internModule / internPackage / internDynamic——「命中既有池不膨胀，miss 才追加」同一纪律，SemIndex 扩 mhConst（kind+目标）/ mtConst（描述符）/ namedConst（tag+名）三张去重表，Dynamic 并入 ref 表（bsm 下标占 a 槽）。
 - MethodHandle 域闸：reference_kind 1..9 封闭表按 kind 分流 Fieldref/Methodref/InterfaceMethodref（JVM 类解析对域外即拒，合成面提前闸下 Err(InvalidSeed)）；type 层一致性（kind 与成员形态匹配）归上层并归运行时。
@@ -40,7 +42,7 @@
 - 压缩协同：新四 tag（MethodHandle/MethodType/Module/Package/Dynamic）的 markCp 闭包与重排收编既有封闭集覆盖（markCp 对 MH/Dynamic/indy 只标 b）；BSM 条目间同引用去重（两个条目共享同一句柄条目、同一 condy）在压缩后经 SemIndex 重建依旧命中；无消费者的孤件常量按死常量消除语义收掉。
 - 测试 `test/unittest/bsm_intern_test.cpp` 九件：纯模型门（去重/形态逐跳/错误族/容量边界/压缩两态/记账）+ JVM 真跑门（BSM+句柄条目类 v52 全域可载；condy 类 v55 按 java.version 分判——JDK8 解析器不识 tag 17，拒收记环境事实）。本地 JDK8 全绿；CI temurin 17 复验。
 
-### 注解族属性 typed 建模 + cp_compact 收编（本批，已完成）
+### 注解族属性 typed 建模 + cp_compact 收编（已完成）
 
 - ParameterAnnotations / AnnotationDefault / MethodParameters / ConstantValue 四件 typed 建模 + 分派 + 公开解码面 + 写回保真；注解体与简单注解族共用同一 Annotation/ElemValue 模型与读写通道。
 - cp_compact 封闭集收编：四件计划相闭包标记 + 应用相重映射；Raw 名单分派退役收口（非零长 Raw 体显式拒绝）。压缩拒收面清零：自产语料 5（全是 AnnotationDefault）→ 0；env 注入语料 54（全是 MethodParameters）→ 0。
@@ -48,7 +50,7 @@
 - Deprecated/Synthetic 评估结论：不建模（体恒零长、无 CP 槽无手术面，零长透传已无损，typed 化无净收益）。
 - 文档：doc_ai/design.md 随本批重建（开源快照未携带），属性面语义按既有章节编号收拢。
 
-### 类构建挂载面 attr_build（本批，已完成）
+### 类构建挂载面 attr_build（已完成）
 
 - 新文件 `src/jbc/ir/attr_build.cpp`：ClassSession 公开挂载 API——attachConstantValue / attachMethodParameters / attachParameterAnnotations / attachAnnotationDefault / attachAnnotations（方法/字段）×{可见,不可见} / attachAttr（方法/字段）/ attachClassAnnotations / attachClassAttr（类）。规格面语义合成：ConstValueSpec / ParamNameRow / SemElemValue(十 const 形态 + 'e' 枚举 + 'c' 类字面量 + '@' 嵌套 + '[' 数组) / SemAnnotation → typed AttrBody，CP 经 SemIndex 去重 intern。
 - 全链「先算后写」：句柄 → 形状/域宽（u1 行数、u16 元素）→ 挂载预检（单例规则封闭表：LNT/LVT/LVTT 多条，"Code" 拒收 → BadMount，其余 AlreadyMounted）→ 规格容量预检 → 合成 → 落位；失败不留半截。
