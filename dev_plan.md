@@ -8,6 +8,10 @@
 - **v0.4.16 已发版（2026-10-17）**：触发条件两条皆齐（注解族属性面 + 类构建能力面 + 消费者协议面）。堆叠批次随发版说明见下「v0.4.16 发版说明」一节。
 - **v0.4.16 之后重新进入堆叠期（2026-10-20 起）**：新增批次不 bump、不打 tag，随下个里程碑一次发版。
 
+## v0.4.17 发版说明
+
+自 `0.4.16` 移除 `jbc::consumer` 模块（E3 源/骨架、E1 引用事实、rename 跨类编排）及其闭环 demo（libjbc_deobf_demo）与三支 consumer 测试，版本 bump 至 0.4.17。边界裁决：source/scan 消费者协议面与 rename 跨类编排是上层消费方设施，不属于 libjbc 的单类字节核边界（core/ir/type/analysis 之外不设消费面）；同名能力由上层仓单份持有（mjbase 的 consumer/renamer），两仓平行实现随之消除。连带清理：伞头 jbc.hpp 收编面与 units.hpp 注释中的 consumer 交叉引用。v0.4.16 引入的其余批次（MethodEditor、BSM intern、属性挂载、文档）不受影响。
+
 ## v0.4.16 发版说明（2026-10-17）
 
 自 `0.4.15` 一次性 bump，堆叠批次并入本版：
@@ -63,8 +67,8 @@
 
 - [x] 从零建方法门面（issue #8 方法体部分）：`MethodEditor` + `addMethodWithBody`，Result-only、无 sticky；类级 ClassDraft、字节对拍与消费面迁移未做。
 - [x] BSM 语义 intern 家族（internMethodHandle/internDynamic/internModule/internPackage + BSM 属性构建/改写面）——账目见上「已堆叠批次」。
-- [x] E-track 消费者协议边界（E1 ReferenceSite 导出面 / E3 IClassSource/SummaryScanner 注入式只读面 / rename 跨类编排）——已落地并全链验收：合成直验 16 例（consumer_scan/rename_test）+ boar 实语料五支 pass（批 4，含 JVM defineClass 载入闸）。
+- [x] E-track 消费者协议边界（E1 ReferenceSite 导出面 / E3 IClassSource/SummaryScanner 注入式只读面 / rename 跨类编排）——已落地并全链验收：合成直验 16 例（consumer_scan/rename_test）+ boar 实语料五支 pass（批 4，含 JVM defineClass 载入闸）。（v0.4.17 已随 consumer 模块移除，见顶部发版说明）
 - [x] 文档归位：morpher 侧 doc_ai/design.md 全量章节折回独立仓（`docs/design.md` 逐字节收拢 + 折回说明/§编号差异警示 + §37 落地记录；兄弟文档四件随折；误引修正 rename.hpp §9、signature.hpp 指 docs 版）。
-- [x] Grunt 实通过验证（对 boar-main*.jar 语料写数个 pass）—— consumer_corpus_test 五支 pass 编组于注入语料实跑全绿：ZeroTouchByteExact（3065 混淆 + 775 干净逐字节恒等）/ SkeletonSweep / ReferenceSweep / RenameClassFamilyWholeCorpus（单类名规则全语料驱动，事实族旧名清零+新名引用集守恒，杂项列/operand 随行改写实证）/BsmTouchedFailLoud（混淆语料 carrier 必现 Err）。语料门 = `LIBJBC_GRUNT_JAR`[-`_ORIGIN`] 注入 + 缺席 skip（CI 无注入即跳）。JVM 级载入闸（v0.4.16 已知界限第 4 项，已收口）：改名 stage 全语料 defineClass 格式闸入本套件（consumer_corpus_test.JvmDefineSweep），JDK 版本探针枚举——`LIBJBC_SWEEP_JAVA_HOME` 注入 > `JAVA_HOME` > 标准安装位 glob（Win Adoptium/Microsoft/Java/Zulu、Linux /usr/lib/jvm），取最小 major>=17，缺席即 skip。
+- [x] Grunt 实通过验证（对 boar-main*.jar 语料写数个 pass）（v0.4.17 已随 consumer 模块移除，见顶部发版说明）—— consumer_corpus_test 五支 pass 编组于注入语料实跑全绿：ZeroTouchByteExact（3065 混淆 + 775 干净逐字节恒等）/ SkeletonSweep / ReferenceSweep / RenameClassFamilyWholeCorpus（单类名规则全语料驱动，事实族旧名清零+新名引用集守恒，杂项列/operand 随行改写实证）/BsmTouchedFailLoud（混淆语料 carrier 必现 Err）。语料门 = `LIBJBC_GRUNT_JAR`[-`_ORIGIN`] 注入 + 缺席 skip（CI 无注入即跳）。JVM 级载入闸（v0.4.16 已知界限第 4 项，已收口）：改名 stage 全语料 defineClass 格式闸入本套件（consumer_corpus_test.JvmDefineSweep），JDK 版本探针枚举——`LIBJBC_SWEEP_JAVA_HOME` 注入 > `JAVA_HOME` > 标准安装位 glob（Win Adoptium/Microsoft/Java/Zulu、Linux /usr/lib/jvm），取最小 major>=17，缺席即 skip。
 - [x] 里程碑发版：一次 bump 版本号 + tag + 包仓条目更新（堆叠批次随发版说明一并列出）——v0.4.16 bump 已提交，tag 在 PR 合并后于 main 打（`v0.4.16`），包仓条目随发版同步。
-- [x] deobf 闭环 demo（`demo/deobf_demo.cpp` + xmake `libjbc_deobf_demo`）：Grunt（renamers-only worker 作业流，JDK25）混淆 origin → obf.jar + mappings.json（class/methods/fields 全量）→ libjbc 按 dumpMappings 全规则组广播还原（jar 直读经 libca ZipFile，规避 Windows NTFS 大小写塌缩；zlib 包消费随 libca_zip 上游契约自带）→ 三重实证：775/775 全语料逐类改写、deobf 名集合与 origin 集合 775==775 双向零差、JVM defineClass sweep 548 ok + 227 外部缺失豁免 0 fail（与 origin 基线同分布）；`--members` 档如实呈现 v1 fail-closed 边界（BsmTouched，kotlin indy 载体，归 rename v2 口径）。随行扩界：签名手术**扁平段链跨形态**——Grunt 抹平嵌套段数、kotlin `$$inlined$` 连 $ 空段真名两实证对原全名匹配的 shape 守卫双杀；扁平链收敛为全名逐字节比对 + 整段 new 原文拼接（`isValidSigInternalName` 字符集闸），'$' 部件机器只留真嵌套 '.' 段链；`RenameShapeMismatch` 保留值并入不命中语义、现不再产生。demo 诊断通道（失败族定位 + 规则级二分）随行落地。
+- [x] deobf 闭环 demo（`demo/deobf_demo.cpp` + xmake `libjbc_deobf_demo`）（v0.4.17 已随 consumer 模块移除，见顶部发版说明）：Grunt（renamers-only worker 作业流，JDK25）混淆 origin → obf.jar + mappings.json（class/methods/fields 全量）→ libjbc 按 dumpMappings 全规则组广播还原（jar 直读经 libca ZipFile，规避 Windows NTFS 大小写塌缩；zlib 包消费随 libca_zip 上游契约自带）→ 三重实证：775/775 全语料逐类改写、deobf 名集合与 origin 集合 775==775 双向零差、JVM defineClass sweep 548 ok + 227 外部缺失豁免 0 fail（与 origin 基线同分布）；`--members` 档如实呈现 v1 fail-closed 边界（BsmTouched，kotlin indy 载体，归 rename v2 口径）。随行扩界：签名手术**扁平段链跨形态**——Grunt 抹平嵌套段数、kotlin `$$inlined$` 连 $ 空段真名两实证对原全名匹配的 shape 守卫双杀；扁平链收敛为全名逐字节比对 + 整段 new 原文拼接（`isValidSigInternalName` 字符集闸），'$' 部件机器只留真嵌套 '.' 段链；`RenameShapeMismatch` 保留值并入不命中语义、现不再产生。demo 诊断通道（失败族定位 + 规则级二分）随行落地。

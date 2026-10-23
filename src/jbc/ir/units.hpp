@@ -676,7 +676,7 @@ public:
     ///
     /// 边界纪律：只动 Class 条目的 `a` 槽（名字索引），不改 tag/不删条目；
     /// 数组形态（"[" 前缀）不在本入口语义里——调用方经描述符/签名族手
-    /// 术处理（consumer/rename 的分族策略）。
+    /// 术处理（描述符/签名族的分族手术归调用方）。
     ca::u32 renameClassConstant(std::string_view oldInternal, std::string_view newInternal);
 
     // ---- BSM/条件常量族（批 2）：同一条去重纪律，带域校验的返回 Result ----

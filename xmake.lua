@@ -7,7 +7,7 @@
 -- （FrameAt / DomainEngine）、type（描述符/签名树）按层叠加。
 
 set_project("libjbc")
-set_version("0.4.16")
+set_version("0.4.17")
 set_license("MIT")
 set_languages("cxx17")
 
@@ -76,7 +76,7 @@ target("libjbc")
 
     add_deps("libca_core", "libca_str")
     add_files("src/jbc/core/*.cpp", "src/jbc/ir/*.cpp", "src/jbc/analysis/*.cpp",
-              "src/jbc/type/*.cpp", "src/jbc/consumer/*.cpp")
+              "src/jbc/type/*.cpp")
     add_headerfiles("src/jbc/(**.hpp)")
     add_includedirs("src", {public = true})
 
@@ -150,9 +150,6 @@ target("libjbc_unittest")
     add_files("test/unittest/annotation_corpus_test.cpp")
     add_files("test/unittest/class_build_attrs_test.cpp")
     add_files("test/unittest/bsm_intern_test.cpp")
-    add_files("test/unittest/consumer_scan_test.cpp")
-    add_files("test/unittest/consumer_rename_test.cpp")
-    add_files("test/unittest/consumer_corpus_test.cpp")
     add_includedirs("src")
     set_rundir("$(projectdir)")
 
@@ -220,24 +217,3 @@ target("libjbc_leak_check")
         add_cxflags("/utf-8", {tools = "cl"})
     end
 
--- 闭环 demo：Grunt 混淆产物 + dumpMappings 映射 → consumer rename 还原
--- deobf class 目录。jar 解包/回包由外部 tar 承担（binary 只管字节域）。
--- 详见 demo/deobf_demo.cpp 头注（含 --members fail-closed 预期红口径）。
-target("libjbc_deobf_demo")
-    set_kind("binary")
-    set_group("libs/demo")
-    set_default(false)
-
-    add_deps("libjbc")
-    -- 直吃 jar：经 libca_zip 的 ZipFile（JVM ZipFile 语义，跨平台不撞
-    -- Windows 大小写不敏感的解包塌缩）。
-    binary_link_closure("libjbc", "libca_str", "libca_core", "libca_zip")
-    add_packages("zlib")
-    add_files("demo/deobf_demo.cpp")
-    add_includedirs("src")
-    set_rundir("$(projectdir)")
-    set_languages("cxx17")
-
-    if is_plat("windows") then
-        add_cxflags("/utf-8", {tools = "cl"})
-    end
