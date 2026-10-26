@@ -1587,3 +1587,63 @@ TEST(IrSessionTest, LabelsAtListsAnchoredLabelsBothRoles)
     CodeEditor ed(cu);
     ASSERT_TRUE(ed.erase(nopId, CodeEditor::ErasePolicy::kRejectIfUsed).is_err());
 }
+
+TEST(IrSessionTest, MethodParametersAcceptsReceiverArity)
+{
+    // JVMS 4.7.24：MethodParameters 行数可为「描述符 arity」或「arity + 1」
+    // （实例方法的接收者行，javac 对非静态方法恒带 this 行）。
+    auto make = [](ca::u16 methodAccess) {
+        ClassBuilder cb;
+        const ca::u16 thisIdx  = cb.utf8("p/T");
+        const ca::u16 superIdx = cb.utf8("java/lang/Object");
+        const ca::u16 codeIdx  = cb.utf8("Code");
+        const ca::u16 mIdx     = cb.utf8("m");
+        const ca::u16 voidIdx  = cb.utf8("()V");
+        cb.setThis(cb.classRef(thisIdx));
+        cb.setSuper(cb.classRef(superIdx));
+        cb.setAccess(0x0021);
+        cb.setVersion(52);
+        cb.addMethod(methodAccess, mIdx, voidIdx,
+                     {AttrSpec{codeIdx, jbc::test::codeContent(0, 0, Bytes{0xb1})}});
+        return sessionOf(cb.build());
+    };
+
+    // 实例方法 + 单接收者行：放行，写回可读且行名保真。
+    {
+        auto s = make(0x0001);
+        ASSERT_NE(s, nullptr);
+        const jbc::ir::MethodId id = s->unit().findMethodId("m", "()V");
+        const jbc::ir::ParamNameRow rows[] = {{"this", 0}};
+        auto r = s->attachMethodParameters(id, {rows, rows + 1});
+        ASSERT_TRUE(r.is_ok()) << jbc::ir::to_string(r.unwrap_err());
+        auto out = jbc::test::writeOk(s->backing());
+        auto s2  = sessionOf(out);
+        ASSERT_NE(s2, nullptr);
+        ASSERT_FALSE(s2->backing().methods[0].attrs.empty());
+        auto dc = s2->backing().decodeAttr(s2->backing().methods[0].attrs.back());
+        ASSERT_TRUE(dc.is_ok());
+        const auto* mp = ca::core::tag_cast::dyn_cast<const jbc::core::MethodParametersAttr>(
+            dc.unwrap());
+        ASSERT_NE(mp, nullptr);
+        ASSERT_EQ(mp->rows.size(), 1u);
+        EXPECT_EQ(s2->backing().cp.utf8Of(mp->rows[0].nameCp), "this");
+    }
+    // 实例方法 + arity+2 行：仍拒（InvalidSeed）。
+    {
+        auto s = make(0x0001);
+        ASSERT_NE(s, nullptr);
+        const jbc::ir::MethodId   id = s->unit().findMethodId("m", "()V");
+        std::vector<jbc::ir::ParamNameRow> rows(2);
+        auto r = s->attachMethodParameters(id, rows);
+        EXPECT_TRUE(r.is_err() && r.unwrap_err() == jbc::ir::LowerError::InvalidSeed);
+    }
+    // 静态方法 + 接收者行：拒（静态方法无接收者）。
+    {
+        auto s = make(0x0009);
+        ASSERT_NE(s, nullptr);
+        const jbc::ir::MethodId   id = s->unit().findMethodId("m", "()V");
+        std::vector<jbc::ir::ParamNameRow> rows(1);
+        auto r = s->attachMethodParameters(id, rows);
+        EXPECT_TRUE(r.is_err() && r.unwrap_err() == jbc::ir::LowerError::InvalidSeed);
+    }
+}

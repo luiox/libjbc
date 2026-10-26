@@ -825,15 +825,21 @@ Result<void, LowerError> ClassSession::attachMethodParameters(
             return Err(LowerError::DomainOverflow);
         }
     }
-    // 描述符 arity 硬契约：行数必须等于方法参数个数（JVM 对失配的产物在
-    // 反射入口显式抛 MalformedParametersException——能被 JVM 证伪的垃圾，
-    // 合成面按域宽闸门同一纪律提前拦下）。
+    // 描述符 arity 硬契约：行数等于方法参数个数，实例方法额外放行「描述符
+    // arity + 1」的接收者形态——JVMS 4.7.24 允许 MethodParameters 把 receiver
+    // 计入参数行（javac 对非静态方法恒带 this 行）；反射入口对失配产物抛
+    // MalformedParametersException，能被 JVM 证伪的垃圾按域宽闸门同一纪律
+    // 提前拦下（接收者行内容不可静态证伪，只按行数放行）。
     {
         const Result<ca::u32, LowerError> rArity = methodDescArity(*this, mu->desc);
         if (rArity.is_err()) {
             return Err(rArity.unwrap_err());
         }
-        if (rows.size() != rArity.unwrap()) {
+        const ca::u32 arity = rArity.unwrap();
+        const bool    isStatic = (mu->access & 0x0008) != 0;   // ACC_STATIC
+        const bool    ok       = rows.size() == arity ||
+                     (!isStatic && rows.size() == static_cast<ca::usize>(arity) + 1);
+        if (!ok) {
             return Err(LowerError::InvalidSeed);
         }
     }
