@@ -751,70 +751,110 @@ void putRef(Bytes& b, ca::u16 cpIdx)
 
 }   // namespace
 
-/// 多抛出点 → 同一 handler：入口帧 = 各抛出点 in-state locals 逐槽
-/// verifier 合并（单边赋值槽支配为 Top——§10.4.8 裁决口径；全边已赋值
-/// 槽具体保持）+ [catch_type 精确类]。BestEffort 对照保持基础播种（空
-/// locals + 万能 Ref）。
+/// 多覆盖指令 → 同一 handler：Strict 发射域是 try 范围内全部可达指令
+/// （JVM 校验器对范围内每条有帧指令做 handler 可指派性检查，§4.10.1.4
+/// 保守口径），入口帧 = 各覆盖点 in-state locals 逐槽 verifier 合并
+/// （Top 支配——任一覆盖点缺席的槽裁决为 Top，全边已赋值槽具体保持）
+/// + [catch_type 精确类]。try 起点在设置 store 之后可见局部值携带；覆盖
+/// 设置段时每个槽都有缺席覆盖点，全部支配为 Top。BestEffort 对照保持基
+/// 础播种（空 locals + 万能 Ref）。
 TEST(StrictFrameExcTest, HandlerEntryCarriesThrowPointLocals)
 {
-    ClassBuilder cb = baseClass();
-    const ExcClassCp cp = excCpOf(cb);
+    const auto run = [&](ca::u32 excStart, VKind k0, VKind k1, VKind k2) {
+        ClassBuilder cb = baseClass();
+        const ExcClassCp cp = excCpOf(cb);
 
-    // 0 iconst_1 / 1 istore_2（先于 try 的全边已赋值槽）/ 2 getstatic T.g /
-    // 5 pop / 6 getstatic T.g / 9 astore_0 / 10 iconst_1 / 11 istore_1 /
-    // 12 getstatic T.f / 15 pop / 16 return / 17 astore_2（handler，顺序伪
-    // 边被截断——只能经异常边进入）/ 18 return
-    Bytes code;
-    code.push_back(0x04);              // 0 iconst_1
-    code.push_back(0x3d);              // 1 istore_2
-    putRef(code, cp.gRef);             // 2 getstatic T.g（抛点：locals [T,T,Int]）
-    code.push_back(0x57);              // 5 pop
-    putRef(code, cp.gRef);             // 6 getstatic T.g
-    code.push_back(0x4b);              // 9 astore_0
-    code.push_back(0x04);              // 10 iconst_1
-    code.push_back(0x3c);              // 11 istore_1
-    putRef(code, cp.fRef);             // 12 getstatic T.f（抛点：[Ref{Object},Int,Int]）
-    code.push_back(0x57);              // 15 pop
-    code.push_back(0xb1);              // 16 return
-    code.push_back(0x4d);              // 17 astore_2（handler）
-    code.push_back(0xb1);              // 18 return
+        // 0 iconst_1 / 1 istore_2（设置段，是否被 try 覆盖由 excStart 定）/
+        // 2 getstatic T.g / 5 pop / 6 getstatic T.g / 9 astore_0 /
+        // 10 iconst_1 / 11 istore_1 / 12 getstatic T.f / 15 pop /
+        // 16 return / 17 astore_2（handler，顺序伪边被截断——只能经异常
+        // 边进入）/ 18 return
+        Bytes code;
+        code.push_back(0x04);              // 0 iconst_1
+        code.push_back(0x3d);              // 1 istore_2
+        putRef(code, cp.gRef);             // 2 getstatic T.g
+        code.push_back(0x57);              // 5 pop
+        putRef(code, cp.gRef);             // 6 getstatic T.g
+        code.push_back(0x4b);              // 9 astore_0
+        code.push_back(0x04);              // 10 iconst_1
+        code.push_back(0x3c);              // 11 istore_1
+        putRef(code, cp.fRef);             // 12 getstatic T.f
+        code.push_back(0x57);              // 15 pop
+        code.push_back(0xb1);              // 16 return
+        code.push_back(0x4d);              // 17 astore_2（handler）
+        code.push_back(0xb1);              // 18 return
 
-    auto s = excClassOf(cb, code, 1, 3, {jbc::test::ExcSpec{0, 16, 17, cp.excCls}});
-    ASSERT_NE(s, nullptr);
-    auto p = promoteMethod(*s, 0);
-    ASSERT_TRUE(p.is_ok());
+        auto s = excClassOf(cb, code, 1, 3,
+                            {jbc::test::ExcSpec{static_cast<ca::u16>(excStart), 16, 17,
+                                                cp.excCls}});
+        ASSERT_NE(s, nullptr);
+        auto p = promoteMethod(*s, 0);
+        ASSERT_TRUE(p.is_ok());
 
-    StubResolver res;
-    FrameEngine fe(s->backing().cp, res, FramePolicy::Strict);
-    std::vector<FrameAt> frames;
-    const FrameSummary sum =
-        fe.compute(*p.unwrap(), MethodSig{true, "()V", "m", ""}, frames);
-    ASSERT_TRUE(sum.ok) << jbc::analysis::to_string(sum.fail);
+        StubResolver res;
+        FrameEngine fe(s->backing().cp, res, FramePolicy::Strict);
+        std::vector<FrameAt> frames;
+        const FrameSummary sum =
+            fe.compute(*p.unwrap(), MethodSig{true, "()V", "m", ""}, frames);
+        ASSERT_TRUE(sum.ok) << jbc::analysis::to_string(sum.fail);
 
-    const ca::usize atHandler = indexAtPc(*p.unwrap(), 17);
-    ASSERT_NE(atHandler, static_cast<ca::usize>(-1));
-    ASSERT_TRUE(frames[atHandler].reachable);
-    // 入口 locals：local0/local1 只在后段抛点被赋值（首抛点在存入之前）→
-    // 单边赋值槽按 verifier 口径支配为 Top；local2 全边已赋值 → Int 保持。
-    ASSERT_GE(frames[atHandler].locals.size(), 3u);
-    EXPECT_EQ(frames[atHandler].locals[0].k, VKind::Top);
-    EXPECT_EQ(frames[atHandler].locals[1].k, VKind::Top);
-    EXPECT_EQ(frames[atHandler].locals[2].k, VKind::Int);
-    // 入口栈 = catch_type 精确类（不再是万能 Ref）。
-    ASSERT_EQ(frames[atHandler].stack.size(), 1u);
-    EXPECT_EQ(frames[atHandler].stack[0].k, VKind::Ref);
-    EXPECT_EQ(frames[atHandler].stack[0].name, "java/lang/Exception");
+        const ca::usize atHandler = indexAtPc(*p.unwrap(), 17);
+        ASSERT_NE(atHandler, static_cast<ca::usize>(-1));
+        ASSERT_TRUE(frames[atHandler].reachable);
+        ASSERT_GE(frames[atHandler].locals.size(), 3u);
+        EXPECT_EQ(frames[atHandler].locals[0].k, k0);
+        EXPECT_EQ(frames[atHandler].locals[1].k, k1);
+        EXPECT_EQ(frames[atHandler].locals[2].k, k2);
+        // 入口栈 = catch_type 精确类（不再是万能 Ref）。
+        ASSERT_EQ(frames[atHandler].stack.size(), 1u);
+        EXPECT_EQ(frames[atHandler].stack[0].k, VKind::Ref);
+        EXPECT_EQ(frames[atHandler].stack[0].name, "java/lang/Exception");
+    };
+
+    // try 起点在设置 store 之后：覆盖点 in-state 里 local2 全边已赋值 →
+    // Int 保持；local0/local1 只在后段覆盖点被赋值（前段覆盖点为 Top）→
+    // Top 支配。
+    run(2, VKind::Top, VKind::Top, VKind::Int);
+    // try 覆盖设置段：iconst/istore 的 in-state 也发异常边，每个槽都有缺
+    // 席覆盖点 → 全部支配合并为 Top。
+    run(0, VKind::Top, VKind::Top, VKind::Top);
 
     // BestEffort 对照：handler 入口仍是基础播种——空 locals + 万能 Ref。
-    FrameEngine fe2(s->backing().cp);
-    std::vector<FrameAt> frames2;
-    const FrameSummary sum2 = fe2.compute(*p.unwrap(), frames2);
-    ASSERT_TRUE(sum2.ok);
-    ASSERT_TRUE(frames2[atHandler].reachable);
-    EXPECT_EQ(frames2[atHandler].locals.size(), 0u);
-    ASSERT_EQ(frames2[atHandler].stack.size(), 1u);
-    EXPECT_EQ(frames2[atHandler].stack[0].k, VKind::Ref);
-    EXPECT_TRUE(frames2[atHandler].stack[0].name.empty());
+    {
+        ClassBuilder cb = baseClass();
+        const ExcClassCp cp = excCpOf(cb);
+        Bytes code;
+        code.push_back(0x04);
+        code.push_back(0x3d);
+        putRef(code, cp.gRef);
+        code.push_back(0x57);
+        putRef(code, cp.gRef);
+        code.push_back(0x4b);
+        code.push_back(0x04);
+        code.push_back(0x3c);
+        putRef(code, cp.fRef);
+        code.push_back(0x57);
+        code.push_back(0xb1);
+        code.push_back(0x4d);
+        code.push_back(0xb1);
+
+        auto s = excClassOf(cb, code, 1, 3,
+                            {jbc::test::ExcSpec{2, 16, 17, cp.excCls}});
+        ASSERT_NE(s, nullptr);
+        auto p = promoteMethod(*s, 0);
+        ASSERT_TRUE(p.is_ok());
+        FrameEngine fe2(s->backing().cp);
+        std::vector<FrameAt> frames2;
+        const FrameSummary sum2 = fe2.compute(*p.unwrap(), frames2);
+        ASSERT_TRUE(sum2.ok);
+        const ca::usize atHandler = indexAtPc(*p.unwrap(), 17);
+        ASSERT_NE(atHandler, static_cast<ca::usize>(-1));
+        ASSERT_TRUE(frames2[atHandler].reachable);
+        EXPECT_EQ(frames2[atHandler].locals.size(), 0u);
+        ASSERT_EQ(frames2[atHandler].stack.size(), 1u);
+        EXPECT_EQ(frames2[atHandler].stack[0].k, VKind::Ref);
+        EXPECT_TRUE(frames2[atHandler].stack[0].name.empty());
+    }
 }
 
 /// catch_type=0（any/finally 汇聚 handler）播 java/lang/Throwable。
@@ -947,16 +987,19 @@ TEST(StrictFrameExcTest, HandlerLocalsMergeViaResolver)
     EXPECT_EQ(frames[atHandler].stack[0].name, "java/lang/Exception");
 }
 
-/// 多抛出点 locals 尺寸类冲突（Int × Ref）→ TypeConflict，failAt 定位到
-/// handler 入口指令；BestEffort 冲突吸收继续（零漂移）。
+/// 多覆盖点 locals 尺寸类冲突（Int × Ref）→ TypeConflict，failAt 定位到
+/// handler 入口指令。try 起点在设置 store 之后：加宽发射域后，若覆盖设置
+/// 段，其覆盖点的缺席槽（Top）会支配合并、吞掉真冲突；移出后覆盖点的
+/// local0 在 Int 与 Ref 之间真实相撞。BestEffort 冲突吸收继续（零漂移）。
 TEST(StrictFrameExcTest, HandlerLocalsConflictFailsAtHandler)
 {
     ClassBuilder cb = baseClass();
     const ExcClassCp cp = excCpOf(cb);
 
-    // 0 iconst_1 / 1 istore_0 / 2 getstatic T.g（抛点1，local0=Int）/
-    // 5 pop / 6 getstatic X.a / 9 astore_0 / 10 getstatic T.g（抛点2，
-    // local0=Ref）/ 13 pop / 14 return / 15 astore_1（handler）/ 16 return
+    // 0 iconst_1 / 1 istore_0（设置段，不在 try 内）/ 2 getstatic T.g
+    // （覆盖点，local0=Int）/ 5 pop / 6 getstatic X.a / 9 astore_0 /
+    // 10 getstatic T.g（覆盖点，local0=Ref）/ 13 pop / 14 return /
+    // 15 astore_1（handler）/ 16 return
     Bytes code;
     code.push_back(0x04);              // 0 iconst_1
     code.push_back(0x3b);              // 1 istore_0
@@ -970,7 +1013,7 @@ TEST(StrictFrameExcTest, HandlerLocalsConflictFailsAtHandler)
     code.push_back(0x4c);              // 15 astore_1（handler）
     code.push_back(0xb1);              // 16 return
 
-    auto s = excClassOf(cb, code, 1, 2, {jbc::test::ExcSpec{0, 14, 15, cp.excCls}});
+    auto s = excClassOf(cb, code, 1, 2, {jbc::test::ExcSpec{2, 14, 15, cp.excCls}});
     ASSERT_NE(s, nullptr);
     auto p = promoteMethod(*s, 0);
     ASSERT_TRUE(p.is_ok());
