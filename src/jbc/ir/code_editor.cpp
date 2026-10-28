@@ -109,6 +109,107 @@ Result<void, EditError> CodeEditor::eraseBatch(const std::vector<InsnId>& ids,
     return u_.dom.eraseBatch(ids, retarget);
 }
 
+Result<void, EditError> CodeEditor::moveRange(InsnId first, InsnId last, InsnId at,
+                                              MoveRangePolicy p)
+{
+    // ---- 校验阶段（全只读，任何失败发生在变更之前）----
+    if (u_.dom.peek(first) == nullptr) {
+        return Err(EditError::InvalidHandle);
+    }
+    const bool toEnd     = at == kNoInsn;
+    const bool lastIsEnd = last == kNoInsn;   // 尾哨兵：段延伸到方法末尾
+    if (!toEnd && u_.dom.peek(at) == nullptr) {
+        return Err(EditError::InvalidHandle);
+    }
+    if (!lastIsEnd && u_.dom.peek(last) == nullptr) {
+        return Err(EditError::InvalidHandle);
+    }
+    const auto& order = u_.dom.order();
+    ca::usize firstPos = order.size();
+    ca::usize lastPos  = order.size();
+    ca::usize atPos    = order.size();   // kNoInsn 锚点 = 末尾哨兵位
+    for (ca::usize i = 0; i < order.size(); ++i) {
+        if (order[i] == first) {
+            firstPos = i;
+        }
+        if (!lastIsEnd && order[i] == last) {
+            lastPos = i;
+        }
+        if (order[i] == at) {
+            atPos = i;
+        }
+    }
+    // 段几何与 CodeDom::moveRange 同规：空段/倒置段/锚点在段内拒绝。
+    if (firstPos >= lastPos || (!toEnd && atPos > firstPos && atPos < lastPos)) {
+        return Err(EditError::BadRange);
+    }
+    // 段已在锚点位置：整体无操作，kHeadStays 也不触发改绑——没有位移就
+    // 没有「留原地」的语义可执行，保持锚定现状才是无操作的本义。
+    const bool noop = toEnd ? lastPos == order.size()
+                            : (atPos == firstPos || atPos == lastPos);
+    if (noop || p == MoveRangePolicy::kHeadFollows) {
+        return u_.dom.moveRange(first, last, at);
+    }
+
+    // ---- kHeadStays：段首标签全部留在原位 ----
+    // 承接者 = 原段位后继（搬走后顶替原段位的指令，即原 exclusive 端）；
+    // 段居尾（last 为尾哨兵）则承接者是方法末边界。段内其余标签不在改绑
+    // 之列（随段迁移是默认语义）。
+    const InsnId successor = lastPos < order.size() ? order[lastPos] : kNoInsn;
+    const std::vector<LabelId> heads = u_.dom.labelsAt(first);
+    // 异常表边界引用的段首标签不可机械改绑：改边界 = 改保护区间语义，
+    // 与 erase 的 fallthrough 策略同规——调用方先显式 bindLabel/destroyLabel。
+    for (const CodeUnit::Exc& e : u_.exc) {
+        for (LabelId label : {e.start, e.end, e.handler}) {
+            for (const LabelId head : heads) {
+                if (head == label) {
+                    return Err(EditError::StillUsed);
+                }
+            }
+        }
+    }
+    // 段居尾时承接者是 end 边界：仍被控制字段引用的段首标签不可改绑过去
+    // （分支目标须锚定存活指令是 checkHandles/exportRaw 的 standing 不变量，
+    // end 锚定的控制目标连导出都无法表达）。
+    if (successor == kNoInsn) {
+        for (const InsnId& uid : order) {
+            const Insn* in = u_.dom.peek(uid);
+            if (in == nullptr) {
+                continue;
+            }
+            const core::Shape sh = core::shapeOf(in->op);
+            const bool isBranch = sh == core::Shape::Branch2 || sh == core::Shape::Branch4;
+            const bool isSwitch = sh == core::Shape::TableSwitch ||
+                                  sh == core::Shape::LookupSwitch;
+            if (!isBranch && !isSwitch) {
+                continue;
+            }
+            for (const LabelId head : heads) {
+                if (in->target == head) {
+                    return Err(EditError::StillUsed);
+                }
+                if (isSwitch) {
+                    for (const LabelId& t : in->targets) {
+                        if (t == head) {
+                            return Err(EditError::StillUsed);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // ---- 变更阶段：改绑 + 单趟重排，失败条件已被校验全部排除 ----
+    for (const LabelId head : heads) {
+        // heads 来自存活 DOM，successor 活或为末哨兵，bindLabel 不会失败；
+        // 错误通道保留完整性，防御性返回。
+        auto r = u_.dom.bindLabel(head, successor);
+        if (r.is_err()) {
+            return Err(r.unwrap_err());
+        }
+    }
+    return u_.dom.moveRange(first, last, at);
+}
+
 std::vector<CodeEditor::Block> CodeEditor::blocks() const
 {
     const auto& order = u_.dom.order();
