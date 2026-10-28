@@ -611,6 +611,84 @@ TEST(DomainSigTest, ExceptionEntrySeeded)
     EXPECT_EQ(r.frames[idx].stack[0].val.k, jbc::analysis::VKind::Ref);
 }
 
+TEST(DomainSigTest, HandlerSeedMergesWithLateNormalEdge)
+{
+    // 处理器入口的正常边晚于种子处理到达（入口块之后的深路径才跳进
+    // handler）：种子不得抢先单跑——旧实现把 [exc] 单槽状态在 analyze 入口
+    // 无条件入队，handler 体系在正常边并入前先以残缺帧执行，直链上需要
+    // 双操作数的 iand 当场 Underflow。正确语义是 verifier 口径：入口帧 =
+    // 全部入边汇合。
+    const Bytes code = {
+        0x04,             // 0  iconst_1          ; [1]
+        0xa7, 0x00, 0x03, // 1  goto 4
+        0x05,             // 4  iconst_2          ; [1,2]
+        0xa7, 0x00, 0x03, // 5  goto 8（跳进 handler）
+        0x3b,             // 8  istore_0（handler） ；种子路径 [exc]→[]
+        0x02,             // 9  iconst_m1         ; [-1]
+        0x7e,             // 10 iand              ; 旧实现：Underflow@10
+        0x3c,             // 11 istore_1
+        0xb1,             // 12 return
+    };
+    std::vector<ExcSpec> exc;
+    exc.push_back(ExcSpec{0, 8, 8, 0});
+    auto s = singleMethodClass(code, exc, 2, 2);
+    ASSERT_NE(s, nullptr);
+    auto p = promoteMethod(*s, 0);
+    ASSERT_TRUE(p.is_ok());
+    const jbc::ir::CodeUnit& u = *p.unwrap();
+
+    ShapeDomain dom;
+    DomainEngine<jbc::analysis::VType> eng(s->backing().cp, dom);
+    DomainResult<jbc::analysis::VType> r = eng.analyze(u);
+    ASSERT_TRUE(r.summary.ok) << jbc::analysis::to_string(r.summary.fail);
+
+    // handler 入口 = 异常种子 ⊔ 正常边 [1,2]：栈深取深侧（2 行），值并成 top。
+    const ca::usize idx = indexAtPc(u, 8);
+    ASSERT_LT(idx, r.frames.size());
+    ASSERT_TRUE(r.frames[idx].reachable);
+    ASSERT_EQ(r.frames[idx].stack.size(), 2u);
+    EXPECT_EQ(r.frames[idx].stack[0].val.k, jbc::analysis::VKind::Bottom);
+    EXPECT_EQ(r.frames[idx].stack[1].val.k, jbc::analysis::VKind::Int);
+}
+
+TEST(DomainSigTest, HandlerSeedKeepsFallthroughEdge)
+{
+    // 顺序边直落处理器入口（fake-try 连续体：handler 就是 try 之后的自然
+    // 续体）：截断会把唯一真实入边丢掉，种子单跑同样在 iand 下溢。基础档
+    // 不截断——handler 入口按普通汇合点参与数据流。
+    const Bytes code = {
+        0x04,   // 0 iconst_1          ; [1]
+        0x05,   // 1 iconst_2          ; [1,2]
+        0x00,   // 2 nop               ; try 范围终点
+        0x3b,   // 3 istore_0（handler）
+        0x02,   // 4 iconst_m1         ; [-1]
+        0x7e,   // 5 iand              ; 旧实现：Underflow@5
+        0x3c,   // 6 istore_1
+        0xb1,   // 7 return
+    };
+    std::vector<ExcSpec> exc;
+    exc.push_back(ExcSpec{0, 3, 3, 0});
+    auto s = singleMethodClass(code, exc, 2, 2);
+    ASSERT_NE(s, nullptr);
+    auto p = promoteMethod(*s, 0);
+    ASSERT_TRUE(p.is_ok());
+    const jbc::ir::CodeUnit& u = *p.unwrap();
+
+    ShapeDomain dom;
+    DomainEngine<jbc::analysis::VType> eng(s->backing().cp, dom);
+    DomainResult<jbc::analysis::VType> r = eng.analyze(u);
+    ASSERT_TRUE(r.summary.ok) << jbc::analysis::to_string(r.summary.fail);
+
+    const ca::usize idx = indexAtPc(u, 3);
+    ASSERT_LT(idx, r.frames.size());
+    ASSERT_TRUE(r.frames[idx].reachable);
+    // 入口 = 异常种子(Ref) ⊔ 顺序边 [Int,Int]：栈深取深侧 2 行；第 0 行
+    // Ref⊔Int 冲突落 Bottom，第 1 行双侧同为 Int 保持。
+    ASSERT_EQ(r.frames[idx].stack.size(), 2u);
+    EXPECT_EQ(r.frames[idx].stack[0].val.k, jbc::analysis::VKind::Bottom);
+    EXPECT_EQ(r.frames[idx].stack[1].val.k, jbc::analysis::VKind::Int);
+}
+
 TEST(DomainDiagTest, FailReportsFaultingInstruction)
 {
     // pop 在空栈上：Underflow 的现场定位（failAt）必须是 pop 本条。

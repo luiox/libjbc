@@ -13,6 +13,7 @@
 
 #include <cstddef>
 #include <deque>
+#include <map>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -109,10 +110,12 @@ public:
         return false;
     }
 
-    /// 异常边精确传播开关（J5/C3）。关闭（默认）：handler 入口在 analyze
-    /// 入口无条件播种（空 locals + [newException]，BestEffort 现状，逐位
-    /// 不变）。开启（Strict 域）：引擎不再播种，改为对 try 范围内每条可
-    /// 抛指令逐覆盖 handler 发异常出口边——入口状态 = 抛出点 in-state
+    /// 异常边精确传播开关（J5/C3）。关闭（默认）：handler 入口由异常表
+    /// 播种（空 locals + [newException]），种子以「待并参与者」形态持有，
+    /// 与真实入边同权汇合（verifier 口径：入口帧 = 全部入边 join）——不再
+    /// 抢先单跑，真实边缺席时由 worklist 排空后的种子倾泻兜底（异常-only
+    /// 处理器语义不变）。开启（Strict 域）：引擎不播种，改为对 try 范围内
+    /// 每条可抛指令逐覆盖 handler 发异常出口边——入口状态 = 抛出点 in-state
     /// locals + [catch_type 对应类型]，handler 可达 ⟺ 至少一条异常边实际
     /// 并入（死 try 范围的 handler 不可达）。
     virtual bool preciseExceptionEdges() const { return false; }
@@ -1029,11 +1032,14 @@ DomainResult<V> DomainEngine<V>::analyze(const ir::CodeUnit& u, const MethodSig*
     inState[order[0].slot] = std::move(entry);
     work.push_back(order[0]);
 
-    // 异常处理器：入口顺序伪边截断集合（两档一致）。基础播种仅关闭精确
-    // 异常边的域使用——精确档（J5/C3）handler 由 try 范围内可抛指令的出口
-    // 边惰性并入，死 try 范围的 handler 不再无条件可达。
+    // 异常处理器两档。精确档（J5/C3）：handler 由 try 范围内可抛指令的出
+    // 口边惰性并入，入口顺序伪边照旧截断（handler 可达 ⟺ 至少一条异常边
+    // 实际并入）。基础档：不发异常边，入口种子以「待并参与者」形态持有——
+    // 真实边到达时种子与边同权并入，真实边缺席的处理器由排空后种子倾泻兜
+    // 底；顺序伪边不再截断，否则 fake-try（handler 即 try 之后的自然续体）
+    // 的唯一真实入边被丢弃，种子单跑必然残帧下溢。
     const bool preciseExc = dom_.preciseExceptionEdges();
-    std::unordered_set<ca::u32> handlerSlots;
+    std::unordered_set<ca::u32> handlerSlots;   ///< 精确档：入口顺序伪边截断集合
     handlerSlots.reserve(u.exc.size() * 2);
 
     // 精确档异常边表（异常表序即并入序）：[startPc, endPc) 覆盖范围 +
@@ -1080,9 +1086,11 @@ DomainResult<V> DomainEngine<V>::analyze(const ir::CodeUnit& u, const MethodSig*
         }
     }
 
+    // 基础档入口种子表（slot 有序 → 倾泻次序确定）：同一 handler 的多个
+    // catch 项种子先并。不入队、不占 inState——等真实边并入，或排空后倾
+    // 泻。精确档无种子：handler 可达性由异常边实际并入决定。
+    std::map<ca::u32, detail::DomState<V>> handlerSeed;
     if (!preciseExc) {
-        // 异常处理器入口播种 + 截断落入入口的顺序伪边（与 FrameEngine 同
-        // 源）；精确档不播种——handler 可达性由异常边实际并入决定。
         for (const ir::CodeUnit::Exc& e : u.exc) {
             const auto target = u.dom.resolveLabel(e.handler);
             if (target.is_err() || target.unwrap().isEnd()) {
@@ -1092,14 +1100,14 @@ DomainResult<V> DomainEngine<V>::analyze(const ir::CodeUnit& u, const MethodSig*
             if (u.dom.peek(handler) == nullptr) {
                 continue;
             }
-            if (!handlerSlots.insert(handler.slot).second) {
-                continue;
-            }
             detail::DomState<V> hs;
             hs.stack.push_back(SlotV<V>{dom_.newException(e), false});
-            const auto [it, fresh] = inState.try_emplace(handler.slot, std::move(hs));
-            if (fresh) {
-                work.push_back(handler);
+            const auto [it, fresh] = handlerSeed.try_emplace(handler.slot, std::move(hs));
+            if (!fresh) {
+                // 多 catch 项共享入口：种子并种子（形态同为空 locals + 单槽
+                // throwable，仅值过域合并）。
+                it->second.stack[0].val =
+                    dom_.merge(it->second.stack[0].val, hs.stack[0].val);
             }
         }
     }
@@ -1140,13 +1148,97 @@ DomainResult<V> DomainEngine<V>::analyze(const ir::CodeUnit& u, const MethodSig*
         return true;
     };
 
+    // 行级并入：短侧补 top 后逐行过域合并（状态副本进，融合结果出）。
+    // Strict 域合并失败时置 fail 并定位到合并点指令，返回 false = 整个
+    // analyze 终止（不伪造帧，§10.1）。
+    const auto mergeInto = [&](detail::DomState<V>& merged, const detail::DomState<V>& incoming,
+                               const ir::InsnId& at) -> bool {
+        const ca::usize nL = merged.locals.size() > incoming.locals.size()
+                                 ? merged.locals.size()
+                                 : incoming.locals.size();
+        const ca::usize nS = merged.stack.size() > incoming.stack.size()
+                                 ? merged.stack.size()
+                                 : incoming.stack.size();
+        if (merged.locals.size() < nL) {
+            merged.locals.resize(nL, SlotV<V>{dom_.top(), false});
+        }
+        if (merged.stack.size() < nS) {
+            merged.stack.resize(nS, SlotV<V>{dom_.top(), false});
+        }
+        for (ca::usize i = 0; i < nL; ++i) {
+            // 行在入边缺席 = 入边该槽为 top：显式过域合并（verifier 格
+            // 下支配为 top；形状格吸收下值恒等 = 原值，bottom 标记保持）。
+            // 原短路实现把吸收语义硬编在协议里，两格分离后不再成立。
+            const V src = i < incoming.locals.size()
+                              ? incoming.locals[i].val
+                              : dom_.top();
+            merged.locals[i].val = dom_.merge(merged.locals[i].val, src);
+            if (i < incoming.locals.size()) {
+                merged.locals[i].bottom =
+                    merged.locals[i].bottom && incoming.locals[i].bottom;
+            }
+        }
+        for (ca::usize i = 0; i < nS; ++i) {
+            // 栈行与 locals 同规：缺席行显式与 top 合并（值恒等口径同上）。
+            const V src = i < incoming.stack.size()
+                              ? incoming.stack[i].val
+                              : dom_.top();
+            merged.stack[i].val = dom_.merge(merged.stack[i].val, src);
+            if (i < incoming.stack.size()) {
+                merged.stack[i].bottom =
+                    merged.stack[i].bottom && incoming.stack[i].bottom;
+            }
+        }
+        const FrameSummary::Fail mergeFail = dom_.failCode();
+        if (mergeFail != FrameSummary::Fail::None) {
+            out.fail   = mergeFail;
+            out.failAt = at;
+            out.ok     = false;
+            result.frames.clear();
+            return false;
+        }
+        return true;
+    };
+
     const ca::usize visitCap = order.size() * 64 + 4096;   // 熔断
     ca::usize visits = 0;
-    while (!work.empty()) {
+    while (!work.empty() || !handlerSeed.empty()) {
         if (++visits > visitCap) {
             out.fail = FrameSummary::Fail::NoFixpoint;
             out.ok   = false;
             return result;
+        }
+        if (work.empty()) {
+            // 种子倾泻：无真实边到达的处理器（异常-only），入口 = 种子本体
+            // ——与「种子即唯一入边」等值，只是时机移到正常流收敛之后，种
+            // 子不再抢先单跑。inState 已有状态（处理器即方法入口等罕见形
+            // 态）则种子并入既有帧后重跑。
+            const auto seedIt = handlerSeed.begin();
+            const auto posIt  = posOf.find(seedIt->first);
+            if (posIt == posOf.end()) {
+                handlerSeed.erase(seedIt);
+                continue;
+            }
+            const ir::InsnId handler = order[posIt->second];
+            const auto existing = inState.find(seedIt->first);
+            if (existing == inState.end()) {
+                inState.emplace(seedIt->first, std::move(seedIt->second));
+                handlerSeed.erase(seedIt);
+                work.push_back(handler);
+            } else {
+                detail::DomState<V> seed = std::move(seedIt->second);
+                handlerSeed.erase(seedIt);
+                ++out.merges;
+                detail::DomState<V> merged = existing->second;
+                if (!mergeInto(merged, seed, handler)) {
+                    return result;
+                }
+                if (!sameState(merged, existing->second)) {
+                    existing->second = std::move(merged);
+                    work.push_back(handler);
+                }
+            }
+            continue;
         }
         const ir::InsnId id = work.front();
         work.pop_front();
@@ -1242,19 +1334,30 @@ DomainResult<V> DomainEngine<V>::analyze(const ir::CodeUnit& u, const MethodSig*
             const auto it = posOf.find(id.slot);
             if (it != posOf.end() && it->second + 1 < order.size()) {
                 const ir::InsnId& next = order[it->second + 1];
-                if (handlerSlots.count(next.slot) == 0) {
+                // 顺序伪边截断仅精确档：基础档 handler 入口是普通汇合点
+                // （种子随边并入），截断会丢弃 fake-try 连续体的唯一真实入边。
+                if (!preciseExc || handlerSlots.count(next.slot) == 0) {
                     succ.push_back(next);
                 }
             }
         }
 
         // 后继并入：状态缺席即播种入队；已存在则副本合并，未变不入队
-        // （fixpoint 终止性）。异常出口边与控制流后继共用同一协议；
-        // 返回 false = Strict 合并失败，整个 analyze 终止（不伪造帧）。
+        // （fixpoint 终止性）。基础档处理器入口的待并种子同权参与汇合。
+        // Strict 合并失败返回 false = 整个 analyze 终止（不伪造帧）。
         const auto propagate = [&](const ir::InsnId& s, detail::DomState<V>& incoming) -> bool {
-            const auto it = inState.find(s.slot);
+            const auto seedIt = handlerSeed.find(s.slot);
+            const auto it     = inState.find(s.slot);
             if (it == inState.end()) {
-                inState.emplace(s.slot, incoming);
+                detail::DomState<V> entryState = incoming;
+                if (seedIt != handlerSeed.end()) {
+                    // 首条真实边到达处理器：入口帧 = 边 ⊔ 待并种子。
+                    if (!mergeInto(entryState, seedIt->second, s)) {
+                        return false;
+                    }
+                    handlerSeed.erase(seedIt);
+                }
+                inState.emplace(s.slot, std::move(entryState));
                 work.push_back(s);
                 return true;
             }
@@ -1265,52 +1368,15 @@ DomainResult<V> DomainEngine<V>::analyze(const ir::CodeUnit& u, const MethodSig*
             }
             // 副本合并；未变不入队（fixpoint 终止性）。
             detail::DomState<V> merged = dst;
-            const ca::usize nL = merged.locals.size() > incoming.locals.size()
-                                     ? merged.locals.size()
-                                     : incoming.locals.size();
-            const ca::usize nS = merged.stack.size() > incoming.stack.size()
-                                     ? merged.stack.size()
-                                     : incoming.stack.size();
-            if (merged.locals.size() < nL) {
-                merged.locals.resize(nL, SlotV<V>{dom_.top(), false});
-            }
-            if (merged.stack.size() < nS) {
-                merged.stack.resize(nS, SlotV<V>{dom_.top(), false});
-            }
-            for (ca::usize i = 0; i < nL; ++i) {
-                // 行在入边缺席 = 入边该槽为 top：显式过域合并（verifier 格
-                // 下支配为 top；形状格吸收下值恒等 = 原值，bottom 标记保持，
-                // 故 BestEffort 逐位不变）。原短路实现把吸收语义硬编在协议
-                // 里，两格分离后不再成立。
-                const V src = i < incoming.locals.size()
-                                  ? incoming.locals[i].val
-                                  : dom_.top();
-                merged.locals[i].val = dom_.merge(merged.locals[i].val, src);
-                if (i < incoming.locals.size()) {
-                    merged.locals[i].bottom =
-                        merged.locals[i].bottom && incoming.locals[i].bottom;
-                }
-            }
-            for (ca::usize i = 0; i < nS; ++i) {
-                // 栈行与 locals 同规：缺席行显式与 top 合并（值恒等口径同上）。
-                const V src = i < incoming.stack.size()
-                                  ? incoming.stack[i].val
-                                  : dom_.top();
-                merged.stack[i].val = dom_.merge(merged.stack[i].val, src);
-                if (i < incoming.stack.size()) {
-                    merged.stack[i].bottom =
-                        merged.stack[i].bottom && incoming.stack[i].bottom;
-                }
-            }
-            // Strict 域合并失败（跨类不可解/异 offset Uninit 等）：显式拒绝，
-            // failAt 定位到合并点指令（不伪造帧，§10.1）。
-            const FrameSummary::Fail mergeFail = dom_.failCode();
-            if (mergeFail != FrameSummary::Fail::None) {
-                out.fail   = mergeFail;
-                out.failAt = s;
-                out.ok     = false;
-                result.frames.clear();
+            if (!mergeInto(merged, incoming, s)) {
                 return false;
+            }
+            if (seedIt != handlerSeed.end()) {
+                // 既有状态先到、种子尚未并入：本轮补并（此后种子出清）。
+                if (!mergeInto(merged, seedIt->second, s)) {
+                    return false;
+                }
+                handlerSeed.erase(seedIt);
             }
             if (!sameState(merged, dst)) {
                 dst = std::move(merged);
