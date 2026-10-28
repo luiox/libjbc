@@ -163,6 +163,19 @@ public:
     Result<void, EditError> moveBefore(InsnId id, InsnId at);
     Result<void, EditError> moveAfter(InsnId id, InsnId at);
 
+    /// @brief 区间顺序重排：把 `[first, last)` 的连续指令段整体搬到 at 之前。
+    ///
+    /// `moveBefore`/`moveAfter` 的区间推广，同样只重排 `order_`，单趟提出
+    /// 回插（O(n)），不触碰指令槽与标签锚定——锚在段内指令上的标签和指向
+    /// 段内标签的分支字段随句柄自然保持。`at == kNoInsn` 表示搬到方法末尾、
+    /// `last == kNoInsn` 表示段延伸到方法末尾（与 createLabel/bindLabel 的
+    /// 末哨兵约定同源——half-open 端点语义下尾段只有经哨兵可命名）。
+    /// first == last 是空段、last 位于 first 之前是倒置段、锚点落在段内
+    /// （锚点自身会被搬移卷走，语义未定义）一律 Err(BadRange)；锚点即段首
+    /// 或紧随段尾时段已在锚点位置，是合法的无操作。段策略（段首边界标签
+    /// 去向）在 CodeEditor 层。
+    Result<void, EditError> moveRange(InsnId first, InsnId last, InsnId at);
+
     /// @brief 删除一条指令；仍被 branch/switch 字段引用或被存活的
     ///        Boundary 标签锚定时返回 StillUsed。
     ///

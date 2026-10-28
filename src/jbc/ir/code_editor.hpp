@@ -55,6 +55,33 @@ public:
         return u_.dom.insertBefore(at, std::move(in));
     }
 
+    /// @brief 区间搬移策略：段首边界标签的两种去向（issue #10）。
+    ///
+    /// 段内（非段首）标签不进策略——它们锚定段内指令，随段迁移本就是
+    /// 顺序重排的默认语义；策略只裁决段首标签歧义（它既可读作段的入口，
+    /// 也可读作原段位的标记）。
+    enum class MoveRangePolicy {
+        kHeadFollows,  ///< 段首标签随段迁移（默认）：锚定关系不动，段内标签
+                       ///< 与段外对段内的引用随句柄自然保持
+        kHeadStays,    ///< 段首标签留在原位承接原 fallthrough：锚点重定向到
+                       ///< 原段位后继（段居尾则改绑方法末边界）；被异常表
+                       ///< 引用的段首标签不可机械改绑，StillUsed 拒绝
+    };
+
+    /// @brief 把 `[first, last)` 连续指令段整体搬到 at 之前，段内相对顺序
+    ///        不变；`at == kNoInsn` = 搬到方法末尾，`last == kNoInsn` =
+    ///        段延伸到方法末尾（尾哨兵，half-open 语义下尾段的可命名形）。
+    ///
+    /// 原子性：句柄存活、段几何（空段/倒置段/锚点在段内 → BadRange）与
+    /// 策略冲突（kHeadStays 遇异常表引用或段居尾时控制字段仍引用的段首
+    /// 标签 → StillUsed）全部在变更前校验，任一步失败不留半搬状态。
+    /// 无操作（锚点即段首或紧随段尾）整体不触发改绑。段内标签随段迁移、
+    /// 段外分支指向段内标签的引用保持有效，均由句柄锚定自然成立，无需
+    /// 改写任何字段；checkHandles 的「控制目标须锚定存活指令」不变量在
+    /// 两条策略下都保持（见 MoveRangePolicy::kHeadStays 的拒绝面）。
+    Result<void, EditError> moveRange(InsnId first, InsnId last, InsnId at,
+                                      MoveRangePolicy p = MoveRangePolicy::kHeadFollows);
+
     /// @brief 重写一条分支/switch 默认目标（不动 case 表）。
     ///
     /// 只改写该指令的控制流字段，不改写其他字段或异常表边界；被替换的

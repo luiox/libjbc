@@ -16,7 +16,7 @@
 | 层 | 内容 | 真源 |
 |---|---|---|
 | core（`jbc::core`） | 单类 lazy ClassFile DOM：骨架 eager + 属性四态（Untouched/Decoded/Modified/New，`mutate` 唯一置脏入口）+ CP 零拷贝只追加 + reader/writer 保真写回；指令 codec 字节精确往返 | §3–§5、§18 |
-| ir（`jbc::ir`） | CodeDom（`InsnId{owner,slot,gen}` 句柄、跨 DOM 结构性拒绝、erase StillUsed 协议）+ ClassSession promote/lower（relocation contract：LNT pcmap 精确 / SMT 链式重算 / LVT 端点钳制 / 未建模即 Err）+ 语义操作数层（memberOf/classOf/constOf + intern 家族 + 保活孪生）+ CodeEditor（erase 双策略） | §6–§7、§22 |
+| ir（`jbc::ir`） | CodeDom（`InsnId{owner,slot,gen}` 句柄、跨 DOM 结构性拒绝、erase StillUsed 协议）+ ClassSession promote/lower（relocation contract：LNT pcmap 精确 / SMT 链式重算 / LVT 端点钳制 / 未建模即 Err）+ 语义操作数层（memberOf/classOf/constOf + intern 家族 + 保活孪生）+ CodeEditor（erase 双策略 + moveRange 区间搬移） | §6–§7、§22、§39 |
 | analysis（`jbc::analysis`） | 逐指令到达帧 FrameAt；值域搭车 DomainEngine\<V\>（FrameEngine 已降级为壳）；帧自预言 best-effort，真实语料 oracle 100% | §25 |
 
 **验证入口（全部可复现）**：
@@ -1617,3 +1617,25 @@ MethodBuildError = Stage{Add, Promote, Edit, Lower} + 该段原族错误码（Ed
 ### 38.4 范围与测试
 
 本批只落方法体链路：类级 ClassDraft、与 test::ClassBuilder 的字节对拍、mj2x/mjt 消费面迁移不在内，现有 A4/A5/attach 签名不动。测试 method_editor_test 六件覆盖：批量建体重读、编辑器 append-commit 重读、放弃编辑器留空体成员（收尸归调用方）、append 失败不污染编辑器（无 sticky 状态）、控制流前置拒绝与下标报告、种子失败不留成员。
+
+## 39. 区间搬移原语 moveRange（2026-10-28，issue #10）
+
+CodeEditor 的搬移面原是单指令粒度（`moveBefore`/`moveAfter`）；逐条循环搬段时锚定边界随每条搬移漂移，语义不可组合，eraseBatch + 重建又会打断标签锚定。`moveRange(first, last, at, policy)` 把 `[first, last)` 连续指令段（段内相对顺序不变）整体搬到 at 之前，补上区间粒度。
+
+### 39.1 分层与标签随迁
+
+- **`CodeDom::moveRange(first, last, at)` 是机械层**：单趟提出回插重排 `order_`（O(n)），不触碰指令槽与标签锚定。标签锚在指令句柄上，段内标签随段迁移、段外分支指向段内标签的引用保持有效，均由句柄锚定自然成立，无需改写任何字段——这也是它区别于「eraseBatch + 重建」的根本：后者面向删除语义，引用改锚走新标签替换；前者不动任何引用。
+- **`CodeEditor::moveRange(first, last, at, policy)` 是策略层**：段几何之外只裁决段首边界标签的去向。段内（非段首）标签不进策略——它们锚定段内指令，随段迁移本就是顺序重排的默认语义；歧义只在段首（它既可读作段的入口，也可读作原段位的标记）。
+- **尾哨兵**：`at == kNoInsn` = 搬到方法末尾、`last == kNoInsn` = 段延伸到方法末尾，与 createLabel/bindLabel 的末哨兵约定同源——half-open 端点语义下尾段只有经哨兵可命名，而尾段恰是块搬移最常见的形态（GotoRearranger 换位消除 GOTO）。
+
+### 39.2 段首边界策略（MoveRangePolicy）
+
+- **kHeadFollows（默认）**：段首标签随段迁移，锚定关系不动。段内含标签且被段外分支引用时，搬移后引用仍指向段内同一逻辑位置。
+- **kHeadStays**：段首标签全部（Boundary 与 ControlFlow 两角色）留在原位承接原 fallthrough，锚点重定向到**原段位后继**（原 exclusive 端指令，即搬走后顶替原段位的指令）；引用段首标签的分支跟着重定向。标签句柄身份不变。段居尾（last 为尾哨兵）时承接者是方法末边界（改绑 end）。无操作（锚点即段首或紧随段尾）整体不触发改绑——没有位移就没有「留原地」可执行。
+
+### 39.3 拒绝面与原子性
+
+- **BadRange**：空段（first == last）、倒置段（last 在 first 之前）、锚点落在段内（锚点自身会被搬移卷走，语义未定义）。不连续性由构造排除：段 = order 中 pos(first) 到 pos(last) 的全部指令，无从 clamp。
+- **StillUsed（kHeadStays 专属）**：异常表 start/end/handler 引用的段首标签不可机械改绑（改边界 = 改保护区间语义，与 erase 的 fallthrough 策略同规，调用方先显式 bindLabel/destroyLabel）；段居尾时仍被 branch/switch 控制字段引用的段首标签同样拒绝——分支目标须锚定存活指令是 checkHandles/exportRaw 的 standing 不变量，end 锚定的控制目标连导出都无法表达。kHeadFollows 无 StillUsed 面：不改写任何引用，异常边界随段整体迁移是标签随迁的自然结果（区间与异常保护区的一致性归调用方，与单条 moveBefore 同责）。
+- **原子性**：句柄存活（InvalidHandle）、段几何、策略冲突全部在变更前校验；变更阶段只有标签改绑与单趟重排，两者的失败条件已被校验排除，任一步失败不留半搬状态。
+- 测试 ir_test 五件：正向搬移含分支标签随迁（lower 重读布局逐位成立）、kHeadStays 承接者改绑与尾段 end 边界、坏几何拒绝与原子性（失败后布局原样可继续用）、异常表边界双策略对照、与 insertAtLabel/eraseBatch 组合。

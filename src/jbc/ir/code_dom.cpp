@@ -30,6 +30,7 @@ const char* to_string(EditError e) noexcept
     case EditError::BadTarget: return "bad target";
     case EditError::BranchOverflow: return "branch overflow";
     case EditError::BadOperand: return "bad operand";
+    case EditError::BadRange: return "bad range";
     }
     return "?";
 }
@@ -304,6 +305,60 @@ Result<void, EditError> CodeDom::moveAfter(InsnId id, InsnId at)
         return Err(EditError::InvalidHandle);
     }
     return moveInOrder(order_, id, at, true);
+}
+
+Result<void, EditError> CodeDom::moveRange(InsnId first, InsnId last, InsnId at)
+{
+    // 校验全部先于变更：句柄存活 → 段位构成非空前向段 → 锚点不在段内。
+    // 校验通过后只剩单趟提出回插，不再有失败路径（原子性由构造保证）。
+    if (slotOf(first) == nullptr) {
+        return Err(EditError::InvalidHandle);
+    }
+    const bool toEnd     = at == kNoInsn;
+    const bool lastIsEnd = last == kNoInsn;   // 尾哨兵：段延伸到方法末尾
+    if (!toEnd && slotOf(at) == nullptr) {
+        return Err(EditError::InvalidHandle);
+    }
+    if (!lastIsEnd && slotOf(last) == nullptr) {
+        return Err(EditError::InvalidHandle);
+    }
+    ca::usize firstPos = order_.size();
+    ca::usize lastPos  = order_.size();
+    ca::usize atPos    = order_.size();   // kNoInsn 锚点 = 末尾哨兵位
+    for (ca::usize i = 0; i < order_.size(); ++i) {
+        if (order_[i] == first) {
+            firstPos = i;
+        }
+        if (!lastIsEnd && order_[i] == last) {
+            lastPos = i;
+        }
+        if (order_[i] == at) {
+            atPos = i;
+        }
+    }
+    // 空段（first == last）与倒置段（last 在 first 之前）不可搬移。
+    if (firstPos >= lastPos) {
+        return Err(EditError::BadRange);
+    }
+    // 锚点落在段内：锚点自身会被搬移卷走，语义未定义。
+    if (!toEnd && atPos > firstPos && atPos < lastPos) {
+        return Err(EditError::BadRange);
+    }
+    // 段已在锚点位置（锚点即段首，或锚点紧随段尾）：合法无操作。
+    if (atPos == firstPos || atPos == lastPos) {
+        return Ok();
+    }
+
+    const ca::usize segLen = lastPos - firstPos;
+    const InsnId* base = order_.data();
+    std::vector<InsnId> seg(base + firstPos, base + lastPos);
+    order_.erase(order_.begin() + static_cast<std::ptrdiff_t>(firstPos),
+                 order_.begin() + static_cast<std::ptrdiff_t>(lastPos));
+    // 锚位在段后（含末哨兵）的按段长回移；在段前的原位即插入点。
+    const ca::usize insertPos = atPos > firstPos ? atPos - segLen : atPos;
+    order_.insert(order_.begin() + static_cast<std::ptrdiff_t>(insertPos),
+                  seg.begin(), seg.end());
+    return Ok();
 }
 
 std::vector<InsnId> CodeDom::usersOf(InsnId id) const

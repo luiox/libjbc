@@ -13,6 +13,7 @@ enum class EditError {
     Decode,          ///< 底层 code 数组解码失败（截断/保留码等）
     BranchOverflow,  ///< export 时 i16 分支偏移放不下（需显式 goto_w 拓宽）
     BadOperand,      ///< 操作数与指令形状不符（如非法局部变量索引）
+    BadRange,        ///< 区间端点不构成非空前向段，或搬移锚点落在段内
 };
 
 /// @brief promote 失败原因（classfile 低层 → ir 高层）。

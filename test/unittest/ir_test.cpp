@@ -579,6 +579,409 @@ TEST(IrSessionTest, EditorEraseBatchBeatsSequentialScanCost)
     EXPECT_EQ(bB.unwrap(), bS.unwrap());
 }
 
+// ---------------------------------------------------------------------------
+// 区间搬移原语 moveRange（issue #10）：段整体重定位、标签随迁、段首边界
+// 策略与原子性
+// ---------------------------------------------------------------------------
+
+namespace {
+
+/// iconst_1; pop; return、无嵌套属性的最小类：组合测试要在删除原始指令
+/// 后 lower，带 LNT 的基座会按 relocation contract 拒绝悬垂 pc 引用。
+Bytes makePlainClass()
+{
+    ClassBuilder cb;
+    const ca::u16 thisIdx = cb.utf8("p/T");
+    const ca::u16 superIdx = cb.utf8("java/lang/Object");
+    const ca::u16 codeIdx = cb.utf8("Code");
+    const ca::u16 mIdx = cb.utf8("m");
+    const ca::u16 voidIdx = cb.utf8("()V");
+    cb.setThis(cb.classRef(thisIdx));
+    cb.setSuper(cb.classRef(superIdx));
+    cb.setAccess(0x0021);
+    cb.setVersion(52);
+    const Bytes code = {0x04, 0x57, 0xb1};   // iconst_1(0); pop(1); return(2)
+    cb.addMethod(0x0009, mIdx, voidIdx,
+                 {AttrSpec{codeIdx, jbc::test::codeContent(1, 0, code, {}, {})}});
+    return cb.build();
+}
+
+}   // namespace
+
+
+TEST(IrSessionTest, MoveRangeMovesSegmentAndKeepsReferences)
+{
+    // 基座 [iconst_1, pop, return] 上搭：T0: goto Lh; N1(Lh); N2(Lb);
+    // N3(Lt); G1: goto Lb。段 [N1, G1) = {N1,N2,N3}：段首标签 Lh 被段外
+    // T0 引用，段内标签 Lb 被段外（exclusive 端）G1 引用。整体搬到 pop
+    // 之前：段内相对顺序不变，标签锚定随句柄自然随迁，段外引用仍指向
+    // 同一逻辑指令；lower 重读后布局逐位成立。
+    auto s = sessionOf(makeEditableClass(false));
+    ASSERT_NE(s, nullptr);
+    auto p = promoteMethod(*s, 0);
+    ASSERT_TRUE(p.is_ok());
+    jbc::ir::CodeUnit& cu = *p.unwrap();
+    CodeEditor ed(cu);
+    ASSERT_EQ(cu.dom.size(), 3u);
+
+    const auto ic  = cu.dom.order()[0];   // iconst_1
+    const auto pop = cu.dom.order()[1];   // pop
+    const auto ret = cu.dom.order()[2];   // return
+
+    auto lh = ed.createLabel();
+    auto lb = ed.createLabel();
+    auto lt = ed.createLabel();
+    ASSERT_TRUE(lh.is_ok() && lb.is_ok() && lt.is_ok());
+    auto n1 = ed.append(CodeEditor::simple(Op::NOP));
+    ASSERT_TRUE(n1.is_ok());
+    ASSERT_TRUE(ed.bindLabel(lh.unwrap(), n1.unwrap()).is_ok());
+    auto n2 = ed.append(CodeEditor::simple(Op::NOP));
+    ASSERT_TRUE(n2.is_ok());
+    ASSERT_TRUE(ed.bindLabel(lb.unwrap(), n2.unwrap()).is_ok());
+    auto n3 = ed.append(CodeEditor::simple(Op::NOP));
+    ASSERT_TRUE(n3.is_ok());
+    ASSERT_TRUE(ed.bindLabel(lt.unwrap(), n3.unwrap()).is_ok());
+    auto g1 = ed.append(CodeEditor::branch(Op::GOTO, lb.unwrap()));
+    ASSERT_TRUE(g1.is_ok());
+    auto t0 = ed.insertAtStart(CodeEditor::branch(Op::GOTO, lh.unwrap()));
+    ASSERT_TRUE(t0.is_ok());
+    // 布局：T0 iconst_1 pop return N1 N2 N3 G1。
+    ASSERT_EQ(cu.dom.size(), 8u);
+
+    const auto segFirst = n1.unwrap();
+    const auto segLast  = g1.unwrap();   // exclusive 端：段 = {N1,N2,N3}
+
+    // 无操作锚点（锚即段首 / 锚紧随段尾）：合法且不触发布局与改绑。
+    ASSERT_TRUE(ed.moveRange(segFirst, segLast, segFirst).is_ok());
+    ASSERT_TRUE(ed.moveRange(segFirst, segLast, segLast).is_ok());
+    ASSERT_EQ(cu.dom.order()[0], t0.unwrap());
+    ASSERT_EQ(cu.dom.order()[4], segFirst);
+
+    // 整体搬到 pop 之前：T0 iconst_1 | N1 N2 N3 | pop return G1。
+    ASSERT_TRUE(ed.moveRange(segFirst, segLast, pop).is_ok());
+    const std::vector<jbc::ir::InsnId> want = {
+        t0.unwrap(), ic, segFirst, n2.unwrap(), n3.unwrap(), pop, ret, segLast};
+    const auto& order = cu.dom.order();
+    ASSERT_EQ(order.size(), want.size());
+    for (ca::usize i = 0; i < want.size(); ++i) {
+        EXPECT_EQ(order[i], want[i]);
+    }
+
+    // 标签随段迁移：句柄未变，锚点指令未变，只是指令换了程序位置。
+    const auto th = cu.dom.resolveLabel(lh.unwrap());
+    ASSERT_TRUE(th.is_ok());
+    EXPECT_EQ(th.unwrap().insn, segFirst);
+    const auto tb = cu.dom.resolveLabel(lb.unwrap());
+    ASSERT_TRUE(tb.is_ok());
+    EXPECT_EQ(tb.unwrap().insn, n2.unwrap());
+    const auto tt = cu.dom.resolveLabel(lt.unwrap());
+    ASSERT_TRUE(tt.is_ok());
+    EXPECT_EQ(tt.unwrap().insn, n3.unwrap());
+
+    // lower 重读：迁移后的逻辑引用原样落盘（T0→N1、G1→N2）。
+    ASSERT_TRUE(cu.dom.encode().is_ok());
+    ASSERT_TRUE(lowerMethod(*s, 0).is_ok());
+    auto s2 = sessionOf(jbc::test::writeOk(s->backing()));
+    ASSERT_NE(s2, nullptr);
+    auto p2 = promoteMethod(*s2, 0);
+    ASSERT_TRUE(p2.is_ok());
+    jbc::ir::CodeUnit& cu2 = *p2.unwrap();
+    ASSERT_EQ(cu2.dom.size(), 8u);
+    const auto& o2    = cu2.dom.order();
+    const auto& head0 = *cu2.dom.peek(o2[0]);
+    EXPECT_EQ(head0.op, Op::GOTO);
+    const auto t0t = cu2.dom.resolveLabel(head0.target);
+    ASSERT_TRUE(t0t.is_ok());
+    EXPECT_EQ(t0t.unwrap().insn, o2[2]);
+    EXPECT_EQ(cu2.dom.peek(o2[2])->op, Op::NOP);
+    const auto& tail7 = *cu2.dom.peek(o2[7]);
+    EXPECT_EQ(tail7.op, Op::GOTO);
+    const auto g1t = cu2.dom.resolveLabel(tail7.target);
+    ASSERT_TRUE(g1t.is_ok());
+    EXPECT_EQ(g1t.unwrap().insn, o2[3]);
+    EXPECT_EQ(cu2.dom.peek(o2[3])->op, Op::NOP);
+}
+
+TEST(IrSessionTest, MoveRangeHeadStaysRebindsHeadLabels)
+{
+    // 段首边界标签的「留原地」策略：锚点重定向到原段位后继，标签句柄
+    // 身份不变，段外引用跟着指到承接者；尾段（last 用尾哨兵）的承接者
+    // 是方法末边界，此时仍被控制字段引用的段首标签显式拒绝。
+    auto s = sessionOf(makeEditableClass(false));
+    ASSERT_NE(s, nullptr);
+    auto p = promoteMethod(*s, 0);
+    ASSERT_TRUE(p.is_ok());
+    jbc::ir::CodeUnit& cu = *p.unwrap();
+    CodeEditor ed(cu);
+    ASSERT_EQ(cu.dom.size(), 3u);
+
+    const auto ic  = cu.dom.order()[0];
+    const auto pop = cu.dom.order()[1];
+    const auto ret = cu.dom.order()[2];
+
+    // 段 [N1, N3) = {N1,N2}，段首标签 Lh 被段外 G1 引用。
+    auto lh = ed.createLabel();
+    ASSERT_TRUE(lh.is_ok());
+    auto n1 = ed.append(CodeEditor::simple(Op::NOP));
+    ASSERT_TRUE(n1.is_ok());
+    ASSERT_TRUE(ed.bindLabel(lh.unwrap(), n1.unwrap()).is_ok());
+    auto n2 = ed.append(CodeEditor::simple(Op::NOP));
+    ASSERT_TRUE(n2.is_ok());
+    auto n3 = ed.append(CodeEditor::simple(Op::NOP));
+    ASSERT_TRUE(n3.is_ok());
+    auto g1 = ed.append(CodeEditor::branch(Op::GOTO, lh.unwrap()));
+    ASSERT_TRUE(g1.is_ok());
+    // 布局：iconst_1 pop return N1 N2 N3 G1。
+
+    // 无操作锚点下的 kHeadStays 也不改绑：Lh 仍锚 N1。
+    ASSERT_TRUE(ed.moveRange(n1.unwrap(), n3.unwrap(), n1.unwrap(),
+                             CodeEditor::MoveRangePolicy::kHeadStays)
+                    .is_ok());
+    EXPECT_EQ(cu.dom.resolveLabel(lh.unwrap()).unwrap().insn, n1.unwrap());
+
+    // 整体搬到方法首：Lh 留在原位，锚点重定向到原段位后继 N3；
+    // 引用它的 G1 跟着重定向（引用重定向到原段位后继）。
+    ASSERT_TRUE(ed.moveRange(n1.unwrap(), n3.unwrap(), ic,
+                             CodeEditor::MoveRangePolicy::kHeadStays)
+                    .is_ok());
+    const std::vector<jbc::ir::InsnId> want = {
+        n1.unwrap(), n2.unwrap(), ic, pop, ret, n3.unwrap(), g1.unwrap()};
+    const auto& order = cu.dom.order();
+    ASSERT_EQ(order.size(), want.size());
+    for (ca::usize i = 0; i < want.size(); ++i) {
+        EXPECT_EQ(order[i], want[i]);
+    }
+    EXPECT_TRUE(cu.dom.validLabel(lh.unwrap()));
+    EXPECT_EQ(cu.dom.resolveLabel(lh.unwrap()).unwrap().insn, n3.unwrap());
+    const auto& g1Insn = *cu.dom.peek(g1.unwrap());
+    ASSERT_EQ(g1Insn.target, lh.unwrap());   // 引用句柄本身未换
+    const auto g1t = cu.dom.resolveLabel(g1Insn.target);
+    ASSERT_TRUE(g1t.is_ok());
+    EXPECT_EQ(g1t.unwrap().insn, n3.unwrap());
+
+    // 尾段 [N4, end)（last = 尾哨兵）+ 无引用段首标签 Lm：kHeadStays 把
+    // Lm 改绑到方法末边界（resolveLabel → End）。
+    auto lm = ed.createLabel();
+    ASSERT_TRUE(lm.is_ok());
+    auto n4 = ed.append(CodeEditor::simple(Op::NOP));
+    ASSERT_TRUE(n4.is_ok());
+    ASSERT_TRUE(ed.bindLabel(lm.unwrap(), n4.unwrap()).is_ok());
+    ASSERT_TRUE(ed.moveRange(n4.unwrap(), jbc::ir::kNoInsn, ic,
+                             CodeEditor::MoveRangePolicy::kHeadStays)
+                    .is_ok());
+    const auto lmTarget = cu.dom.resolveLabel(lm.unwrap());
+    ASSERT_TRUE(lmTarget.is_ok());
+    EXPECT_TRUE(lmTarget.unwrap().isEnd());
+
+    // 尾段段首标签被控制字段引用：kHeadStays 拒绝（end 锚定的控制目标
+    // 不可表达），kHeadFollows 照常随段迁移。
+    auto lq = ed.createLabel();
+    ASSERT_TRUE(lq.is_ok());
+    auto n5 = ed.append(CodeEditor::simple(Op::NOP));
+    ASSERT_TRUE(n5.is_ok());
+    ASSERT_TRUE(ed.bindLabel(lq.unwrap(), n5.unwrap()).is_ok());
+    auto g2 = ed.append(CodeEditor::branch(Op::GOTO, lq.unwrap()));
+    ASSERT_TRUE(g2.is_ok());
+    auto n6 = ed.append(CodeEditor::simple(Op::NOP));
+    ASSERT_TRUE(n6.is_ok());
+    {
+        auto rej = ed.moveRange(n5.unwrap(), jbc::ir::kNoInsn, ic,
+                                CodeEditor::MoveRangePolicy::kHeadStays);
+        ASSERT_TRUE(rej.is_err());
+        EXPECT_EQ(rej.unwrap_err(), jbc::ir::EditError::StillUsed);
+    }
+    {
+        auto ok = ed.moveRange(n5.unwrap(), jbc::ir::kNoInsn, ic,
+                               CodeEditor::MoveRangePolicy::kHeadFollows);
+        ASSERT_TRUE(ok.is_ok()) << jbc::ir::to_string(ok.unwrap_err());
+    }
+    // lq 锚点随段走（仍指 N5），G2 的引用照常解析。
+    EXPECT_EQ(cu.dom.resolveLabel(lq.unwrap()).unwrap().insn, n5.unwrap());
+    const auto& g2Insn = *cu.dom.peek(g2.unwrap());
+    ASSERT_EQ(g2Insn.target, lq.unwrap());
+    const auto g2t = cu.dom.resolveLabel(g2Insn.target);
+    ASSERT_TRUE(g2t.is_ok());
+    EXPECT_EQ(g2t.unwrap().insn, n5.unwrap());
+    ASSERT_TRUE(cu.dom.encode().is_ok());
+}
+
+TEST(IrSessionTest, MoveRangeRejectsBadGeometry)
+{
+    // 空段 / 倒置段 / 锚点在段内 → BadRange；坏句柄 → InvalidHandle；
+    // 尾哨兵 last 是合法形；失败后编辑器状态原样可继续用（原子性）。
+    auto s = sessionOf(makeEditableClass(false));
+    ASSERT_NE(s, nullptr);
+    auto p = promoteMethod(*s, 0);
+    ASSERT_TRUE(p.is_ok());
+    jbc::ir::CodeUnit& cu = *p.unwrap();
+    CodeEditor ed(cu);
+    ASSERT_EQ(cu.dom.size(), 3u);
+
+    const auto ic  = cu.dom.order()[0];
+    const auto pop = cu.dom.order()[1];
+    const auto ret = cu.dom.order()[2];
+    auto n1 = ed.append(CodeEditor::simple(Op::NOP));
+    auto n2 = ed.append(CodeEditor::simple(Op::NOP));
+    auto n3 = ed.append(CodeEditor::simple(Op::NOP));
+    ASSERT_TRUE(n1.is_ok() && n2.is_ok() && n3.is_ok());
+    // 布局：iconst_1 pop return N1 N2 N3。
+
+    {   // 空段：first == last。
+        auto r = ed.moveRange(n1.unwrap(), n1.unwrap(), ic);
+        ASSERT_TRUE(r.is_err());
+        EXPECT_EQ(r.unwrap_err(), jbc::ir::EditError::BadRange);
+    }
+    {   // 倒置段：first 在 last 之后。
+        auto r = ed.moveRange(n2.unwrap(), n1.unwrap(), ic);
+        ASSERT_TRUE(r.is_err());
+        EXPECT_EQ(r.unwrap_err(), jbc::ir::EditError::BadRange);
+    }
+    {   // 锚点在段内：锚会被搬移卷走。
+        auto r = ed.moveRange(ic, ret, pop);
+        ASSERT_TRUE(r.is_err());
+        EXPECT_EQ(r.unwrap_err(), jbc::ir::EditError::BadRange);
+    }
+    {   // 坏句柄：kNoInsn 段首（段首必须是真实成员）与跨 DOM 假句柄。
+        auto r1 = ed.moveRange(jbc::ir::kNoInsn, n1.unwrap(), ic);
+        ASSERT_TRUE(r1.is_err());
+        EXPECT_EQ(r1.unwrap_err(), jbc::ir::EditError::InvalidHandle);
+        const jbc::ir::InsnId fake{cu.dom.owner() + 4096, 0, 0};
+        auto r2 = ed.moveRange(n1.unwrap(), n2.unwrap(), fake);
+        ASSERT_TRUE(r2.is_err());
+        EXPECT_EQ(r2.unwrap_err(), jbc::ir::EditError::InvalidHandle);
+    }
+    // 连续失败不留半搬状态：布局原样，编辑器可继续正常工作。
+    const std::vector<jbc::ir::InsnId> want = {
+        ic, pop, ret, n1.unwrap(), n2.unwrap(), n3.unwrap()};
+    const auto& order = cu.dom.order();
+    ASSERT_EQ(order.size(), want.size());
+    for (ca::usize i = 0; i < want.size(); ++i) {
+        EXPECT_EQ(order[i], want[i]);
+    }
+    // 尾段 [N1, end) 整体搬到方法末尾 = 已在位置：合法无操作。
+    ASSERT_TRUE(ed.moveRange(n1.unwrap(), jbc::ir::kNoInsn, jbc::ir::kNoInsn)
+                    .is_ok());
+    EXPECT_EQ(cu.dom.order().size(), want.size());
+    auto enc = cu.dom.encode();
+    ASSERT_TRUE(enc.is_ok());
+}
+
+TEST(IrSessionTest, MoveRangeExcBoundaryPolicyAndAtomicity)
+{
+    // 异常表边界引用的段首标签：kHeadStays 不可机械改绑（改边界 = 改保护
+    // 区间语义，与 erase 的 fallthrough 策略同规）→ StillUsed，且失败现场
+    // 逐位原样（原子性）；kHeadFollows 下异常边界随段整体迁移，lower 重读
+    // 后保护区间指向搬移后的布局。exc 布局 start@iconst_1、end@pop（段内
+    // 双边界）、handler@return（段外），搬移后区间仍非退化。
+    const Bytes cls = makeExcClass(0, 1, 2);
+    auto s = sessionOf(cls);
+    ASSERT_NE(s, nullptr);
+    auto p = promoteMethod(*s, 0);
+    ASSERT_TRUE(p.is_ok());
+    jbc::ir::CodeUnit& cu = *p.unwrap();
+    CodeEditor ed(cu);
+    ASSERT_EQ(cu.exc.size(), 1u);
+
+    const auto startId = cu.dom.order()[0];   // iconst_1 = exc.start
+    const auto popId   = cu.dom.order()[1];   // pop      = exc.end
+    const auto retId   = cu.dom.order()[2];   // return   = exc.handler
+    auto tail = ed.append(CodeEditor::simple(Op::NOP));   // 锚点候选（段外）
+    ASSERT_TRUE(tail.is_ok());
+
+    const auto orderBefore = cu.dom.order();
+    const auto startBefore = cu.dom.resolveLabel(cu.exc[0].start);
+    ASSERT_TRUE(startBefore.is_ok());
+
+    {   // 段 [iconst_1, return) = {iconst_1, pop}，段首标签 = exc.start。
+        auto rej = ed.moveRange(startId, retId, tail.unwrap(),
+                                CodeEditor::MoveRangePolicy::kHeadStays);
+        ASSERT_TRUE(rej.is_err());
+        EXPECT_EQ(rej.unwrap_err(), jbc::ir::EditError::StillUsed);
+    }
+    // 原子性：失败后顺序与边界解析逐位原样，编辑器照常可用。
+    ASSERT_EQ(cu.dom.order(), orderBefore);
+    const auto startAfter = cu.dom.resolveLabel(cu.exc[0].start);
+    ASSERT_TRUE(startAfter.is_ok());
+    EXPECT_EQ(startAfter.unwrap().insn, startBefore.unwrap().insn);
+
+    {   // kHeadFollows：异常边界随段整体迁移（标签锚定不动，代码搬家）。
+        auto ok = ed.moveRange(startId, retId, tail.unwrap(),
+                               CodeEditor::MoveRangePolicy::kHeadFollows);
+        ASSERT_TRUE(ok.is_ok()) << jbc::ir::to_string(ok.unwrap_err());
+    }
+    // 布局 [return, iconst_1, pop, nop]：双边界随段走，handler 原位。
+    EXPECT_EQ(cu.dom.resolveLabel(cu.exc[0].start).unwrap().insn, startId);
+    EXPECT_EQ(cu.dom.resolveLabel(cu.exc[0].end).unwrap().insn, popId);
+    EXPECT_EQ(cu.dom.resolveLabel(cu.exc[0].handler).unwrap().insn, retId);
+    // lower 重读：保护区间 [1, 2) 覆盖搬移后的 {iconst_1, pop}，handler@0。
+    ASSERT_TRUE(lowerMethod(*s, 0).is_ok());
+    auto s2 = sessionOf(jbc::test::writeOk(s->backing()));
+    ASSERT_NE(s2, nullptr);
+    auto dc = s2->backing().decodeAttr(s2->backing().methods[0].attrs[0]);
+    ASSERT_TRUE(dc.is_ok());
+    auto& ca2 = static_cast<CodeAttr&>(*dc.unwrap());
+    ASSERT_EQ(ca2.excTable.size(), 1u);
+    EXPECT_EQ(ca2.excTable[0].startPc, 1u);
+    EXPECT_EQ(ca2.excTable[0].endPc, 2u);
+    EXPECT_EQ(ca2.excTable[0].handlerPc, 0u);
+}
+
+TEST(IrSessionTest, MoveRangeComposesWithInsertAtLabelAndEraseBatch)
+{
+    // 与其他原语组合：moveRange 尾段前移 → insertAtLabel 落在迁移后的段首
+    // 标签边界 → eraseBatch 清掉原地残余 → lower 重读全链成立。
+    auto s = sessionOf(makePlainClass());
+    ASSERT_NE(s, nullptr);
+    auto p = promoteMethod(*s, 0);
+    ASSERT_TRUE(p.is_ok());
+    jbc::ir::CodeUnit& cu = *p.unwrap();
+    CodeEditor ed(cu);
+    ASSERT_EQ(cu.dom.size(), 3u);
+
+    const auto ic  = cu.dom.order()[0];
+    const auto pop = cu.dom.order()[1];
+    auto lh = ed.createLabel();
+    ASSERT_TRUE(lh.is_ok());
+    auto n1 = ed.append(CodeEditor::simple(Op::NOP));
+    ASSERT_TRUE(n1.is_ok());
+    ASSERT_TRUE(ed.bindLabel(lh.unwrap(), n1.unwrap()).is_ok());
+    auto n2 = ed.append(CodeEditor::simple(Op::NOP));
+    ASSERT_TRUE(n2.is_ok());
+    // 布局：iconst_1 pop return N1(Lh) N2。
+
+    // 尾段 [N1, end) = {N1,N2} 整体搬到方法首。
+    ASSERT_TRUE(ed.moveRange(n1.unwrap(), jbc::ir::kNoInsn, ic).is_ok());
+    ASSERT_EQ(cu.dom.order()[0], n1.unwrap());
+    ASSERT_EQ(cu.dom.order()[1], n2.unwrap());
+
+    // insertAtLabel 在迁移后的段首标签边界插入：新头接管标签。
+    auto n3 = ed.insertAtLabel(lh.unwrap(), CodeEditor::simple(Op::NOP));
+    ASSERT_TRUE(n3.is_ok());
+    ASSERT_EQ(cu.dom.order()[0], n3.unwrap());
+    EXPECT_EQ(cu.dom.resolveLabel(lh.unwrap()).unwrap().insn, n3.unwrap());
+
+    // eraseBatch 清掉原基座残余（retarget 策略，pop 的承接者是 return）。
+    std::vector<jbc::ir::InsnId> doomed = {ic, pop};
+    ASSERT_TRUE(ed.eraseBatch(doomed, CodeEditor::ErasePolicy::kRetargetToFallthrough)
+                    .is_ok());
+    ASSERT_EQ(cu.dom.size(), 4u);
+    const auto& order = cu.dom.order();
+    EXPECT_EQ(order[0], n3.unwrap());
+    EXPECT_EQ(order[1], n1.unwrap());
+    EXPECT_EQ(order[2], n2.unwrap());
+
+    // lower 重读：N3 N1 N2 return 全链成立，标签边界落位正确。
+    ASSERT_TRUE(lowerMethod(*s, 0).is_ok());
+    auto s2 = sessionOf(jbc::test::writeOk(s->backing()));
+    ASSERT_NE(s2, nullptr);
+    auto p2 = promoteMethod(*s2, 0);
+    ASSERT_TRUE(p2.is_ok());
+    jbc::ir::CodeUnit& cu2 = *p2.unwrap();
+    ASSERT_EQ(cu2.dom.size(), 4u);
+    EXPECT_EQ(cu2.dom.peek(cu2.dom.order()[0])->op, Op::NOP);
+    EXPECT_EQ(cu2.dom.peek(cu2.dom.order()[3])->op, Op::RETURN);
+}
+
 TEST(IrSessionTest, LowerCatchesDanglingExceptionHandle)
 {
     // end 用方法末尾标签（endPc = code 长度，合法形态）：return 不被异常表

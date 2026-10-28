@@ -8,6 +8,10 @@
 - **v0.4.16 已发版（2026-10-17）**：触发条件两条皆齐（注解族属性面 + 类构建能力面 + 消费者协议面）。堆叠批次随发版说明见下「v0.4.16 发版说明」一节。
 - **v0.4.16 之后重新进入堆叠期（2026-10-20 起）**：新增批次不 bump、不打 tag，随下个里程碑一次发版。
 
+## v0.4.18 发版说明
+
+自 `0.4.17` 落地 CodeEditor 区间搬移原语 moveRange（issue #10），版本 bump 至 0.4.18。`CodeEditor::moveRange(first, last, at, policy)` 把 `[first, last)` 连续指令段（段内相对顺序不变）整体搬到锚点之前，补上搬移面的区间粒度：机械层 `CodeDom::moveRange` 单趟重排 `order_`，标签锚定在指令句柄上，段内标签随段迁移与段外引用保持由句柄锚定自然成立，不改写任何字段；策略层 `MoveRangePolicy` 裁决段首边界标签两种语义——`kHeadFollows`（默认，随段走）/`kHeadStays`（留原位承接原 fallthrough，锚点重定向到原段位后继，段居尾改绑方法末边界）。拒绝面：空段/倒置段/锚点在段内 → 新错误码 `EditError::BadRange`；kHeadStays 遇异常表引用的段首标签或段居尾时控制字段仍引用的段首标签 → StillUsed；全部校验先于变更，任一步失败不留半搬状态。尾哨兵 `last == kNoInsn` 表示段延伸到方法末尾（half-open 语义下尾段的可命名形）。消费方：mjbase 块重排类优化 pass（GotoRearranger 迁移件）。连带修复：0.4.17 批次漏更的 `get_lib_version` 与库版本测试期望（停在 0.4.16）随本次 bump 一并对齐 0.4.18。测试 ir_test 新增五件（正向搬移含分支标签随迁 / kHeadStays 承接者改绑与尾段 end 边界 / 坏几何拒绝与原子性 / 异常表边界双策略对照 / 与 insertAtLabel、eraseBatch 组合）；设计记录见 docs/design.md §39。
+
 ## v0.4.17 发版说明
 
 自 `0.4.16` 移除 `jbc::consumer` 模块（E3 源/骨架、E1 引用事实、rename 跨类编排）及其闭环 demo（libjbc_deobf_demo）与三支 consumer 测试，版本 bump 至 0.4.17。边界裁决：source/scan 消费者协议面与 rename 跨类编排是上层消费方设施，不属于 libjbc 的单类字节核边界（core/ir/type/analysis 之外不设消费面）；同名能力由上层仓单份持有（mjbase 的 consumer/renamer），两仓平行实现随之消除。连带清理：伞头 jbc.hpp 收编面与 units.hpp 注释中的 consumer 交叉引用。v0.4.16 引入的其余批次（MethodEditor、BSM intern、属性挂载、文档）不受影响。
