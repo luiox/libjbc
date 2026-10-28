@@ -15,6 +15,7 @@
 #include "jbc/core/bytes.hpp"
 #include "jbc/core/class_file.hpp"
 #include "jbc/core/constant_pool.hpp"
+#include "jbc/core/cp_resolve.hpp"
 #include "jbc/core/error.hpp"
 #include "jbc/core/insn.hpp"
 #include "jbc/core/insn_codec.hpp"
