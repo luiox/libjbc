@@ -654,6 +654,66 @@ TEST(SmtBuildApi, FramesNotAlignedRejected)
     EXPECT_EQ(r.unwrap_err(), SmtBuildError::FramesNotOk);
 }
 
+/// try 范围只覆盖不可抛指令（iload/ifeq/goto）+ handler 段首 nop 的形态。
+/// JVM 校验器对范围内全部有帧指令做 handler 可指派性检查，handler 入口恒
+/// 须有帧；引擎若仅从可抛指令发异常边，此形态下 handler 不可达，SMT 缺
+/// handler 帧（JVM 加载期 VerifyError）。handler 本体只有异常边进入。
+/// anyCatch=false 时 catch_type 指向真实 Class 条目，true 时为 0（any）。
+std::shared_ptr<ClassSession> deadTryClass(bool anyCatch)
+{
+    ClassBuilder cb = baseClass();
+    const ca::u32 catchCp =
+        anyCatch ? 0 : static_cast<ca::u32>(cb.classRef(cb.utf8("java/lang/Exception")));
+    const ca::u16 codeIdx = cb.utf8("Code");
+    const Bytes code = {
+        0x04,             // 0  iconst_1
+        0x3b,             // 1  istore_0
+        0x1a,             // 2  iload_0            ← try 起（不可抛）
+        0x99, 0x00, 0x09, // 3  ifeq -> 12         （范围内，不可抛）
+        0xa7, 0x00, 0x06, // 6  goto -> 12         ← try 止（开区间）
+        0x00,             // 9  nop                ← handler 段首
+        0x57,             // 10 pop（消耗 throwable）
+        0xb1,             // 11 return
+        0xb1,             // 12 return
+    };
+    std::vector<AttrSpec> ma;
+    ma.push_back(AttrSpec{
+        codeIdx,
+        jbc::test::codeContent(1, 1, code, {ExcSpec{2, 9, 9, static_cast<ca::u16>(catchCp)}})});
+    cb.addMethod(0x0009, cb.utf8("m"), cb.utf8("(I)V"), std::move(ma));
+    return sessionOf(cb.build());
+}
+
+TEST(SmtBuildApi, HandlerFrameEmittedForFramedCoveredInsns)
+{
+    const MethodSig sig{true, "(I)V", "m", ""};
+    const auto check = [&](ClassSession& s) {
+        const SmtBuildResult r = buildOf(s, sig, StubResolver{});
+        ASSERT_TRUE(r.needed);
+        ASSERT_NE(r.attr, nullptr);
+        const auto full =
+            expandSmt(*r.attr, entryLocalsOf(sig), s.backing().cp);
+        const auto it = std::find_if(full.begin(), full.end(),
+                                     [](const jbc::test::FullFrame& f) { return f.offset == 9; });
+        ASSERT_NE(it, full.end()) << "handler entry frame missing at pc 9";
+        ASSERT_EQ(it->stack.size(), 1u);
+        EXPECT_EQ(it->stack[0].k, VKind::Ref);
+    };
+
+    // catch_type 非零变体。
+    {
+        auto s = deadTryClass(false);
+        ASSERT_NE(s, nullptr);
+        check(*s);
+    }
+    // catch_type 0（any）变体：handler 帧同样恒在。
+    {
+        auto s = deadTryClass(true);
+        ASSERT_NE(s, nullptr);
+        check(*s);
+    }
+}
+
 TEST(SmtBuildApi, BranchMergeFrameIsSame1WithInternedObject)
 {
     auto s = branchMergeClass();

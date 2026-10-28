@@ -115,9 +115,11 @@ public:
     /// 与真实入边同权汇合（verifier 口径：入口帧 = 全部入边 join）——不再
     /// 抢先单跑，真实边缺席时由 worklist 排空后的种子倾泻兜底（异常-only
     /// 处理器语义不变）。开启（Strict 域）：引擎不播种，改为对 try 范围内
-    /// 每条可抛指令逐覆盖 handler 发异常出口边——入口状态 = 抛出点 in-state
-    /// locals + [catch_type 对应类型]，handler 可达 ⟺ 至少一条异常边实际
-    /// 并入（死 try 范围的 handler 不可达）。
+    /// 每条可达指令逐覆盖 handler 发异常出口边（§4.10.1.4 保守口径，与
+    /// verifier 对有帧覆盖指令的 handler 检查同域）——入口状态 = 指令点
+    /// in-state locals + [catch_type 对应类型]，handler 可达 ⟺ 范围内至
+    /// 少一条可达指令（死范围的 handler 不可达，verifier 对死代码同样不
+    /// 出约束）。
     virtual bool preciseExceptionEdges() const { return false; }
 
     /// Strict 类域的显式失败通道：域钩子内部遇到「不可算」时置位，引擎
@@ -1384,13 +1386,20 @@ DomainResult<V> DomainEngine<V>::analyze(const ir::CodeUnit& u, const MethodSig*
             }
             return true;
         };
-        // 精确档异常出口边（J5/C3）：try 范围内可抛指令 → 每个覆盖它的
+        // 精确档异常出口边（J5/C3）：try 范围内可达指令 → 每个覆盖它的
         // handler（异常表序）。入口状态 = 抛出点 in-state locals（transfer
         // 前形态——<init> 翻转属正常后继效应，异常路径不携带）+
         // [catch_type 对应类型]；栈整体替换为异常值，与 JVM verifier 语义
         // 一致。多抛出点经同一合并协议收敛（异类引用走 resolver）。先于
         // 控制流后继发射，取的是未经自环合并污染的 in-state。
-        if (preciseExc && !excEdges.empty() && detail::canThrow(inp->op)) {
+        //
+        // 发射域是「范围内全部可达指令」而非仅可抛指令——JVM 校验器对范围
+        // 内每条有帧指令都做 handler 可指派性检查（§4.10.1.4 保守口径），
+        // 只从可抛指令发边会让不可抛覆盖（if 前跳/纯局部段）的 handler 不
+        // 可达，SMT 缺 handler 帧而 JVM 加载期 VerifyError。可达指令缺席
+        // （死范围）时无边可发，handler 不可达——与 verifier 对死代码不出
+        // 约束的口径一致。
+        if (preciseExc && !excEdges.empty()) {
             const ca::u32 pc = inp->srcPc;
             detail::DomState<V> exBase;
             exBase.locals = inState[id.slot].locals;
@@ -1535,7 +1544,8 @@ private:
 ///（引擎发边，出口态携子程序改写后的局部槽）；returnAddress 只与自身合并，
 /// 异调用点互并（多调用点共享入口）显式拒绝（Subroutine）。
 /// 异常边精确传播开启（J5/C3）：handler 入口 = 抛出点 locals + [catch_type
-/// 精确类（CP Class 名；0 = any 播 Throwable）]，handler 不再无条件可达。
+/// 精确类（CP Class 名；0 = any 播 Throwable）]，handler 由范围内可达指令
+/// 的出口边并入（§4.10.1.4 保守口径），不再无条件可达。
 ///
 /// 合成数组名（newarray/anewarray 的 "[I"/"[L…;"）经内部驻留表交给借用
 /// 视图；其余精确名全部直接借用 CP 视图。
