@@ -115,7 +115,7 @@ public:
     std::unordered_map<ca::u32, ca::u32> floatConst;         // 位模式 → Float 索引
     std::unordered_map<ca::i64, ca::u32> longConst;          // 值 → Long 索引
     std::unordered_map<ca::u64, ca::u32> doubleConst;        // 位模式 → Double 索引
-    // BSM/条件常量族（批 2）：句柄看 kind+目标；MethodType 看描述符；
+    // BSM/条件常量族：句柄看 kind+目标；MethodType 看描述符；
     // Module/Package 共表看 (tag, 名字)；Dynamic 并入 ref 表（bsm 下标占 a 槽）。
     std::unordered_map<ca::u64, ca::u32> mhConst;            // (kind, ref) → MethodHandle 索引
     std::unordered_map<ca::u32, ca::u32> mtConst;            // descIdx → MethodType 索引

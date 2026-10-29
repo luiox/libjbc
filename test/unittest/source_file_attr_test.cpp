@@ -2,8 +2,8 @@
 /// @brief       SourceFile（JVMS 4.7.10）typed 建模单测：分派接线、解码保真、
 ///              typed 读写面、半截体显式失败、trailing 保持、u16 域宽闸门。
 ///
-/// SourceFile 无任何下游 Raw 消费者，是 B3 四件中唯一已接 decodeAttrBody
-/// typed 分派的属性（design.md §32.9）。
+/// SourceFile 无任何下游 Raw 消费者，是四件中唯一已接 decodeAttrBody
+/// typed 分派的属性。
 #include <gtest/gtest.h>
 
 #include <memory>
@@ -109,7 +109,7 @@ TEST(SourceFileAttrTest, TruncatedBodyIsExplicitFailure)
     EXPECT_EQ(jbc::test::writeOk(*cf), cls);
 }
 
-// ---- trailing（design.md §27.1）：声明 length 多出的尾部字节重编码原样写回 ----
+// ---- trailing：声明 length 多出的尾部字节重编码原样写回 ----
 
 TEST(SourceFileAttrTest, TrailingSurvivesReencode)
 {
@@ -129,7 +129,7 @@ TEST(SourceFileAttrTest, TrailingSurvivesReencode)
     EXPECT_EQ(sf->trailing.size(), 4u);
 }
 
-// ---- 编码闸门（design.md §27.2）：u2 编码列超域宽显式 Err，不静默截断 ----
+// ---- 编码闸门：u2 编码列超域宽显式 Err，不静默截断 ----
 
 TEST(SourceFileAttrTest, EncoderRejectsOutOfRangeIndex)
 {

@@ -1,17 +1,17 @@
 /// @file        frame.hpp
-/// @brief       帧引擎：操作数栈/局部变量的数据流（design.md §10/§10.1）。
+/// @brief       帧引擎：操作数栈/局部变量的数据流（/）。
 ///
 /// 单一起原则：写出与 analysis 用同一实现。两条计算档位（FramePolicy）：
 /// BestEffort（缺省）是形状数据流——类型只到尺寸类（cat1/cat2/引用），
 /// 合并冲突降级为 Top 并计数，足够 maxStack/maxLocals 的重算与自对拍；
-/// Strict（A1 生成档）是类型精确数据流——transfer 携带精确类名与
+/// Strict 档是类型精确数据流——transfer 携带精确类名与
 /// Uninitialized 形态，合并经注入的 ITypeResolver 求解，算不动以指令级
 /// 诊断显式拒绝（验收口径：可算者与 javac 一致、不可算者显式拒绝并给
 /// 指令定位）。ITypeResolver 可注入：公共父类求解需要类层级，默认
 /// ShapeResolver 不区分引用子类型；真实现归上层消费方（层次图求解）。
-/// Strict 域自 C2 起建模 jsr/ret 子程序数据流（JVMS §4.10.2.5：
+/// Strict 域自 C2 起建模 jsr/ret 子程序数据流（JVMS ：
 /// jsr 压返回地址、ret 经局部槽跳回；单调用点精确，多调用点共享入口
-/// 显式拒绝——见 design.md §10.6）。
+/// 显式拒绝——见 ）。
 #pragma once
 
 #include <memory>
@@ -47,8 +47,8 @@ enum class VKind : ca::u8 {
     Ref,
     Null,
     UninitThis,
-    Uninitialized,    ///< new 产出的未初始化实例（§10.1：按 new 指令 pc 判等）
-    ReturnAddress,    ///< jsr 压入的返回地址（C2：按调用方 jsr 指令 pc 判等）
+    Uninitialized,    ///< new 产出的未初始化实例（按 new 指令 pc 判等）
+    ReturnAddress,    ///< jsr 压入的返回地址（按调用方 jsr 指令 pc 判等）
     Bottom,
 };
 
@@ -58,7 +58,7 @@ enum class VKind : ca::u8 {
 /// - Strict：Ref 携带精确内部名（name，借用 CP 视图，寿命 = 常量池）；
 ///   Uninitialized 的 cls 字段承载产生方 new 指令的 pc（uninitOffset()）；
 ///   ReturnAddress 的 cls 字段承载调用方 jsr 指令的 pc（jsrPc()，C2）。
-///   UninitThis 只出现在构造器超调用前的 this 槽（§10.1）。
+///   UninitThis 只出现在构造器超调用前的 this 槽。
 struct VType
 {
     VKind k = VKind::Top;
@@ -86,7 +86,7 @@ struct VType
         return VType{VKind::Uninitialized, newPc, {}};
     }
 
-    /// ReturnAddress 形态：pc 为调用方 jsr 指令偏移（C2）。
+    /// ReturnAddress 形态：pc 为调用方 jsr 指令偏移。
     static VType retAddr(ca::u32 jsrPc) noexcept
     {
         return VType{VKind::ReturnAddress, jsrPc, {}};
@@ -105,7 +105,7 @@ enum class TypeMergeError : ca::u8 {
     Unresolvable,     ///< resolver 无法求解（类层级缺席、外部查询失败等）
 };
 
-/// @brief 引用合并策略接口（design.md §10.1：merge 单方法面，A1 契约）。
+/// @brief 引用合并策略接口（merge 单方法面，A1 契约）。
 ///
 /// 只解决「两个具体引用类型的公共父类」；结构性规则（Top 吸收、Null 底、
 /// Uninitialized 按 offset 判等）由计算域内置，不经此接口。实现体归
@@ -129,11 +129,11 @@ public:
     ca::core::Result<VType, TypeMergeError> merge(VType a, VType b) override;
 };
 
-/// @brief 帧计算档位（design.md §10.1 三态）。
+/// @brief 帧计算档位（三态）。
 enum class FramePolicy : ca::u8 {
     BestEffort = 0,   ///< 缺省：形状数据流（现状行为，逐位不变）
     Strict = 1,       ///< 类型精确：必须注入 ITypeResolver；不可算显式 Err + failAt
-    Preserve = 2,     ///< 读侧档：既有 SMT → 语义帧视图（§10.5）；实现在
+    Preserve = 2,     ///< 读侧档：既有 SMT → 语义帧视图；实现在
                       ///<   smt_read.hpp 的独立入口（读属性不是数据流），
                       ///<   compute 对本档恒显式拒绝（防止误导性路由）
 };
@@ -155,13 +155,13 @@ struct FrameSummary
         BadCpRef,      ///< CP 引用无法解析（描述符缺失等）
         Wide,
         NoFixpoint,    ///< 访问量超熔断阈值：状态不收敛（建模缺陷的兜底报告）
-        Subroutine,    ///< 子程序路径畸形/不可算（C2）：ret 读非返回地址槽、
+        Subroutine,    ///< 子程序路径畸形/不可算：ret 读非返回地址槽、
                        ///<   返回点越界（jsr 无顺序后继）、多调用点共享入口的
                        ///<   returnAddress 合并冲突（JVMS 4.10.2.5：只与自身
                        ///<   合并）；jsr/ret 数据流本身已建模，不再整体拒绝
         TypeConflict,  ///< Strict：跨类合并/异 offset Uninit 合并等不可算冲突
         NoResolver,    ///< Strict：未注入 ITypeResolver（fail loud，不降级）
-        NotSupported,  ///< Preserve：占位档被选入计算路径（读侧归 C4/J7）
+        NotSupported,  ///< Preserve：占位档被选入计算路径（读侧归 smt_read）
     } fail = Fail::None;
     ir::InsnId failAt = ir::kNoInsn;   ///< fail != None 时的现场指令（诊断定位）
     bool hasSubroutine = false;        ///< 方法体含 RET（jsr/ret 遗留；BestEffort
@@ -243,7 +243,7 @@ ca::i32 methodRetSlots(std::string_view desc);
 ca::i32 fieldSlots(std::string_view desc);
 
 /// @brief SMT 链头（隐式初始帧）的 locals 条目序列（entry 口径：cat2 一参
-///        一条；§10.5）。
+///        一条；）。
 ///
 /// this 形态（构造器 UninitThis / 其余精确类名）与描述符参数逐条入列，与
 /// 引擎 MethodSig 播种（domain.hpp analyze）同源同义——那边走域钩子按槽
@@ -252,8 +252,7 @@ ca::i32 fieldSlots(std::string_view desc);
 /// 由交付层按需进行。
 std::vector<VType> initialLocalsOf(const MethodSig& sig);
 
-/// @brief 把帧计算观测到的 maxes 采用到 CodeUnit（A1/J7 显式 API，检查清单
-///        A2；§10.5 覆盖裁决）。
+/// @brief 把帧计算观测到的 maxes 采用到 CodeUnit（显式 API）。
 ///
 /// 语义按裁决执行：Strict 档显式重算 = 覆盖——重算结果即真值，CodeUnit 里
 /// 的现值只是旧栈产物；低于原值亦采用（Top 支配口径下重算值与 verifier
@@ -262,7 +261,7 @@ std::vector<VType> initialLocalsOf(const MethodSig& sig);
 /// 归后续批）。
 ///
 /// 两个 verifier 地板并入采用值（FrameSummary 记的是数据流触达，不含两条
-/// 规范性底线；§10.5 成文）：
+/// 规范性底线； 成文）：
 /// - maxLocals ≥ 参数槽地板（this + 描述符参数，按 @p sig 求值）——引擎的
 ///   maxLocals 只计 store 触达，只读参数的方法观测值会低于 verifier 要求；
 /// - maxStack ≥ 1（@p u 带异常表时）——handler 入口栈恒有异常值。

@@ -1,5 +1,5 @@
 /// @file        member_ops_test.cpp
-/// @brief       A3/A4/A5：成员级增删、身份失效协议与从零建类的单元测试。
+/// @brief       成员级增删、身份失效协议与从零建类的单元测试。
 ///
 /// 全部用关内建的 ClassBuilder 字节构造（不依赖本机语料与 JDK）；JVM 真跑
 /// 门在 member_move_test.cpp。测试矩阵：
@@ -352,7 +352,7 @@ TEST(MemberOpsA3Test, AdoptMethodRejectsSelfSourceAndDeadHandle)
     EXPECT_EQ(dead.unwrap_err(), LowerError::InvalidHandle);
 }
 
-/// 分支体供体类 d/B（回归钉死 §34.3 分支体重放双缺陷，M 线 member_move
+/// 分支体供体类 d/B（回归钉死  分支体重放双缺陷，M 线 member_move
 /// 夹具零分支缺口的无 JDK 单测面）：
 ///   - biz(I)I：for 循环后向 goto + 前向 if_icmpge + tableswitch + ldc +
 ///     异常表（catch-all）——三读门误伤分支族与占位标签被 append 拒收

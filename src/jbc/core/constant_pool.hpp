@@ -160,7 +160,7 @@ public:
     /// @brief 按内容查找 Utf8 条目（O(n) 逐条 memcmp）；未命中返回 0。
     ///
     /// 与 @ref addUtf8 配对构成「命中既有池返回原索引（不膨胀），miss 才
-    /// 追加」的 intern 纪律（对齐 §22.4 语义 intern 家族）；0 是占位槽索引，
+    /// 追加」的 intern 纪律（对齐  语义 intern 家族）；0 是占位槽索引，
     /// 天然充当哨兵——没有任何真实条目会命中它。
     ca::u32 findUtf8(std::string_view s) const noexcept;
 

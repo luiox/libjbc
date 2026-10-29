@@ -347,7 +347,7 @@ std::unique_ptr<ClassFile> classWithDecodedAttr(const std::string& name, const B
 
 }   // namespace
 
-/// 属性体 trailing（design.md §27.1）：声明结构读完后的多余字节在「未改
+/// 属性体 trailing：声明结构读完后的多余字节在「未改
 /// 往返」与「置脏重编码」两条路径下都必须原样保留——声明 length 比结构
 /// 多 4 字节，静默丢尾即保真违约。五个已知属性 decoder 同治。
 TEST(AttrExtraTest, AttrBodyTrailingSurvivesReencode)
@@ -385,7 +385,7 @@ TEST(AttrExtraTest, AttrBodyTrailingSurvivesReencode)
     }
 }
 
-/// 编码闸门（design.md §27.2）：计数/索引超 u16 必须 Err(Unencodable)，
+/// 编码闸门：计数/索引超 u16 必须 Err(Unencodable)，
 /// 不得 static_cast 静默截断——截断产出计数错位 / 引用错条目的 class。
 TEST(AttrExtraTest, EncodersRejectOutOfRangeFields)
 {

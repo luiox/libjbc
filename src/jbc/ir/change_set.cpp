@@ -1,5 +1,5 @@
 /// @file        change_set.cpp
-/// @brief       ChangeSet 折叠查询实现（语义见 design.md §35.3）。
+/// @brief       ChangeSet 折叠查询实现（语义见 ）。
 #include "jbc/ir/change_set.hpp"
 
 #include <cstddef>
@@ -35,7 +35,7 @@ struct FoldKeyHash
     }
 };
 
-/// 按键维护的折叠状态（语义见 §35.3 的事件规则）。
+/// 按键维护的折叠状态（语义见  的事件规则）。
 struct FoldState
 {
     bool present        = false;

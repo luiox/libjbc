@@ -3,7 +3,7 @@
 ///
 /// 没有这一层，消费者必须理解 Methodref→NameAndType→Utf8 的两跳布局才能
 /// 读一条 getfield，必须手工拼四个 addXxx 才能插一条 invokestatic——
-/// CP 知识泄漏到每个消费者（ergonomics.md F0）。
+/// CP 知识泄漏到每个消费者（。
 #include <cstdint>
 #include <unordered_map>
 
@@ -184,7 +184,7 @@ bool ClassSession::setMember(Insn& in, MemberSem::Kind kind, std::string_view ow
             if (kind != MemberSem::Kind::Method && kind != MemberSem::Kind::InterfaceMethod) {
                 return false;
             }
-            // invokeinterface 的 count 字段必须随描述符重算（design.md §27.4）：
+            // invokeinterface 的 count 字段必须随描述符重算：
             // count = 参数槽位数 + 1（this 槽，JVMS 6.5 invokeinterface 语义）。
             // 只改 CP 引用不改 count，会在指向参数更多的方法后产出 JVM 可拒绝
             // 的 class。描述符解析失败时不改写（fail-closed），指令保持原样。
@@ -436,12 +436,12 @@ ca::u32 ClassSession::renameClassConstant(const std::string_view oldInternal,
         if (!cp.isUtf8(probe.a) || !cp.utf8Equals(probe.a, oldInternal)) {
             continue;
         }
-        core::ConstantPool::Entry& e = cp.mutateAt(i);   // 唯一规范写入口（§30.1）
+        core::ConstantPool::Entry& e = cp.mutateAt(i);   // 唯一规范写入口
         e.a = newUtf8;
         ++retargeted;
     }
     if (retargeted > 0) {
-        // 条目内容已变更：去重缓存的键值对应全部失效，惰性重建（§36.3）。
+        // 条目内容已变更：去重缓存的键值对应全部失效，惰性重建。
         sem_.reset();
     }
     return retargeted;

@@ -238,8 +238,8 @@ Result<void, ReadError> ConstantPool::parse(Cursor& cur, Diagnostics& diag)
             if (i >= static_cast<ca::u32>(count)) {
                 // 宽条目的第二个槽位越出 constant_pool_count：CP 结构损坏——
                 // 后续条目边界无法确定，且宽容写回会使槽位比输入多 1（既不
-                // 保真也不报错）。与其他 CP 结构错误一致，reader 阶段即 Err
-                // （design.md §27.3），不走降级通道。
+                // 保真也不报错）。与其他 CP 结构错误一致，reader 阶段即 Err，
+                // 不走降级通道。
                 diag.error(ReadError::BadConstantPoolCount, static_cast<ca::u32>(entryStart));
                 return Err(ReadError::BadConstantPoolCount);
             }

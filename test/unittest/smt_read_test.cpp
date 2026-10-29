@@ -1,6 +1,5 @@
 /// @file        smt_read_test.cpp
-/// @brief       Preserve 读侧（SMT 语义帧视图）+ maxes 采用测试（design.md
-///              §10.5，A1/J7 验收面）。
+/// @brief       Preserve 读侧（SMT 语义帧视图）+ maxes 采用测试。
 ///
 /// 四部分：
 /// 1. 读侧链展开单测——same/append/chop/full 链算术、隐式初始帧（this 形态
@@ -484,7 +483,7 @@ TEST(SmtReadGuard, TagPayloadContradictionsRejected)
 }
 
 // ---------------------------------------------------------------------------
-// maxes 采用 API（§10.5 覆盖裁决）
+// maxes 采用 API（覆盖裁决）
 // ---------------------------------------------------------------------------
 
 TEST(MaxesApi, OkSummaryOverwritesBothFields)
@@ -614,7 +613,7 @@ TEST(MaxesApi, AdoptedMaxesFlowToLowerWriteBackAndReread)
 
 namespace {
 
-/// 读↔算逐槽对拍（§10.3.6 口径：locals 尾部 Top 修剪后公共前缀一致 + stack
+/// 读↔算逐槽对拍（口径：locals 尾部 Top 修剪后公共前缀一致 + stack
 /// 全量一致；javac 声明投影的截尾不判分歧）。
 void compareReadVsCompute(const char* ctx, const SmtFrameView& v, const FrameAt& c,
                           ca::usize& checked, ca::usize& mismatch)

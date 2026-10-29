@@ -192,7 +192,7 @@ TEST(RoundtripTest, OversizedCodeIsRejected)
     EXPECT_EQ(r.unwrap_err(), WriteError::Unencodable);
 }
 
-/// 类属性表之后的尾部垃圾（design.md §27.1 trailing 同族）：未修改往返必须
+/// 类属性表之后的尾部垃圾（trailing 同族）：未修改往返必须
 /// 字节一致——静默丢尾即保真违约。
 TEST(RoundtripTest, ClassTrailingBytesRoundtripUntouched)
 {

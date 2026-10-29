@@ -1,5 +1,5 @@
 /// @file        cp_compact_jvm_test.cpp
-/// @brief       CP 压缩后的 JVM 真跑等价门（A8）：膨胀 → 压缩 → 反射面行为恒等。
+/// @brief       CP 压缩后的 JVM 真跑等价门：膨胀 → 压缩 → 反射面行为恒等。
 ///
 /// 样本覆盖 Signature（泛型继承 + 泛型方法 + 桥接）、RuntimeVisible Annotations
 /// （含 Class 载荷）、Exceptions、InnerClasses、ConstantValue、BootstrapMethods

@@ -219,7 +219,7 @@ public:
 
     std::vector<Entry> entries;
 
-    /// @brief 声明结构之后的非标准尾部字节（trailing 同族，design.md §27.1）。
+    /// @brief 声明结构之后的非标准尾部字节（trailing 同族）。
     std::vector<ca::u8> trailing;
 };
 
@@ -242,7 +242,7 @@ public:
 
     std::vector<Row> rows;
 
-    /// @brief 声明结构之后的非标准尾部字节（trailing 同族，design.md §27.1）。
+    /// @brief 声明结构之后的非标准尾部字节（trailing 同族）。
     std::vector<ca::u8> trailing;
 };
 
@@ -270,7 +270,7 @@ public:
 
     std::vector<Row> rows;
 
-    /// @brief 声明结构之后的非标准尾部字节（trailing 同族，design.md §27.1）。
+    /// @brief 声明结构之后的非标准尾部字节（trailing 同族）。
     std::vector<ca::u8> trailing;
 };
 
@@ -346,7 +346,7 @@ public:
 
     std::vector<Frame> frames;
 
-    /// @brief 声明结构之后的非标准尾部字节（trailing 同族，design.md §27.1）。
+    /// @brief 声明结构之后的非标准尾部字节（trailing 同族）。
     std::vector<ca::u8> trailing;
 };
 
@@ -397,15 +397,15 @@ public:
 
     std::vector<Annotation> annos;
 
-    /// @brief 声明结构之后的非标准尾部字节（trailing 同族，design.md §27.1）。
+    /// @brief 声明结构之后的非标准尾部字节（trailing 同族）。
     std::vector<ca::u8> trailing;
 };
 
 /// @brief Signature 属性（JVMS 4.7.9）：泛型签名的单 u2 载荷。
 ///
 /// 类/方法/字段三级挂载点各至多一个；属性体是 `u2 signature_index`，签名串
-/// 在 CP Utf8，语法与手术语义归 @ref jbc::type::signature（design.md §32），
-/// 属性层手术入口见 @ref jbc::ir::sig_attr（§32.4）。
+/// 在 CP Utf8，语法与手术语义归 @ref jbc::type::signature，
+/// 属性层手术入口见 @ref jbc::ir::sig_attr。
 class SignatureAttr : public AttrBody
 {
 public:
@@ -415,7 +415,7 @@ public:
 
     ca::u32 signatureCp = 0;   ///< Utf8 CP 索引（泛型签名串）
 
-    /// @brief 声明结构之后的非标准尾部字节（trailing 同族，design.md §27.1）。
+    /// @brief 声明结构之后的非标准尾部字节（trailing 同族）。
     ///
     /// 合法 Signature 体恰为 2 字节；超长输入的尾字节奏此保留，重编码原样
     /// 写回，不静默丢弃。
@@ -426,11 +426,11 @@ public:
 ///
 /// 类型注解族的全结构建模：target_type + target_info 并取（4.7.20.1 十形态）
 /// + type_path（4.7.20.2）+ 注解体（type_index 描述符 + element_value 表，
-/// 与 @ref AnnotationsAttr 共用 ElemValue）。可见性只差属性名（ AttrSlot.
+/// 与 @ref AnnotationsAttr 共用 ElemValue）。可见性只差属性名（AttrSlot.
 /// nameCp 承载，体不感知），RuntimeVisibleTypeAnnotations 与
 /// RuntimeInvisibleTypeAnnotations 共用本模型。挂载点：类/字段/方法属性表
 /// 与 Code 嵌套属性表。类名手术面（type_index 与 'c' 元素值的类描述符）见
-/// @ref jbc::ir::type_annotation_attr（design.md §32.7）。
+/// @ref jbc::ir::type_annotation_attr。
 class TypeAnnotationsAttr : public AttrBody
 {
 public:
@@ -497,7 +497,7 @@ public:
 
     std::vector<Annotation> annotations;
 
-    /// @brief 声明结构之后的非标准尾部字节（trailing 同族，design.md §27.1）。
+    /// @brief 声明结构之后的非标准尾部字节（trailing 同族）。
     std::vector<ca::u8> trailing;
 };
 
@@ -529,21 +529,21 @@ public:
 
     std::vector<Row> rows;
 
-    /// @brief 声明结构之后的非标准尾部字节（trailing 同族，design.md §27.1）。
+    /// @brief 声明结构之后的非标准尾部字节（trailing 同族）。
     std::vector<ca::u8> trailing;
 };
 
-/// @brief B3 四件结构元数据属性（SourceFile/InnerClasses/EnclosingMethod/
+/// @brief 结构元数据属性四件（SourceFile/InnerClasses/EnclosingMethod/
 ///        Exceptions）的共同边界，成文于此避免四处重复：
 ///
 ///  1. **只挂类级/成员级属性表，不 Code 嵌套，载荷全是 CP 索引与访问位，
-///     无任何 pc 偏移**——relocation 契约（§33 封闭集）不涉及它们，布局
+///     无任何 pc 偏移**——relocation 契约（封闭集）不涉及它们，布局
 ///     改动不需要、也不得对这四件做任何重定位。
 ///  2. **codec 形状与既有 typed 属性同铁律**：半截体 decode 显式 Err、
-///     声明结构后的多余字节奏 trailing（§27.1）、编码逐字段过 u16 域宽
-///     闸门（§27.2）。
-///  3. **分派现状**：四件均已接 decodeAttrBody 的 typed 分派（B3 接线批与
-///     上层消费面迁移同批落地，design.md §32.9）；公开解码函数
+///     声明结构后的多余字节奏 trailing、编码逐字段过 u16 域宽
+///     闸门。
+///  3. **分派现状**：四件均已接 decodeAttrBody 的 typed 分派：
+///     公开解码函数
 ///     （attr_codec.hpp 的 *Body 入口）保留为不触碰槽状态的直接解码面。
 class SourceFileAttr : public AttrBody
 {
@@ -554,7 +554,7 @@ public:
 
     ca::u32 sourceFileCp = 0;   ///< Utf8 CP 索引（源文件名）
 
-    /// @brief 声明结构之后的非标准尾部字节（trailing 同族，design.md §27.1）。
+    /// @brief 声明结构之后的非标准尾部字节（trailing 同族）。
     ///
     /// 合法 SourceFile 体恰为 2 字节；超长输入的尾字节奏此保留，重编码
     /// 原样写回，不静默丢弃。
@@ -568,7 +568,7 @@ public:
 /// Utf8。既有 Raw 手术路径（上层消费方 remapper）对三槽的改写语义——类名映射
 /// 命中才动、outer==0 保 0、简单名随内部类二进制名映射同步且仅在全名命中
 /// 旧简单名时改写——与 @ref Row 三槽一一对应，typed 读写可完整表达
-/// （design.md §32.9）。
+/// 。
 class InnerClassesAttr : public AttrBody
 {
 public:
@@ -586,7 +586,7 @@ public:
 
     std::vector<Row> rows;
 
-    /// @brief 声明结构之后的非标准尾部字节（trailing 同族，design.md §27.1）。
+    /// @brief 声明结构之后的非标准尾部字节（trailing 同族）。
     std::vector<ca::u8> trailing;
 };
 
@@ -597,7 +597,7 @@ public:
 /// NameAndType，**0 合法**——外围类是实例初始化器或静态初始化器时不指名
 /// 方法。两槽即类名手术面：类名重映射动 classCp；方法重映射动 methodNatCp
 /// （解析 NAT 后换新条目，NestHost/NestMembers 不在本属性）。与
-/// @ref InnerClassesAttr 同属 B3 分派挂账（见上）。
+/// @ref InnerClassesAttr 同批接 typed 分派（见上）。
 class EnclosingMethodAttr : public AttrBody
 {
 public:
@@ -608,7 +608,7 @@ public:
     ca::u32 classCp = 0;      ///< CP Class（直接外围类）
     ca::u32 methodNatCp = 0;  ///< CP NameAndType；0 = 无直接包围方法
 
-    /// @brief 声明结构之后的非标准尾部字节（trailing 同族，design.md §27.1）。
+    /// @brief 声明结构之后的非标准尾部字节（trailing 同族）。
     std::vector<ca::u8> trailing;
 };
 
@@ -616,7 +616,7 @@ public:
 ///
 /// 体是 `u2 count + u2 class_index*`，条目指向 CP Class。异常类重映射 =
 /// 逐条目 CP Class 重指向（既有 Raw 手术路径的语义），typed 模型以
-/// @ref exceptionCps 直接表达。与 @ref InnerClassesAttr 同属 B3 分派挂账
+/// @ref exceptionCps 直接表达。与 @ref InnerClassesAttr 同批接 typed 分派
 /// （见上）。
 class ExceptionsAttr : public AttrBody
 {
@@ -627,7 +627,7 @@ public:
 
     std::vector<ca::u32> exceptionCps;  ///< CP Class 索引表（checked 异常）
 
-    /// @brief 声明结构之后的非标准尾部字节（trailing 同族，design.md §27.1）。
+    /// @brief 声明结构之后的非标准尾部字节（trailing 同族）。
     std::vector<ca::u8> trailing;
 };
 
@@ -635,7 +635,7 @@ public:
 ///
 /// 体是单 `u2 host_class_index`（CP Class）。与 NestMembers/PermittedSubclasses
 /// 三件同边界：只挂类级属性表、不 Code 嵌套、载荷全为 CP 索引、无 pc 偏移
-/// ——§33 relocation 封闭集不涉及；codec 同铁律（半截体 Err、trailing 同族、
+/// —— relocation 封闭集不涉及；codec 同铁律（半截体 Err、trailing 同族、
 /// u16 域宽闸门）。hostClassCp 即类名手术面（nest 宿主重映射 = 单 CP Class
 /// 重指向，与既有 Raw 手术路径语义一一对应）。
 class NestHostAttr : public AttrBody
@@ -647,7 +647,7 @@ public:
 
     ca::u32 hostClassCp = 0;   ///< CP Class（nest 宿主）
 
-    /// @brief 声明结构之后的非标准尾部字节（trailing 同族，design.md §27.1）。
+    /// @brief 声明结构之后的非标准尾部字节（trailing 同族）。
     ///
     /// 合法 NestHost 体恰为 2 字节；超长输入的尾字节奏此保留，重编码
     /// 原样写回，不静默丢弃。
@@ -669,7 +669,7 @@ public:
 
     std::vector<ca::u32> memberCps;  ///< CP Class 索引表（nest 成员）
 
-    /// @brief 声明结构之后的非标准尾部字节（trailing 同族，design.md §27.1）。
+    /// @brief 声明结构之后的非标准尾部字节（trailing 同族）。
     std::vector<ca::u8> trailing;
 };
 
@@ -688,7 +688,7 @@ public:
 
     std::vector<ca::u32> permittedCps;  ///< CP Class 索引表（允许子类）
 
-    /// @brief 声明结构之后的非标准尾部字节（trailing 同族，design.md §27.1）。
+    /// @brief 声明结构之后的非标准尾部字节（trailing 同族）。
     std::vector<ca::u8> trailing;
 };
 
@@ -723,7 +723,7 @@ public:
 
     std::vector<Component> components;
 
-    /// @brief 声明结构之后的非标准尾部字节（trailing 同族，design.md §27.1）。
+    /// @brief 声明结构之后的非标准尾部字节（trailing 同族）。
     std::vector<ca::u8> trailing;
 };
 
@@ -741,7 +741,7 @@ public:
 /// 结束（体尾多出的 2 字节属 trailing，同族保留）。
 ///
 /// 与 Nest 族/Record 同边界：只挂类级属性表、不 Code 嵌套、载荷全为 CP
-/// 索引与访问位、无 pc 偏移——§33 relocation 封闭集不涉及。段旗语
+/// 索引与访问位、无 pc 偏移—— relocation 封闭集不涉及。段旗语
 /// （ACC_TRANSITIVE=0x0020 / ACC_STATIC_PHASE=0x0040 / ACC_OPEN=0x0020 /
 /// ACC_SYNTHETIC=0x1000 / ACC_MANDATED=0x8000）按不透明 u16 保真，与
 /// InnerClasses 的 access_flags 同款处理。
@@ -798,7 +798,7 @@ public:
     std::vector<ca::u32> usesCps;   ///< CP Class（uses 指令服务表）
     std::vector<Provide> provides;
 
-    /// @brief 声明结构之后的非标准尾部字节（trailing 同族，design.md §27.1）。
+    /// @brief 声明结构之后的非标准尾部字节（trailing 同族）。
     ///
     /// 合法 Module 体在 provides 之后正好结束；超长输入的尾字节奏此保留，
     /// 重编码原样写回，不静默丢弃。
@@ -820,7 +820,7 @@ public:
 
     std::vector<ca::u32> packageCps;  ///< CP Package 索引表（模块包名）
 
-    /// @brief 声明结构之后的非标准尾部字节（trailing 同族，design.md §27.1）。
+    /// @brief 声明结构之后的非标准尾部字节（trailing 同族）。
     std::vector<ca::u8> trailing;
 };
 
@@ -838,7 +838,7 @@ public:
 
     ca::u32 mainClassCp = 0;   ///< CP Class（模块主类）
 
-    /// @brief 声明结构之后的非标准尾部字节（trailing 同族，design.md §27.1）。
+    /// @brief 声明结构之后的非标准尾部字节（trailing 同族）。
     ///
     /// 合法 ModuleMainClass 体恰为 2 字节；超长输入的尾字节奏此保留，
     /// 重编码原样写回，不静默丢弃。
@@ -865,7 +865,7 @@ public:
     ///        行序一一对应），空内层表 = 该参数无注解（合法且常见）。
     std::vector<std::vector<AnnotationsAttr::Annotation>> parameters;
 
-    /// @brief 声明结构之后的非标准尾部字节（trailing 同族，design.md §27.1）。
+    /// @brief 声明结构之后的非标准尾部字节（trailing 同族）。
     std::vector<ca::u8> trailing;
 };
 
@@ -884,7 +884,7 @@ public:
 
     AnnotationsAttr::ElemValue defaultValue;   ///< 默认值元素（单 element_value）
 
-    /// @brief 声明结构之后的非标准尾部字节（trailing 同族，design.md §27.1）。
+    /// @brief 声明结构之后的非标准尾部字节（trailing 同族）。
     std::vector<ca::u8> trailing;
 };
 
@@ -913,7 +913,7 @@ public:
 
     std::vector<Row> rows;
 
-    /// @brief 声明结构之后的非标准尾部字节（trailing 同族，design.md §27.1）。
+    /// @brief 声明结构之后的非标准尾部字节（trailing 同族）。
     std::vector<ca::u8> trailing;
 };
 
@@ -933,7 +933,7 @@ public:
 
     ca::u32 constantValueCp = 0;   ///< CP 常量槽（Integer/Float/Long/Double/String）
 
-    /// @brief 声明结构之后的非标准尾部字节（trailing 同族，design.md §27.1）。
+    /// @brief 声明结构之后的非标准尾部字节（trailing 同族）。
     ///
     /// 合法 ConstantValue 体恰为 2 字节；超长输入的尾字节奏此保留，重编码
     /// 原样写回，不静默丢弃。

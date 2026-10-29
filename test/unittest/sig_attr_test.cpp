@@ -339,7 +339,7 @@ TEST(SigAttrTest, SameTargetStringReusesExistingPoolEntry)
     EXPECT_EQ(cf->cp.size(), cpMid) << "reverse rename reuses original entry";
 }
 
-// ---- 非 2 字节体：手术只改 u2 索引，尾部经 trailing 原样保留（§27.1）----
+// ---- 非 2 字节体：手术只改 u2 索引，尾部经 trailing 原样保留----
 
 TEST(SigAttrTest, ExtraBodyBytesSurviveSurgery)
 {
@@ -351,7 +351,7 @@ TEST(SigAttrTest, ExtraBodyBytesSurviveSurgery)
     cb.setThis(cb.classRef(thisIdx));
     cb.setSuper(cb.classRef(superIdx));
     cb.setVersion(52);
-    // 非法 3 字节体：u2 索引 + 1 尾巴（畸形输入的可表达事实，§27.1 同族）。
+    // 非法 3 字节体：u2 索引 + 1 尾巴（畸形输入的可表达事实， 同族）。
     cb.addClassAttr(sigName, {sigContent(sig)[0], sigContent(sig)[1], 0xFE});
     const Bytes bytes = cb.build();
 
@@ -739,7 +739,7 @@ TEST(SigAttrTest, LvttTruncatedBodyFailsDecodeKind)
 
 TEST(SigAttrTest, LvttTrailingBytesSurviveSurgery)
 {
-    // 体尾垃圾（§27.1 trailing 同族）：行改写后重编码原样保留尾字节。
+    // 体尾垃圾（trailing 同族）：行改写后重编码原样保留尾字节。
     ClassBuilder cb;
     const ca::u16 thisIdx = cb.utf8("p/Use");
     const ca::u16 superIdx = cb.utf8("java/lang/Object");

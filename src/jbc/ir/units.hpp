@@ -1,7 +1,7 @@
 /// @file        units.hpp
 /// @brief       v0.3 高层单元：ClassSession（backing + IR）与方法级 promote/lower。
 ///
-/// 形状来自 design.md §6/§13.2：ClassSession 持有低层 ClassFile（backing）与
+/// 形状来自 /：ClassSession 持有低层 ClassFile（backing）与
 /// ClassUnit（IR）；pass 只通过 CodeUnit/CodeEditor 改 IR；lower 把一个方法的
 /// 变换写回 backing 的 Code 属性，并按 relocation contract 处理受 pc 影响
 /// 的嵌套属性。指令的 CP 操作数在 v0.3 仍是 backing 常量池索引（session
@@ -122,7 +122,7 @@ struct FieldUnit
 
 /// @brief 「无此方法」哨兵：ClassUnit::findMethod 的未命中返回值。
 ///
-/// 命名常量替代裸下标魔法值，与 kNoInsn（F5 结清）同一惯例——指针查询
+/// 命名常量替代裸下标魔法值，与 kNoInsn同一惯例——指针查询
 /// 用 nullptr 表达未命中，下标查询用本哨兵。
 inline constexpr ca::usize kNoMethod = static_cast<ca::usize>(-1);
 
@@ -264,7 +264,7 @@ public:
     SymbolPool& symbols() noexcept { return symbols_; }
     const SymbolPool& symbols() const noexcept { return symbols_; }
 
-    /// @brief 按名字定位第一个方法（ergonomics F4）。
+    /// @brief 按名字定位第一个方法）。
     ///
     /// 与 SymbolPool 物化文本逐字节比较（零分配，不做 UTF8 解码）；
     /// 同名重载命中下标最小者。前置条件：name 为字节视图（不要求以 NUL
@@ -387,7 +387,7 @@ class MemberSemRef;
 class ConstSemRef;
 class ClassSemRef;
 
-/// @brief 新增方法的种子（A3）：成员元数据 + 可选的空 Code 体。
+/// @brief 新增方法的种子：成员元数据 + 可选的空 Code 体。
 ///
 /// name/desc 是字节视图（挂载点常量由会话 intern 进 backing CP，命中既有
 /// 池不膨胀）；access 语义同 classfile 的 access_flags（u16 域，超界 Err）。
@@ -405,7 +405,7 @@ struct MethodSeed
     ca::u16 maxLocals = 0;
 };
 
-/// @brief 新增字段的种子（A4）：与 MethodSeed 同构，字段没有方法体。
+/// @brief 新增字段的种子：与 MethodSeed 同构，字段没有方法体。
 struct FieldSeed
 {
     std::string_view name;
@@ -414,7 +414,7 @@ struct FieldSeed
 };
 
 // ---------------------------------------------------------------------------
-// 类构建挂载面的合成规格模型（attr_build 批 1：注解族 + 简单注解 + 通用挂载）。
+// 类构建挂载面的合成规格模型（注解族 + 简单注解 + 通用挂载）。
 //
 // 与 MethodSeed/FieldSeed 同一输入形态：全部 string_view + 值语义，CP 落位由
 // 会话语义 intern 完成（命中既有池不膨胀）。规格树由调用方构造，合成期被完整
@@ -527,7 +527,7 @@ struct BsmArg
     std::string_view desc;     ///< Kind::Dynamic 的 NameAndType 描述符
 };
 
-/// @brief 从零建类的种子（A5）：空类起步的头四件 + 接口表。
+/// @brief 从零建类的种子：空类起步的头四件 + 接口表。
 ///
 /// 名字一律内部名（'/' 分隔）。version 打包同 ClassUnit::version：
 /// (major<<16)|minor。superName 为空串表示不写 superClass 条目（索引 0，
@@ -553,8 +553,8 @@ struct NewClassSeed
 ///
 /// 构造收口：保活句柄（promoteMethod / collectCodeUnits 的返回值）内部
 /// 依赖 shared_from_this，会话必须以 shared_ptr 持有——构造函数私有，
-/// 唯一入口是 @ref makeSession / @ref makeSessionFromBytes（design.md §24
-/// 寿命接管）。
+/// 唯一入口是 @ref makeSession / @ref makeSessionFromBytes
+/// （寿命接管）。
 class ClassSession : public std::enable_shared_from_this<ClassSession>
 {
 public:
@@ -565,7 +565,7 @@ public:
     ClassUnit& unit() noexcept { return unit_; }
     const ClassUnit& unit() const noexcept { return unit_; }
 
-    // ---- ChangeSet 协议（E2，design.md §35）----
+    // ---- ChangeSet 协议----
 
     /// @brief 本会话的变更台账（观察面，恒开启）：会话各变更通道在实改发生时
     ///        记账，消费者按粒度查询决定失效重建范围。
@@ -671,7 +671,7 @@ public:
     /// 是字面量事实，不是类引用）。
     ///
     /// 返回实际重指向的条目数；0 = 无命中（零改动，SemIndex 缓存也不需要
-    /// 失效）。有改动时使语义去重缓存失效（§36.3 同款：条目内容变了，
+    /// 失效）。有改动时使语义去重缓存失效（同款：条目内容变了，
     /// 缓存的键值对应随之失效，下次查询惰性重建）。
     ///
     /// 边界纪律：只动 Class 条目的 `a` 槽（名字索引），不改 tag/不删条目；
@@ -679,7 +679,7 @@ public:
     /// 术处理（描述符/签名族的分族手术归调用方）。
     ca::u32 renameClassConstant(std::string_view oldInternal, std::string_view newInternal);
 
-    // ---- BSM/条件常量族（批 2）：同一条去重纪律，带域校验的返回 Result ----
+    // ---- BSM/条件常量族：同一条去重纪律，带域校验的返回 Result ----
 
     /// @brief 方法句柄 intern（JVMS 4.4.8）：reference_kind 1..9 按 kind 分流
     ///        Fieldref/Methodref/InterfaceMethodref 三形态 + NameAndType。
@@ -705,14 +705,14 @@ public:
     /// 句柄无效（已删除/来自另一会话）返回 Err(InvalidHandle)。
     Result<void, LowerError> commitMethodMetadata(MethodId method);
 
-    /// @brief 将指定字段的 IR 元数据提交到 backing 的 field_info（A4）。
+    /// @brief 将指定字段的 IR 元数据提交到 backing 的 field_info。
     ///
     /// 与 commitMethodMetadata 同构：字段名/描述符/访问标志的高层改动以本
     /// 入口为唯一落盘通道（显式调用出活，无自动点）。句柄无效返回
     /// Err(InvalidHandle)。
     Result<void, LowerError> commitFieldMetadata(FieldId field);
 
-    /// @brief 新增方法（A3）：按种子挂入元数据（withCode 时含空 Code 体）。
+    /// @brief 新增方法：按种子挂入元数据（withCode 时含空 Code 体）。
     ///
     /// 名字/描述符 intern 进 backing CP（命中既有池不膨胀，CP 只追加）；
     /// backing methods 追加一条 method_info，unit 挂入 MethodUnit 并分配
@@ -720,10 +720,10 @@ public:
     /// 名字+描述符唯一性，失败不留半截成员。
     Result<MethodId, LowerError> addMethod(const MethodSeed& seed);
 
-    /// @brief 新增字段（A4）：按种子挂入元数据。预检与 intern 纪律同 addMethod。
+    /// @brief 新增字段：按种子挂入元数据。预检与 intern 纪律同 addMethod。
     Result<FieldId, LowerError> addField(const FieldSeed& seed);
 
-    /// @brief 删除方法（A3）：摘除 method_info 与 MethodUnit，回收身份槽。
+    /// @brief 删除方法：摘除 method_info 与 MethodUnit，回收身份槽。
     ///
     /// 失效语义：被删方法的 MethodId 立即失配（查询面 nullptr/kNoMethod，
     /// 变更面 Err(InvalidHandle)）；该槽 generation 自增，此后 addMethod
@@ -734,29 +734,29 @@ public:
     /// （与 CodeDom::erase 后旧 Insn* 作废同一纪律）。
     Result<void, LowerError> removeMethod(MethodId method);
 
-    /// @brief 删除字段（A4）：语义与 removeMethod 同构（身份回收 + 物理平移）。
+    /// @brief 删除字段：语义与 removeMethod 同构（身份回收 + 物理平移）。
     Result<void, LowerError> removeField(FieldId field);
 
-    /// @brief 跨类搬移（A3 的接收形态）：把另一会话的方法挂入本会话。
+    /// @brief 跨类搬移：把另一会话的方法挂入本会话。
     ///
-    /// 名字/描述符/方法体随迁，迁移语义见 design.md §34：
+    /// 名字/描述符/方法体随迁，迁移语义见 ：
     /// - 挂载点常量 intern 进本会话 CP；方法体经 IR 重放随迁——指令的 CP
     ///   操作数按源会话语义视图读出、按本会话语义 intern 写入（引用结构
     ///   Methodref/NameAndType/Utf8 三跳在本会话池内重建）；分支/switch/异常
     ///   表经标签映射重建；maxes 随体拷贝。
     /// - 本会话新建的成员是「元数据 + 重放体」：源成员的非 Code 属性
     ///   （LNT/LVT/SMT/注解/Exceptions 等）不随迁；分支体在 v51+ 目标上
-    ///   需调用方随后用 buildStackMapTable 再生帧（见契约挂账）。
+    ///   需调用方随后用 buildStackMapTable 再生帧（契约见本节）。
     /// - ldc 的 MethodHandle/MethodType/Dynamic/Long/Float/Double 与
     ///   invokedynamic 调用点显式 Err(NotModeled)——不猜、不静默降级。
     /// - 源方法身份无效返回 Err(InvalidHandle)；源方法无体（abstract/
     ///   native）合法，产物同为无体成员。
     Result<MethodId, LowerError> adoptMethod(ClassSession& src, MethodId method);
 
-    /// @brief 跨类搬移（A4 的接收形态）：把另一会话的字段挂入本会话。
+    /// @brief 跨类搬移：把另一会话的字段挂入本会话。
     ///
     /// 字段只有元数据面：名字/描述符 intern 进本会话 CP；源字段的属性表
-    /// （ConstantValue/Signature/注解）不随迁（同 §34 契约）。
+    /// （ConstantValue/Signature/注解）不随迁（同  契约）。
     Result<FieldId, LowerError> adoptField(const ClassSession& src, FieldId field);
 
     /// @brief 将类级元数据提交到 backing（与 commitMethodMetadata 对称的类级面）。
@@ -780,7 +780,7 @@ public:
     /// intern/membership 查询惰性重建。定义在 operand.cpp（SemIndex 完整处）。
     void invalidateSemantics() noexcept;
 
-    // ---- 类构建挂载面（attr_build 批 1：注解族合成 + 通用挂载，A7 定形）----
+    // ---- 类构建挂载面（注解族合成 + 通用挂载）----
     //
     // 挂载语义（全 API 一致）：
     // - **只挂不改**：槽上已有同名属性时 Err(AlreadyMounted)——替换语义走
@@ -817,7 +817,7 @@ public:
     Result<void, LowerError> attachClassAnnotations(bool visible,
                                                     const std::vector<SemAnnotation>& annos);
 
-    /// @brief 通用挂载（A7 定形）：给成员挂一个**调用方已构造**的 typed 体。
+    /// @brief 通用挂载：给成员挂一个**调用方已构造**的 typed 体。
     ///
     /// 体上的 CP 槽由调用方先经语义 intern 家族落位；本面负责挂载点校验
     /// （Code 一律拒绝——方法体归 promote/lower 管径）、单例规则、属性名
@@ -829,7 +829,7 @@ public:
     Result<void, LowerError> attachClassAttr(std::string_view attrName,
                                              std::unique_ptr<core::AttrBody> body);
 
-    // ---- BSM 属性面（批 2）：类级 BootstrapMethods 的语义构建 ----
+    // ---- BSM 属性面：类级 BootstrapMethods 的语义构建 ----
     //
     // - **条目复用**：methodRef + 静态参数组全字段一致的既有条目直接命中
     //   复用（JVMS 对同形条目无可辨差异，javac/ASM 同思路合并）；
@@ -845,8 +845,8 @@ public:
                                                       const std::vector<BsmArg>& args);
 
 private:
-    // CP 压缩（A8，design.md §36）需要重建语义 intern 索引并把换池前的旧池
-    // 移入退居存储（§35.2 文本视图存活期契约），是会话内部的通道。
+    // CP 压缩需要重建语义 intern 索引并把换池前的旧池
+    // 移入退居存储（文本视图存活期契约），是会话内部的通道。
     friend Result<void, CompactFailure> compactConstantPool(ClassSession&);
 
     // shared_from_this 要求会话生来就在 shared_ptr 里：构造只对 makeSession
@@ -890,12 +890,12 @@ private:
 
     std::unique_ptr<core::ClassFile> backing_;
     ClassUnit unit_;
-    ChangeSet changes_;                     ///< E2 变更台账（§35，观察面不动模型）
+    ChangeSet changes_;                     ///< E2 变更台账（观察面不动模型）
     std::unique_ptr<class SemIndex> sem_;   // 语义去重索引（惰性构建）
 
-    /// @brief 压缩换池后退居的旧常量池（A8，§36.3）。
+    /// @brief 压缩换池后退居的旧常量池。
     ///
-    /// §35.2 的 ChangeSet 文本视图（改名记录的 prior 身份等）可能指向旧池
+    ///  的 ChangeSet 文本视图（改名记录的 prior 身份等）可能指向旧池
     /// arena 或源字节；压缩整体换池若直接销毁旧池，这些视图即悬垂。旧池
     /// 移入本处随会话同生共死，arena 块链整体移交，视图存活期契约不被
     /// 压缩破坏。
@@ -907,13 +907,13 @@ const char* to_string(LowerError e) noexcept;
 
 /// @brief 构建会话：解析骨架（this/super/接口/成员名与描述符物化进符号池）。
 ///
-/// 返回 shared_ptr 是**寿命接管**的根（design.md §24）：保活句柄
+/// 返回 shared_ptr 是**寿命接管**的根：保活句柄
 /// （CodeUnitRef / *SemRef）内部各持一份，会话活到最后一个引用归零。
 /// 共享的只是寿命，不是可变性——并发编辑依旧不被允许（单线程顺序模型）。
 Result<std::shared_ptr<ClassSession>, PromoteError>
 makeSession(std::unique_ptr<core::ClassFile> backing);
 
-/// @brief 从零建会话（A5）：空类起步，不走既有 backing。
+/// @brief 从零建会话：空类起步，不走既有 backing。
 ///
 /// 与 take-ownership 版同参返回形态：会话以 shared_ptr 接管寿命。种子的
 /// this/super/接口在构造期引导进 backing CP（Utf8 + Class 即时落位），成员
@@ -931,7 +931,7 @@ Result<std::shared_ptr<ClassSession>, PromoteError> makeSession(const NewClassSe
 ///
 /// 一步入口横跨 core（readClass:ReadError）与 ir（makeSession:PromoteError）
 /// 两个错误族；本结构如实保留「段 + 码」，不做跨族的有损映射，也不新增
-/// 第六套错误枚举（ergonomics F3 的收敛裁决照旧）。
+/// 第六套错误枚举（收敛裁决照旧）。
 struct SessionError
 {
     enum class Stage : ca::u8 {
@@ -944,11 +944,11 @@ struct SessionError
     PromoteError session = PromoteError::Ok;           ///< stage == Session 时有效
 };
 
-/// @brief 一步入口：class 字节 → 会话（ergonomics F2）。
+/// @brief 一步入口：class 字节 → 会话）。
 ///
 /// 等价消化 readClass → 取 ReadResult.file → makeSession 的三步样板
 /// （demo/测试此前重复 3 份）；产物与三步版完全一致，同样以 shared_ptr
-/// 接管寿命（design.md §24）。
+/// 接管寿命。
 ///
 /// - 前置条件：bytes 在本调用期间保持有效（preserveSourceBytes 默认开启
 ///   时字节被复制进模型，返回后即可释放）。
@@ -964,7 +964,7 @@ makeSessionFromBytes(core::ByteView bytes,
 ///
 /// 视图版（memberOf 等）借用会话寿命；本类型把寿命带在身上——消费者
 /// 把查询结果存进容器、日志、跨线程队列都安全，会话活到最后一个引用
-/// 归零（design.md §24 寿命接管）。字符串字节本身（CP 源副本/arena）
+/// 归零（寿命接管）。字符串字节本身（CP 源副本/arena）
 /// 在会话存活期内地址稳定，追加不失效。
 class MemberSemRef
 {
@@ -1046,7 +1046,7 @@ private:
 /// （重建 CodeUnit）。指令 CP 操作数保持 backing 索引——session 存活期间有效。
 /// 扫描场景请先用 @ref hasCode 把「无代码」分流掉，让本函数的 Err 只剩
 /// 真失败（AttrNotDecoded / BadInstructions）——两者混在一个 `continue`
-/// 里会把解码坏了的方法静默吞掉（ergonomics F1）。
+/// 里会把解码坏了的方法静默吞掉）。
 Result<CodeUnitRef, PromoteError> promoteMethod(ClassSession& s, ca::usize methodIdx);
 
 /// @brief 按稳定方法身份升格方法体。
@@ -1068,7 +1068,7 @@ Result<void, LowerError> lowerMethod(ClassSession& s, ca::usize methodIdx);
 /// @brief 按稳定方法身份写回方法体。
 Result<void, LowerError> lowerMethod(ClassSession& s, MethodId method);
 
-/// @brief 查询第 methodIdx 个方法是否带 Code 属性（ergonomics F1）。
+/// @brief 查询第 methodIdx 个方法是否带 Code 属性）。
 ///
 /// 把「方法没有代码」（abstract/native，预期形态）从 promote 的错误路径
 /// 里拿出来：先用本查询分流，promoteMethod 的 Err 就只剩真失败。
@@ -1082,7 +1082,7 @@ bool hasCode(const ClassSession& s, ca::usize methodIdx) noexcept;
 
 /// @brief collectCodeUnits 的单方法记录：三种互斥状态。
 ///
-/// 设计目的是让「无 Code」与「真失败」不可混淆（ergonomics F1）：消费者
+/// 设计目的是让「无 Code」与「真失败」不可混淆）：消费者
 /// 想把 Failed 静默 continue，必须显式写下 Failed 分支才做得到。
 struct CodeVisit
 {
@@ -1098,7 +1098,7 @@ struct CodeVisit
     CodeUnitRef unit;                        ///< 仅 kind == Ok 时有效
 };
 
-/// @brief collectCodeUnits 的指令族（ergonomics F12：memberOf 一个入口返回
+/// @brief collectCodeUnits 的指令族（memberOf 一个入口返回
 /// 五族，统计「调用」时字段访问会混入——查询侧按族过滤的便捷形态）。
 enum class InsnFamily : ca::u8 {
     Invoke = 0,        ///< invoke 全家族（virtual/special/static/interface/indy）
@@ -1110,7 +1110,7 @@ enum class InsnFamily : ca::u8 {
 /// @brief 指令所属族的掩码位（CodeCollectFilter 用）；不属任何族返回 0。
 ca::u32 insnFamilyBit(core::Op op) noexcept;
 
-/// @brief collectCodeUnits 的收录过滤器（ergonomics F12/D6）。
+/// @brief collectCodeUnits 的收录过滤器。
 ///
 /// 两个维度独立生效（交集语义，维度掩码为 0 = 该维度不过滤）：
 /// - @ref insnFamilies：方法体内至少含一条命中族的指令；
@@ -1126,21 +1126,21 @@ struct CodeCollectFilter
     bool includeNoCode = true; ///< 无 Code 方法（abstract/native）是否产出记录
 };
 
-/// @brief 按方法下标升序收集会话内全部方法的 Code 升格结果（ergonomics F1，
+/// @brief 按方法下标升序收集会话内全部方法的 Code 升格结果（
 ///        全量形态；按族过滤见带过滤器重载）。
 ///
 /// - 形态：值返回（拉），不是回调推送——visitor 清零的机械判据是数据形态
-///   （design.md §26：事件推给消费者即换皮）。每方法恰一条记录；提前退出
+///   （事件推给消费者即换皮）。每方法恰一条记录；提前退出
 ///   由调用方自己 break。
 /// - 已 promote 的方法**直接复用**现有 CodeUnit，不重建——重建会使消费
 ///   者手里既有的 CodeUnitRef 失效（promoteMethod 的「幂等 = 重建」语义
 ///   在遍历场景是陷阱，这里刻意避开）；未 promote 的方法就地升格一次。
 /// - 错误语义：三种 Kind 互斥；本函数自身不失败，升格失败落在
 ///   CodeVisit::Failed 里交由消费者处置——调用方仍须显式分支才能静默
-///   跳过（F1 防静默吞错在拉形态下不回退）。
+///   跳过（防静默吞错不回退）。
 std::vector<CodeVisit> collectCodeUnits(ClassSession& s);
 
-/// @brief 带族过滤的收集（ergonomics F12/D6）：只收录命中
+/// @brief 带族过滤的收集：只收录命中
 ///        @ref CodeCollectFilter 各维度的方法，记录形态与全量版同构。
 ///
 /// 收录判定在升格之后进行（升格失败的 Failed 记录恒保留，见过滤器契约）；

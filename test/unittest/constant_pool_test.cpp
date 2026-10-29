@@ -118,7 +118,7 @@ TEST(ConstantPoolTest, OutOfRangeIndexIsRejected)
     EXPECT_FALSE(cf->cp.utf8Equals(0, "anything"));
 }
 
-/// 宽条目的第二槽越出 constant_pool_count 属 CP 结构损坏（design.md §27.3）：
+/// 宽条目的第二槽越出 constant_pool_count 属 CP 结构损坏：
 /// 后续条目边界无法确定，且宽容写回会使槽位比输入多 1——reader 阶段即 Err，
 /// 不产出降级模型。
 TEST(ConstantPoolTest, WideEntryOverflowingCountIsRejected)

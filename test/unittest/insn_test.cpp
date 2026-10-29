@@ -197,7 +197,7 @@ TEST(InsnCodecTest, EmptyCodeIsValid)
     EXPECT_EQ(r.unwrap().size(), 0u);
 }
 
-/// 编码闸门（design.md §27.2）：操作数落不进目标域宽必须 Err(Unencodable)，
+/// 编码闸门：操作数落不进目标域宽必须 Err(Unencodable)，
 /// 不得静默截断——截断产出引用错条目 / 立即数错值的 class。u1 域放不下的
 /// 唯一合法出路是显式拓宽（wide 前缀 / LDC_W / goto_w）。
 TEST(InsnCodecTest, EncodeRejectsOutOfRangeOperands)
@@ -386,7 +386,7 @@ TEST(CodeDomTest, ReplaceAllUsesRedirectsControlFlowOnly)
 }
 
 // ---------------------------------------------------------------------------
-// CodeDom：eraseBatch 批量删除（D3，design.md 全有或全无契约）
+// CodeDom：eraseBatch 批量删除（全有或全无契约）
 // ---------------------------------------------------------------------------
 
 TEST(CodeDomTest, EraseBatchAllOrNothing)

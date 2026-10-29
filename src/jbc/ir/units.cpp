@@ -137,7 +137,7 @@ Result<std::shared_ptr<ClassSession>, PromoteError> makeSession(const NewClassSe
     // 全部从 backing 镜像（成员面为空），两套状态天然一致。
     auto made = makeSession(std::move(backing));
     if (made.is_ok()) {
-        // E2 记账（§35.1）：从零建出 = 整类皆新，消费者按整类重建。
+        // E2 记账：从零建出 = 整类皆新，消费者按整类重建。
         ChangeRecord created;
         created.kind = ChangeKind::ClassCreated;
         made.unwrap()->noteChange(created);
@@ -852,7 +852,7 @@ Result<void, LowerError> lowerMethod(ClassSession& s, MethodId method)
     out->maxStack  = cu.maxStack;
     out->maxLocals = cu.maxLocals;
     cu.dom.acceptLoweredLayout(raw);
-    // E2 记账（§35.1）：body 粒度以 lower 落盘点为准——code/异常表/maxes 任一
+    // E2 记账：body 粒度以 lower 落盘点为准——code/异常表/maxes 任一
     // 实改才记（copy-through 早退路径不进此处）。身份视图取符号池（只增不移）。
     {
         ChangeRecord body;
@@ -894,9 +894,9 @@ Result<void, LowerError> ClassSession::commitMethodMetadata(MethodId method)
     }
     core::MemberInfo& m = backing_->methods[mu->backingIndex];
     if (m.nameCp != nameCp || m.descCp != descCp || m.access != mu->access) {
-        // E2 记账（§35.1）：元数据粒度只在实改时记；改写前身份从 backing CP
+        // E2 记账：元数据粒度只在实改时记；改写前身份从 backing CP
         // 原样解析（append-only 契约保证旧条目仍在），仅身份实变（改名/换
-        // 描述符）时携带——未改名（仅 access 变）保持空视图（§35.2 契约）。
+        // 描述符）时携带——未改名（仅 access 变）保持空视图（契约）。
         ChangeRecord meta;
         meta.kind   = ChangeKind::MemberMetadata;
         meta.member = MemberKind::Method;
@@ -958,7 +958,7 @@ Result<void, LowerError> ClassSession::commitClassMetadata()
     }
 
     // 提交：intern 去重落位，再写回头字段。super 空名 = 无父类（Object），写 0。
-    // E2 记账（§35.1）：类级粒度只在实改时记——CP 只追加且 intern 去重，同一
+    // E2 记账：类级粒度只在实改时记——CP 只追加且 intern 去重，同一
     // 名字的索引不变，故头字段索引/旗标的前后相等 ⇔ 元数据未变。
     const ca::u16 oldAccess = cf.access;
     const ca::u16 oldMajor  = cf.major;
@@ -1083,7 +1083,7 @@ Result<MethodId, LowerError> ClassSession::addMethod(const MethodSeed& seed)
     mu.desc         = unit_.symbols().intern(seed.desc);
     mu.access       = seed.access;
     mu.backingIndex = backing_->methods.size() - 1;
-    // E2 记账（§35.1）：挂入即新成员；身份视图取符号池（入参视图可能是暂态）。
+    // E2 记账：挂入即新成员；身份视图取符号池（入参视图可能是暂态）。
     const std::string_view nameView = unit_.symbols().str(mu.name);
     const std::string_view descView = unit_.symbols().str(mu.desc);
     const MethodId out = mu.id;
@@ -1155,7 +1155,7 @@ Result<void, LowerError> ClassSession::removeMethod(MethodId method)
         return Err(LowerError::InvalidHandle);
     }
     const ca::usize gone = mu->backingIndex;
-    // E2 记账（§35.1）：摘除即失成员；身份视图先取（符号池存储不受骨架摘除
+    // E2 记账：摘除即失成员；身份视图先取（符号池存储不受骨架摘除
     // 影响，视图在会话存活期内有效）。
     ChangeRecord removed;
     removed.kind   = ChangeKind::MemberRemoved;
@@ -1228,7 +1228,7 @@ namespace {
 /// adoptMethod 的方法体重放：指令逐条搬运，CP 操作数按源会话语义视图读出、
 /// 按本会话语义 intern 写入。分支/switch 目标经标签映射重建（前向目标的
 /// 占位标签在重放期未锚定，走 CodeDom 受控延后绑定构建态，统一改绑后
-/// 收尾全量补校验，见 §34.3）。失败即 Err，调用方保证全有或全无（新成员
+/// 收尾全量补校验，见 ）。失败即 Err，调用方保证全有或全无（新成员
 /// 刚挂入，失败由调用方 remove 收尸或整体放弃会话）。
 Result<void, LowerError> replayMethodBody(ClassSession& dstS, ClassSession& srcS,
                                           const CodeUnit& from, CodeUnit& to)
@@ -1316,7 +1316,7 @@ Result<void, LowerError> replayMethodBody(ClassSession& dstS, ClassSession& srcS
                         break;
                     default:
                         // Long/Float/Double/MethodType/MethodHandle/Dynamic：
-                        // 语义 intern 面未覆盖，显式挂账（design.md §34）。
+                        // 语义 intern 面未覆盖，显式拒绝。
                         return Err(LowerError::NotModeled);
                     }
                 }

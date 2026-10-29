@@ -3,11 +3,11 @@
 ///
 /// 类型注解体里承载类名的位置——注解类型描述符（type_index）与 'c'
 /// element_value 的类描述符（如 `@Anno(Expr.class)`）——是字段描述符形态，
-/// 类名改写经 jbc::type::descriptor 的 span 手术面发生（design.md §32.7）。
+/// 类名改写经 jbc::type::descriptor 的 span 手术面发生。
 /// target_info 里的 supertype/throws 下标指向 CP Class 条目（interfaces 表
 /// 与 Exceptions 表），随 CP Class 条目重指向自动跟随，不属本入口。
 ///
-/// 契约（design.md §32.7）：
+/// 契约：
 ///   1. **显式调用出活**：调用方注入一对旧名/新名；未触发则槽保持
 ///      Untouched，字节逐字节 copy-through（硬门禁）。
 ///   2. **描述符层语义**：span 全名匹配 + 结构化替换，描述符语法非法

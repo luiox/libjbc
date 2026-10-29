@@ -154,7 +154,7 @@ Result<ReadResult, ReadError> readClass(ByteView bytes, const ReadOptions& opt)
     }
 
     // 类级属性表之后应正好结束。多余字节照 Code 体 trailing 同族处理
-    // （design.md §27.1）：保留为副本，写回原样附回——而不是 Err 或静默丢弃，
+    // ：保留为副本，写回原样附回——而不是 Err 或静默丢弃，
     // 否则 writeClass 输出缺尾，「未修改字节级往返」对这类输入不成立。
     // trailing 是「结构可确定、语义不合规」的降级形态，读取产物标记
     // Recovered（+warning）——降级必须可查询，不能只留在诊断流里。
@@ -216,7 +216,7 @@ Result<ReadResult, ReadError> readClass(ByteView bytes, const ReadOptions& opt)
 
     // 状态与诊断必须在模型被 move 走之前取出。Error 级诊断只可能伴随 Err
     // 返回（每处 diag.error 后同步 return Err），这里对 Recovered 起作用的
-    // 是 trailing 降级：结构读全了、但尾部不合规（§4.3 Recovered 语义）。
+    // 是 trailing 降级：结构读全了、但尾部不合规（Recovered 语义）。
     ReadResult rr;
     rr.state = (f->diagnostics().hasError() || hasTrailing) ? ParseState::Recovered
                                                             : ParseState::Validated;

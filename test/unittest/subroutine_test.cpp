@@ -1,16 +1,16 @@
 /// @file        subroutine_test.cpp
-/// @brief       Strict 域 jsr/ret 子程序数据流测试（C2，design.md §10.6）。
+/// @brief       Strict 域 jsr/ret 子程序数据流测试。
 ///
-/// 语义依据 JVMS §4.10.2.5 族（jsr 压返回地址、ret 经局部槽跳回、
-/// 子程序未改写的局部槽保留调用方值）+ §6.5 jsr/ret/astore 指令语义。
+/// 语义依据 JVMS  族（jsr 压返回地址、ret 经局部槽跳回、
+/// 子程序未改写的局部槽保留调用方值）+  jsr/ret/astore 指令语义。
 /// 五部分：
 /// 1. 合成样本——嵌套子程序双返回点、子程序改写/保留调用方槽的对照、
 ///    入口栈上返回地址载荷。
-/// 2. 多调用点共享入口——returnAddress 只与自身合并（§4.10.2.5），异调用
+/// 2. 多调用点共享入口——returnAddress 只与自身合并，异调用
 ///    点互并在 Strict 域显式拒绝（failAt = 入口合并点）。
 /// 3. 畸形路径行为表——ret 读非返回地址槽（Int/Null/空槽）、jsr 指向非
 ///    指令偏移（promote 层结构拒绝）、jsr 为方法末条指令（返回点越界）。
-/// 4. SMT 生成裁决钉死——子程序帧显式 Err(Subroutine)（JVMS §4.7.4 tag 集
+/// 4. SMT 生成裁决钉死——子程序帧显式 Err(Subroutine)（JVMS  tag 集
 ///    无 returnAddress 形态）；v49 走版本门 Err(ClassTooOld)（v≤49 不带
 ///    SMT 走旧校验是规范许可行为）。
 /// 5. JVM 真跑门——v49 手造样本（无 SMT）javap 结构核对 + 本机 java 实际
@@ -103,7 +103,7 @@ FrameSummary strictCompute(ClassSession& s, const CodeUnit& u,
 }   // namespace
 
 // ---------------------------------------------------------------------------
-// 嵌套子程序：两级调用链的双返回点精确落位（§10.6）
+// 嵌套子程序：两级调用链的双返回点精确落位
 // ---------------------------------------------------------------------------
 
 TEST(SubroutineTest, NestedSubroutinesExactReturnSites)
@@ -172,7 +172,7 @@ TEST(SubroutineTest, NestedSubroutinesExactReturnSites)
 }
 
 // ---------------------------------------------------------------------------
-// 子程序改写 vs 保留调用方槽：出口态经 ret 并入返回点（§4.10.2.5 合并族）
+// 子程序改写 vs 保留调用方槽：出口态经 ret 并入返回点（合并族）
 // ---------------------------------------------------------------------------
 
 TEST(SubroutineTest, SubroutineRewritesAndPreservesCallerSlots)
@@ -230,7 +230,7 @@ TEST(SubroutineTest, SubroutineRewritesAndPreservesCallerSlots)
 }
 
 // ---------------------------------------------------------------------------
-// 多调用点共享入口：returnAddress 只与自身合并（§4.10.2.5），异调用点
+// 多调用点共享入口：returnAddress 只与自身合并，异调用点
 // 互并在 Strict 域显式拒绝（failAt = 入口合并点）
 // ---------------------------------------------------------------------------
 
@@ -277,7 +277,7 @@ TEST(SubroutineTest, MultiCallerSharedEntryRejectedAtEntry)
 }
 
 // ---------------------------------------------------------------------------
-// 畸形路径行为表（§10.6）：ret 读非返回地址槽 / 返回点越界
+// 畸形路径行为表：ret 读非返回地址槽 / 返回点越界
 // ---------------------------------------------------------------------------
 
 TEST(SubroutineTest, MalformedRetReadsIntSlot)
@@ -387,7 +387,7 @@ TEST(SubroutineTest, MalformedJsrNoReturnSite)
     EXPECT_EQ(sum.failAt, p.unwrap()->dom.order()[atRet]);
 }
 
-/// jsr 指向非法偏移：JVMS §4.9.2 结构约束（跳转目标必须是方法内某条指令
+/// jsr 指向非法偏移：JVMS  结构约束（跳转目标必须是方法内某条指令
 /// 的 opcode）由 promote 层拒绝（importFrom 的 BadTarget 面），帧计算前
 /// 即不可达——结构校验归 reader/promote，帧域不重复把关。
 TEST(SubroutineTest, MalformedJsrToNonInsnOffsetPromoteRejects)
@@ -422,7 +422,7 @@ TEST(SubroutineTest, MalformedJsrToNonInsnOffsetPromoteRejects)
 }
 
 // ---------------------------------------------------------------------------
-// SMT 生成裁决钉死（§10.6）：子程序帧显式 Err(Subroutine)；v49 走版本门
+// SMT 生成裁决钉死：子程序帧显式 Err(Subroutine)；v49 走版本门
 // ---------------------------------------------------------------------------
 
 /// 0 jsr→8 / 3 nop / 4 return / 5-7 nop / 8 astore_1 / 9 ret 1（最小往返）。
@@ -445,7 +445,7 @@ Bytes minimalJsrCode()
 TEST(SubroutineTest, SmtBuildRejectsSubroutineFrames)
 {
     // v50：Strict 帧可算（引擎版本无关），但 full_frame 的
-    // verification_type_info 无 returnAddress 形态（JVMS §4.7.4）——显式
+    // verification_type_info 无 returnAddress 形态（JVMS ）——显式
     // Err(Subroutine)，不改码 Top/Int 伪造帧。
     auto s = methodClass(minimalJsrCode(), 1, 2, 50);
     ASSERT_NE(s, nullptr);
@@ -463,7 +463,7 @@ TEST(SubroutineTest, SmtBuildRejectsSubroutineFrames)
 TEST(SubroutineTest, SmtBuildOnV49HitsVersionGateFirst)
 {
     // v49：SMT 属性无定义——版本门先行（Err(ClassTooOld)）；v≤49 不带 SMT
-    // 走旧校验是规范许可行为（JVMS §4.10.1 failover），不需要也不得生成。
+    // 走旧校验是规范许可行为（JVMS  failover），不需要也不得生成。
     auto s = methodClass(minimalJsrCode(), 1, 2, 49);
     ASSERT_NE(s, nullptr);
     auto p = promoteMethod(*s, 0);
@@ -478,7 +478,7 @@ TEST(SubroutineTest, SmtBuildOnV49HitsVersionGateFirst)
 }
 
 // ---------------------------------------------------------------------------
-// JVM 真跑门（A1 批同款）：v49 手造样本（无 SMT）→ javap -v 结构核对 →
+// JVM 真跑门：v49 手造样本（无 SMT）→ javap -v 结构核对 →
 // 本机 java 实际加载执行。验证三件事：造码真实可验（旧推理 verifier 通过）、
 // 子程序语义正确（改写/保留/嵌套的计算结果）、畸形样本 JVM 侧同样拒绝。
 // ---------------------------------------------------------------------------

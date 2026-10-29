@@ -92,7 +92,7 @@ TEST(CrtAttrTest, TruncatedRowIsExplicitFailure)
     EXPECT_EQ(jbc::test::writeOk(*cf), cls);
 }
 
-// ---- trailing（design.md §27.1）：声明 length 多出的尾部字节重编码原样写回 ----
+// ---- trailing：声明 length 多出的尾部字节重编码原样写回 ----
 
 TEST(CrtAttrTest, TrailingSurvivesReencode)
 {
@@ -112,7 +112,7 @@ TEST(CrtAttrTest, TrailingSurvivesReencode)
     EXPECT_EQ(jbc::test::writeOk(*cf), cls) << "re-encode dropped trailing";
 }
 
-// ---- 编码闸门（design.md §27.2）：u2 编码列超域宽显式 Err，不静默截断 ----
+// ---- 编码闸门：u2 编码列超域宽显式 Err，不静默截断 ----
 
 TEST(CrtAttrTest, EncodersRejectOutOfRangeFields)
 {

@@ -6,7 +6,7 @@
 ///   - encode 是 decode 的精确逆：对未编辑的序列，字节必须逐位一致
 ///     （switch 的 4 字节对齐 padding 按目标 pc 重算，与源一致）。
 ///   - 本层不做任何「修改」——插入/删除/重定向属于 ir 层的 CodeDom。
-///     在 code 字节上直接做 pass 是设计明确禁止的路径（design.md §15）。
+///     在 code 字节上直接做 pass 是设计明确禁止的路径。
 #pragma once
 
 #include <vector>

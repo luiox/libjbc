@@ -1,4 +1,4 @@
--- libjbc：node-first JVM 字节码统一建模库（架构设计见 doc_ai/design.md）。
+-- libjbc：node-first JVM 字节码统一建模库（架构设计见 docs/design.md）。
 -- 本文件是独立仓工程根：包仓接线（libca 经 luiox-repo git 直连）、构建
 -- 开关、全局编译纪律（no-RTTI）与链接闭包助手，随后定义全部 target。
 -- core 层：单类 lazy classfile DOM——骨架 eager（头 / CP / 成员元数据 /
@@ -163,7 +163,6 @@ target("libjbc_unittest")
 end
 
 -- 消费者视角可用性用例：扫描/变换/往返三件事当外部库做。
--- 同时是 doc_ai/ergonomics.md 摩擦点清单的证据来源。
 target("libjbc_use_demo")
     set_kind("binary")
     set_group("libs/demo")

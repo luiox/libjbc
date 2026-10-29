@@ -308,7 +308,7 @@ Bytes makeExcClass(ca::u16 startPc, ca::u16 endPc, ca::u16 handlerPc)
 
 TEST(IrSessionTest, EditorEraseRejectsExceptionBoundary)
 {
-    // P0 回归（design.md §7.3：try region 引用必须进 use 域）：异常表
+    // P0 回归（try region 引用必须进 use 域）：异常表
     // start/end/handler 三边界各指一条指令，erase 在 CodeEditor 层前置拒绝
     // （dom 的 usersOf 只扫 branch/switch，StillUsed 错误现场留在编辑层）；
     // 绕过编辑器的死句柄由 lower 的 pcOfId 兜底，见

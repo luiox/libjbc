@@ -1,5 +1,5 @@
 /// @file        smt_build.hpp
-/// @brief       StackMapTable 生成器（design.md §10.4，A1/J6）。
+/// @brief       StackMapTable 生成器。
 ///
 /// 把 Strict 帧计算的结果（逐指令到达帧）编码为 core 层既有的
 /// StackMapTableAttr 模型：目标集合收集（分支/switch 目标 + 异常 handler
@@ -7,11 +7,11 @@
 /// Uninitialized 载荷 = 产生方 new 指令 pc）、紧凑形态选择（JVMS 4.7.4
 /// 同族 + chop/append/full，与 javac 同取最小形态）。
 ///
-/// 边界（A1/J6 裁决）：显式 API——只有调用本函数才发生生成与 CP 落位；
+/// 边界（裁决）：显式 API——只有调用本函数才发生生成与 CP 落位；
 /// 不自动接线 lower/write（把属性挂回 Code、maxes 自动采用归 J7）。
-/// 陈述口径：按 Strict 域陈述运行值精确类型（§10.2.6 裁决），不做 javac
+/// 陈述口径：按 Strict 域陈述运行值精确类型（裁决），不做 javac
 /// 的声明投影——死局部不 chop、类型不陈述父类；与 javac 产物按
-/// 「公共前缀逐槽一致」比对（§10.3.6 口径）。
+/// 「公共前缀逐槽一致」比对（口径）。
 #pragma once
 
 #include <memory>
@@ -27,16 +27,16 @@ namespace jbc::analysis {
 
 using ca::core::Result;
 
-/// @brief 生成失败语义（§10.4：每个失败码都是显式定义的行为）。
+/// @brief 生成失败语义（每个失败码都是显式定义的行为）。
 enum class SmtBuildError : ca::u8 {
     ClassTooOld,     ///< classfile 版本 < 50：SMT 属性无定义（调用方决定跳过或报错）
     FramesNotOk,     ///< 输入帧不是与 CodeUnit 对齐的 ok=true Strict 计算结果
     BottomInFrame,   ///< 帧槽出现 Bottom / 无名引用（冲突残留或播种缺名——防御拒绝）
     TargetNotInsn,   ///< Uninitialized 载荷未命中方法内任何 new 指令 pc
     TooBig,          ///< 帧数 / delta 超 u2 编码域
-    Subroutine,      ///< 帧槽含 ReturnAddress：SMT 无法编码子程序（C2 裁决——
+    Subroutine,      ///< 帧槽含 ReturnAddress：SMT 无法编码子程序（裁决——
                      ///<   verification_type_info 是封闭 tag 集，无 returnAddress
-                     ///<   形态（JVMS §4.7.4）；v≤49 不带 SMT 走旧校验是规范
+                     ///<   形态（JVMS ）；v≤49 不带 SMT 走旧校验是规范
                      ///<   许可行为，不需要也不得生成 SMT）
 };
 
@@ -54,7 +54,7 @@ struct SmtBuildResult
     std::unique_ptr<core::StackMapTableAttr> attr;
 };
 
-/// @brief 由 Strict 帧结果生成 StackMapTable 属性模型（A1/J6 显式 API）。
+/// @brief 由 Strict 帧结果生成 StackMapTable 属性模型（显式 API）。
 ///
 /// - 输入：@p frames 必须来自 FrameEngine(Strict).compute(u, sig) 的逐指令
 ///   帧（与 order() 对齐、ok=true、播种经 MethodSig——初始帧名精确、构造器

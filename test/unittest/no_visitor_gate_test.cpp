@@ -1,11 +1,11 @@
 /// @file        no_visitor_gate_test.cpp
-/// @brief       visitor 清零门禁（design.md §1.4-4 / §15 / §26）：src 内不得出现
+/// @brief       visitor 清零门禁（design.md §11 visitor 清零）：src 内不得出现
 ///              visitor 形状——类型名、visit* 方法、std::function 回调 sink。
 ///
-/// 判定标准不是类名里有没有 Visitor，而是数据「拉回来还是推给你」（§26）；
+/// 判定标准不是类名里有没有 Visitor，而是数据「拉回来还是推给你」（design.md §11）；
 /// 本测试把它落成三个机械模式。注释与字符串先被掩蔽（替换为空格、保留换行，
 /// 行号因此仍然准确），所以「设计上拒绝 visitor」这类正当描述不会误伤。
-/// 确需豁免：先改 §26 与 §1.4 的条款，再改这里——门禁与文档同源。
+/// 确需豁免：先改 design.md §11 的条款，再改这里——门禁与文档同源。
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -126,10 +126,10 @@ TEST(NoVisitorGate, SrcHasNoVisitorShapes)
 {
     const fs::path root = srcRoot();
     ASSERT_FALSE(root.empty())
-        << "找不到 libs/libjbc/src：请在 xmake set_rundir 的 projectdir 下运行 "
+        << "找不到 src/：请在 xmake set_rundir 的 projectdir 下运行 "
            "(xmake run libjbc_unittest)，门禁不能静默缺席";
 
-    // §26 三个机械模式（与文档同源；改其一先改另一）
+    // 三个机械模式（与文档同源；改其一先改另一）
     const std::vector<std::pair<std::regex, std::string>> bans = {
         {std::regex(R"(\b(class|struct)\s+\w*Visitor\b)"), "(class|struct) XxxVisitor"},
         {std::regex(R"(\bvisit\w*\s*\()"), "visitXxx(...)"},
@@ -184,5 +184,5 @@ TEST(NoVisitorGate, SrcHasNoVisitorShapes)
     EXPECT_TRUE(hits.empty())
         << "visitor 形状残留（" << hits.size() << " 处 / 扫描 " << scanned
         << " 文件）——libjbc 不含 visitor，无论公共 API、codec 内部还是 adapter"
-           "（design.md §1.4-4/§15/§26）：" << msg.str();
+           "（design.md §11 visitor 清零）：" << msg.str();
 }
