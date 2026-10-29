@@ -10,7 +10,7 @@
 ///    展开按公共前缀逐槽比对（口径：多槽/更精确不判分歧）。javac
 ///    缺席时 skip。
 /// 3. JVM 真跑——javac 样本（异常/循环/switch/构造器链）+ 手拼 uninit
-///    样本，J7 全链（剥 SMT + maxes 覆盖 + lower 写回 + 重生成 SMT）后
+///    样本，全链（剥 SMT + maxes 覆盖 + lower 写回 + 重生成 SMT）后
 ///    java 执行验收（整链端到端的最强门）。JDK 缺席时 skip。
 #include <gtest/gtest.h>
 
@@ -311,7 +311,7 @@ MethodSig sigOf(const ClassSession& s, ca::usize i)
     return sig;
 }
 
-/// J7 全链生成管线（oracle 与 JVM 探针共用，A1 收官门）：对会话内全部方法
+/// 全链生成管线（oracle 与 JVM 探针共用）：对会话内全部方法
 /// 剥原 SMT → Strict 帧 → 重生成 → maxes 覆盖采用（applyComputedMaxes）→
 /// lower 写回（脏检查分支落 backing）→ 挂回 SMT。返回失败原因（空 = 成功）。
 struct RegenStats
@@ -351,7 +351,7 @@ std::string regenSmtInSession(ClassSession& s, StubResolver& res, RegenStats& st
         }
         auto built = std::move(r).unwrap();
 
-        // J7 全链：maxes 覆盖（显式 API）→ lower 写回——布局未变，lower 不
+        // 全链：maxes 覆盖（显式 API）→ lower 写回——布局未变，lower 不
         // 触碰指令与嵌套属性；maxes 变化走手动链路的同一脏检查分支（覆盖
         // 语义），与 JVM 真跑门共同锁「重算 maxes 可运行」。
         if (!applyComputedMaxes(*p.unwrap(), sum, sig)) {

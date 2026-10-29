@@ -3,8 +3,8 @@
 ///
 /// 由 strict_frame_test 与 smt_build_test 共用：同一份
 /// javac（--release 8）语料、同一套「SMT 帧链 → 全帧展开」机制、同一套
-/// 「公共前缀逐槽一致」比对判据（/ 陈述口径）。语料在
-/// J6 扩入 loop 与 switch 两样本（回边与 switch 目标帧此前无覆盖）。
+/// 「公共前缀逐槽一致」比对判据与陈述口径。语料覆盖
+/// loop 与 switch 两样本（回边与 switch 目标帧）。
 #pragma once
 
 #include <gtest/gtest.h>

@@ -99,6 +99,7 @@ Raw 名单已整体退役：非零长 Raw 体显式 `Err(AttrNotModeled)`，拒�
 
 - 指令是值语义槽（`slots_` 拥有、`order_` 存程序顺序），无 intrusive 链表、无 LabelNode。分支/switch/异常表边界持 owner-scoped `LabelId`（控制流标签与边界标签角色分离）；libjbc 的分支目标必须是已存在指令的句柄——「删了还有人跳过来」是返回值不是运行期错误，代价是前向跳两步（先锚点后 setTarget）。
 - 删除语义是 API 可见的状态机：有 incoming use 默认 `StillUsed`；`replaceAllUsesWith`/retarget 归零才可删；批量删除（`eraseBatch`）**全有或全无**、批内互指不算引用、retarget 安排显式；`CodeEditor` 是策略层（拒绝或改锚到顺序后继）。
+- 搬移原语 `moveRange(first, last, at)`：`[first, last)` 连续段整体搬到 at 之前，单趟提出回插重排 `order_`（O(n)），不触指令槽与标签锚定——段内标签随段迁移、段外对段内标签的引用天然有效，区别于「eraseBatch + 重建」（后者面向删除语义，改锚走标签替换）。`at == kNoInsn`/`last == kNoInsn` 尾哨兵与标签末哨兵同源（half-open 端点下尾段只有经哨兵可命名）。`CodeEditor::moveRange(+policy)` 在段几何外只裁决段首标签去向：`kHeadFollows`（默认）随段走；`kHeadStays` 留原位承接原 fallthrough、锚点改绑原段位后继（居尾改绑 end），被异常表 start/end/handler 引用的段首标签 `StillUsed` 拒绝——改边界 = 改保护区语义。几何拒绝（空段/倒置/锚点在段内）与句柄校验全部前置于变更，无半搬状态。
 - 迭代面 `collectCodeUnits` 值返回（拉形态），每方法恰一条 `CodeVisit`（NoCode/Failed/Ok 互斥），Failed 恒保留——静默吞错必须显式写分支才做得到；`CodeCollectFilter` 按指令族 × 属性族两维 AND 过滤。
 
 ### 5.2 ClassSession：promote / lower
@@ -146,7 +147,7 @@ promote、未 lower 的编辑、失败通道不记账（观察而非变更）。
 - **三态 `FramePolicy`**：BestEffort（形状数据流，帧自预言 oracle 100%）；Strict（类型精确，未注入 resolver 显式 `Err(NoResolver)` fail loud，算不动以指令级诊断拒绝，不伪造帧）；Preserve（读侧独立入口 `readFramesFromSmt`，不进 compute 路由——用途是与计算帧对拍/自校验）。
 - **resolver 契约**：`ITypeResolver::merge(VType, VType)` 单方法面，只解「两个具体引用类型的公共父类」。实现由调用方注入（类层级世界属上层）；默认降级 ShapeResolver（引用族互并退形状 Ref）。libjbc 保持单类职责，不做 SimpleVerifier 式层级校验。
 - **两格分离**：BestEffort 形状格 top=占槽未知（吸收，merge(Top,X)=X，服务 maxes 收敛）；Strict verifier 类型格 top=不可用值（支配，merge(Top,X)=Top）。依据是 JVMS 4.10.1.4 帧匹配——生成 SMT 的唯一裁判是 verifier，汇合槽单边 top 陈述为具体类型 verifier 必拒。
-- 异常边：try 范围内每条可抛指令向覆盖它的每个 handler 发边（可抛集 = JVM 保守全集）；handler 入口 = (抛出点 locals, [catch_type 精确类])，catch_type=0 播 Throwable；层级缺席保守放行全并入；死 try 的 handler 不可达。
+- 异常边两档：基础档 handler 由异常表播种（空 locals + [newException]），种子以**待并参与者**形态持有、与真实入边同权汇合（verifier 口径：入口帧 = 全部入边 join），真实边缺席由 worklist 排空后的种子倾泻兜底；精确档引擎不播种，对 try 范围内每条**可达**指令向覆盖它的每个 handler 发异常出口边（可抛判定 = JVM 保守全集），handler 入口 = (抛出点 in-state locals, [catch_type 精确类])，catch_type=0 播 Throwable；层级缺席保守放行全并入；死 try 的 handler 不可达（verifier 对死代码同样不出约束）。
 - jsr/ret：Strict 域数据流建模（返回地址载荷 = 调用点 srcPc；单调用点精确，多调用点共享入口显式 `Err(Subroutine)`——精确语义需 touched-bit-vector，不伪造）。含返回地址槽的帧不可编码为 SMT（封闭 tag 集无此形态），生成侧显式 Err。
 - **SMT 生成**（`buildStackMapTable`，显式调用出活）：逐字陈述 Strict 域运行值精确类型（不做 javac 的声明投影，比对口径 = 公共前缀逐槽一致）；目标集合 = 分支/switch 目标 + handler 入口；紧凑族选择（same/same1/ chop/append/full）按 javac 极小化策略；cat2 展开垫底槽必须恰为 Top；tag-8 载荷必须命中方法内 new 的 pc；tag-7 经 internClass 落位；主版本 <50 显式 `Err(ClassTooOld)`；无控制流不产出属性。
 - **maxes**：`applyComputedMaxes` 显式 API，重算即真值；verifier 地板并入（maxLocals ≥ 参数槽，maxStack ≥ 1 当带异常表）；超 u16 域不采用不改字段。只显式、不隐式。

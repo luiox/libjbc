@@ -184,7 +184,7 @@ FrameSummary policyRefusal(FramePolicy policy)
 /// locals 按槽位序原样搬运（值行在前、bottom 行在后）。引擎栈的内部布局
 /// 是 [垫底行, 值行]（值行恒在 back()，Machine::pushVal 先压垫底行），
 /// 交付口径与 SMT 条目空间（smt_read 展开 / smtEntriesOf 收缩）及
-/// JVMS  同序：值槽在前、Top 垫底槽在后，故栈上 cat2 对在交付时
+/// JVMS §4.7.4 同序：值槽在前、Top 垫底槽在后，故栈上 cat2 对在交付时
 /// 翻转为 [值, Top]。
 void deliverFrames(DomainResult<VType>& r, std::vector<FrameAt>& out)
 {

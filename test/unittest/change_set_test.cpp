@@ -1,5 +1,5 @@
 /// @file        change_set_test.cpp
-/// @brief       E2 ChangeSet 协议单元测试。
+/// @brief       ChangeSet 协议单元测试。
 ///
 /// 全部用关内建 ClassBuilder 字节构造（不依赖本机语料与 JDK）。测试矩阵：
 ///   - 记账形状：从零建出 / 解析会话零起点 / 增删（方法+字段）/ adopt /

@@ -507,7 +507,7 @@ Result<core::AnnotationsAttr::ElemValue, LowerError> ClassSession::synthElem(
     case Form::String:
         out.tag = 's';
         // 's' 的 const_value_index 直接指向 Utf8（JVMS 4.7.16.1 + javac
-        // 同形——见对照实验 B4：javac 对 "hi" 编 s#7 而 #7=Utf8）：注解
+        // 同形——javac 对 "hi" 编 s#7 而 #7=Utf8）：注解
         // 字符串不隔 CONSTANT_String 条目。
         out.cp = internUtf8Sem(e.str);
         return Ok(std::move(out));

@@ -129,7 +129,7 @@ TEST(LeakTest, AppendingToConstantPoolLeavesNothingBehind)
     });
 }
 
-/// 失败路径：截断输入必须干净失败。旧库的 A7 事故（构造中途抛出导致泄漏）
+/// 失败路径：截断输入必须干净失败。旧库的泄漏事故（构造中途抛出导致泄漏）
 /// 正是这一类的反面教材。
 TEST(LeakTest, MalformedInputFailsWithoutLeaking)
 {

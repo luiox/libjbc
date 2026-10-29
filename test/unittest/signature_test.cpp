@@ -2,7 +2,7 @@
 /// @brief       泛型签名系统测试：三形态表驱动解析（每产生式 ≥2 形态）、
 ///        roundtrip 逐字节恒等、畸形输入显式 Err（码+位置）、类名手术面。
 ///
-/// 验收口径（checklist B1）：合法输入 parse→unparse 逐字节恒等；畸形输入
+/// 验收口径：合法输入 parse→unparse 逐字节恒等；畸形输入
 /// Err 带位置不静默；手术后重 parse 恒等、逆向 rename 还原原串。
 #include <gtest/gtest.h>
 

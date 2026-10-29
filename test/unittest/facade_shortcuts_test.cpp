@@ -1,6 +1,6 @@
-/// @file        ergonomics_test.cpp
-/// @brief       v0.4 人体工学补口测试：
-///        F1 hasCode/collectCodeUnits、F2 makeSessionFromBytes、F4 findMethod。
+/// @file        facade_shortcuts_test.cpp
+/// @brief       便捷入口测试：
+///        hasCode/collectCodeUnits、CodeCollectFilter、makeSessionFromBytes、findMethod。
 ///
 /// 全部用关内建的 ClassBuilder 字节构造（不依赖本机语料），畸形输入逐字节
 /// 受控——这与 test_class_bytes.hpp 的测试哲学一致。
@@ -62,7 +62,7 @@ Bytes makeThreeMethodClass()
 
 std::shared_ptr<ClassSession> sessionOf(const Bytes& bytes)
 {
-    // 本文件的样板被 F2 结清：一步入口，不再 readClass→取 file→makeSession。
+    // 本文件的样板被 makeSessionFromBytes 结清：一步入口，不再 readClass→取 file→makeSession。
     auto r = jbc::ir::makeSessionFromBytes(ByteView{bytes.data(), bytes.size()});
     return r.is_ok() ? std::move(r).unwrap() : nullptr;
 }
@@ -70,10 +70,10 @@ std::shared_ptr<ClassSession> sessionOf(const Bytes& bytes)
 }   // namespace
 
 // ===========================================================================
-// F1：hasCode / collectCodeUnits——「无 Code」与「真失败」分流
+// hasCode / collectCodeUnits——「无 Code」与「真失败」分流
 // ===========================================================================
 
-TEST(ErgonomicsF1Test, HasCodeDistinguishesNoCodeAndRange)
+TEST(CodeCollectShortcutTest, HasCodeDistinguishesNoCodeAndRange)
 {
     auto s = sessionOf(makeThreeMethodClass());
     ASSERT_NE(s, nullptr);
@@ -87,7 +87,7 @@ TEST(ErgonomicsF1Test, HasCodeDistinguishesNoCodeAndRange)
     EXPECT_FALSE(jbc::ir::hasCode(*s, 1000));
 }
 
-TEST(ErgonomicsF1Test, CollectCodeUnitsSeparatesNoCodeFromFailure)
+TEST(CodeCollectShortcutTest, CollectCodeUnitsSeparatesNoCodeFromFailure)
 {
     auto s = sessionOf(makeThreeMethodClass());
     ASSERT_NE(s, nullptr);
@@ -116,7 +116,7 @@ TEST(ErgonomicsF1Test, CollectCodeUnitsSeparatesNoCodeFromFailure)
     EXPECT_EQ(visits[2].unit.get(), nullptr);
 }
 
-TEST(ErgonomicsF1Test, CollectCodeUnitsReusesPromotedUnit)
+TEST(CodeCollectShortcutTest, CollectCodeUnitsReusesPromotedUnit)
 {
     auto s = sessionOf(makeThreeMethodClass());
     ASSERT_NE(s, nullptr);
@@ -139,7 +139,7 @@ TEST(ErgonomicsF1Test, CollectCodeUnitsReusesPromotedUnit)
     EXPECT_EQ(kept.unwrap()->dom.size(), 3u);   // 原句柄仍有效可解引用
 }
 
-TEST(ErgonomicsF1Test, CollectCodeUnitsOnAbstractOnlyClassAllNoCode)
+TEST(CodeCollectShortcutTest, CollectCodeUnitsOnAbstractOnlyClassAllNoCode)
 {
     ClassBuilder cb;
     const ca::u16 thisIdx = cb.utf8("p/A");
@@ -166,7 +166,7 @@ TEST(ErgonomicsF1Test, CollectCodeUnitsOnAbstractOnlyClassAllNoCode)
 }
 
 // ===========================================================================
-// D6：collectCodeUnits 按族过滤——CodeCollectFilter 两维（指令族/属性族）
+// collectCodeUnits 按族过滤——CodeCollectFilter 两维（指令族/属性族）
 // ===========================================================================
 
 namespace {
@@ -257,7 +257,7 @@ std::vector<ca::usize> idxOf(std::shared_ptr<ClassSession>& s,
 
 }   // namespace
 
-TEST(ErgonomicsD6Test, DefaultFilterMatchesNoFilter)
+TEST(CodeCollectFilterTest, DefaultFilterMatchesNoFilter)
 {
     auto s = sessionOf(makeFamilyClass());
     ASSERT_NE(s, nullptr);
@@ -274,7 +274,7 @@ TEST(ErgonomicsD6Test, DefaultFilterMatchesNoFilter)
     }
 }
 
-TEST(ErgonomicsD6Test, InsnFamilyBitClassifiesAndExcludes)
+TEST(CodeCollectFilterTest, InsnFamilyBitClassifiesAndExcludes)
 {
     using jbc::ir::insnFamilyBit;
     EXPECT_NE(insnFamilyBit(Op::INVOKESTATIC), 0u);
@@ -290,7 +290,7 @@ TEST(ErgonomicsD6Test, InsnFamilyBitClassifiesAndExcludes)
     EXPECT_EQ(insnFamilyBit(Op::GETFIELD) & insnFamilyBit(Op::LDC), 0u);
 }
 
-TEST(ErgonomicsD6Test, InsnFamilyFilterSelectsMatchingMethods)
+TEST(CodeCollectFilterTest, InsnFamilyFilterSelectsMatchingMethods)
 {
     auto s = sessionOf(makeFamilyClass());
     ASSERT_NE(s, nullptr);
@@ -327,7 +327,7 @@ TEST(ErgonomicsD6Test, InsnFamilyFilterSelectsMatchingMethods)
     EXPECT_EQ(visits[0].unit->dom.size(), 3u);
 }
 
-TEST(ErgonomicsD6Test, AttrKindFilterSelectsByNestedAttr)
+TEST(CodeCollectFilterTest, AttrKindFilterSelectsByNestedAttr)
 {
     auto s = sessionOf(makeFamilyClass());
     ASSERT_NE(s, nullptr);
@@ -344,7 +344,7 @@ TEST(ErgonomicsD6Test, AttrKindFilterSelectsByNestedAttr)
     EXPECT_EQ(idxOf(s, f), (std::vector<ca::usize>{5, 6}));
 }
 
-TEST(ErgonomicsD6Test, TwoDimensionsIntersect)
+TEST(CodeCollectFilterTest, TwoDimensionsIntersect)
 {
     auto s = sessionOf(makeFamilyClass());
     ASSERT_NE(s, nullptr);
@@ -359,7 +359,7 @@ TEST(ErgonomicsD6Test, TwoDimensionsIntersect)
     EXPECT_EQ(idxOf(s, f), (std::vector<ca::usize>{5, 6}));
 }
 
-TEST(ErgonomicsD6Test, IncludeNoCodeFalseKeepsFailed)
+TEST(CodeCollectFilterTest, IncludeNoCodeFalseKeepsFailed)
 {
     auto s = sessionOf(makeFamilyClass());
     ASSERT_NE(s, nullptr);
@@ -374,17 +374,17 @@ TEST(ErgonomicsD6Test, IncludeNoCodeFalseKeepsFailed)
     ASSERT_EQ(visits.size(), 2u);
     EXPECT_EQ(visits[0].methodIdx, 0u);
     EXPECT_EQ(visits[0].kind, CodeVisit::Kind::Ok);
-    // Failed 恒保留——过滤不复活 F1 要堵的「静默吞失败」。
+    // Failed 恒保留——过滤不复活「静默吞失败」。
     EXPECT_EQ(visits[1].methodIdx, 6u);
     EXPECT_EQ(visits[1].kind, CodeVisit::Kind::Failed);
     EXPECT_EQ(visits[1].error, PromoteError::BadInstructions);
 }
 
 // ===========================================================================
-// F2：makeSessionFromBytes——一步从字节建会话
+// makeSessionFromBytes——一步从字节建会话
 // ===========================================================================
 
-TEST(ErgonomicsF2Test, OneStepBuildsSameSessionAsThreeStep)
+TEST(MakeSessionFromBytesTest, OneStepBuildsSameSessionAsThreeStep)
 {
     const Bytes cls = makeThreeMethodClass();
     auto r = jbc::ir::makeSessionFromBytes(ByteView{cls.data(), cls.size()});
@@ -404,7 +404,7 @@ TEST(ErgonomicsF2Test, OneStepBuildsSameSessionAsThreeStep)
     EXPECT_EQ(p.unwrap()->dom.size(), 3u);
 }
 
-TEST(ErgonomicsF2Test, ReportsReadStageErrorWithCode)
+TEST(MakeSessionFromBytesTest, ReportsReadStageErrorWithCode)
 {
     // 坏魔数：错误落在 Read 段，具体码保留（不被跨族映射吞掉）。
     const Bytes badMagic = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07};
@@ -421,7 +421,7 @@ TEST(ErgonomicsF2Test, ReportsReadStageErrorWithCode)
     EXPECT_EQ(r2.unwrap_err().read, ReadError::Truncated);
 }
 
-TEST(ErgonomicsF2Test, HonorsReadOptions)
+TEST(MakeSessionFromBytesTest, HonorsReadOptions)
 {
     const Bytes cls = makeThreeMethodClass();
     ReadOptions opt;
@@ -435,7 +435,7 @@ TEST(ErgonomicsF2Test, HonorsReadOptions)
 }
 
 // ===========================================================================
-// F4：ClassUnit::findMethod——按名字/描述符定位方法
+// ClassUnit::findMethod——按名字/描述符定位方法
 // ===========================================================================
 
 namespace {
@@ -470,7 +470,7 @@ Bytes makeOverloadClass()
 
 }   // namespace
 
-TEST(ErgonomicsF4Test, FindMethodByNameAndDescriptor)
+TEST(FindMethodTest, FindMethodByNameAndDescriptor)
 {
     auto s = sessionOf(makeOverloadClass());
     ASSERT_NE(s, nullptr);
@@ -488,7 +488,7 @@ TEST(ErgonomicsF4Test, FindMethodByNameAndDescriptor)
     EXPECT_EQ(u.findMethod(""), jbc::ir::kNoMethod);
 }
 
-TEST(ErgonomicsF4Test, FindMethodIndexFeedsPromoteAndLower)
+TEST(FindMethodTest, FindMethodIndexFeedsPromoteAndLower)
 {
     auto s = sessionOf(makeOverloadClass());
     ASSERT_NE(s, nullptr);
@@ -503,7 +503,7 @@ TEST(ErgonomicsF4Test, FindMethodIndexFeedsPromoteAndLower)
     EXPECT_TRUE(jbc::ir::lowerMethod(*s, overload).is_ok());   // 无变化 → copy-through
 }
 
-TEST(ErgonomicsF4Test, MethodIdSurvivesIrReorderAndCodeAttrReorder)
+TEST(FindMethodTest, MethodIdSurvivesIrReorderAndCodeAttrReorder)
 {
     auto s = sessionOf(makeOverloadClass());
     ASSERT_NE(s, nullptr);
@@ -535,9 +535,9 @@ TEST(ErgonomicsF4Test, MethodIdSurvivesIrReorderAndCodeAttrReorder)
     EXPECT_EQ(p2.unwrap()->dom.size(), 2u);
 }
 
-TEST(ErgonomicsF4Test, MaxesHandEditFeedsLowerWriteBack)
+TEST(FindMethodTest, MaxesHandEditFeedsLowerWriteBack)
 {
-    // A2 契约（手动链路）：手改 CodeUnit 的 maxes 后，lower 的脏检查分支把
+    // 手动链路：手改 CodeUnit 的 maxes 后，lower 的脏检查分支把
     // 新值写回 Code 属性（自动采用帧引擎重算值是另一条待接线链路）。
     auto s = sessionOf(makeOverloadClass());
     ASSERT_NE(s, nullptr);
@@ -564,7 +564,7 @@ TEST(ErgonomicsF4Test, MaxesHandEditFeedsLowerWriteBack)
     EXPECT_EQ(p2.unwrap()->maxLocals, 7u);
 }
 
-TEST(ErgonomicsF4Test, MethodMetadataCommitUsesStableMethodId)
+TEST(FindMethodTest, MethodMetadataCommitUsesStableMethodId)
 {
     auto s = sessionOf(makeOverloadClass());
     ASSERT_NE(s, nullptr);

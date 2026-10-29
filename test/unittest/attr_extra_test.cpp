@@ -47,7 +47,7 @@ Bytes buildWithAttr(const std::string& name, const Bytes& body)
 std::vector<std::string> collectClassFiles(const std::string& mainRoot)
 {
     namespace fs = std::filesystem;
-    // 主语料 = 语料解析序产物（env > 仓内自产，F1）；
+    // 主语料 = 语料解析序产物（env > 仓内自产）；
     // 固定语料 = test_resource 里的注解样本（cfr 提取，含类/方法级注解与
     // lambda 的 BootstrapMethods），保证注解路径不依赖构建产物存在。
     std::vector<fs::path> roots{fs::path(mainRoot), fs::path("test_resource/libjbc/annotated")};
@@ -95,7 +95,7 @@ TEST(AttrExtraTest, BootstrapMethodsDecodeAndReencode)
     EXPECT_EQ(jbc::test::writeOk(*cf), cls);
 }
 
-/// B6 冒烟：BootstrapMethods 参数改写 → 写出 → 重读一致（checklist B6）。
+/// 冒烟：BootstrapMethods 参数改写 → 写出 → 重读一致。
 ///
 /// javac lambda 形态的最小载体：BSM 条目（methodRef = MethodHandle，
 /// args = [String 常量]）+ invokedynamic 指令（CP InvokeDynamic 条目）。

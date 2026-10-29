@@ -890,7 +890,7 @@ private:
 
     std::unique_ptr<core::ClassFile> backing_;
     ClassUnit unit_;
-    ChangeSet changes_;                     ///< E2 变更台账（观察面不动模型）
+    ChangeSet changes_;                     ///< 变更台账（观察面不动模型）
     std::unique_ptr<class SemIndex> sem_;   // 语义去重索引（惰性构建）
 
     /// @brief 压缩换池后退居的旧常量池。
