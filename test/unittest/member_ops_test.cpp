@@ -3,10 +3,10 @@
 ///
 /// 全部用关内建的 ClassBuilder 字节构造（不依赖本机语料与 JDK）；JVM 真跑
 /// 门在 member_move_test.cpp。测试矩阵：
-///   - A3 方法：add（元数据 + 空 Code 体）/ remove（句柄失效 + 槽位复用
+///   - 方法：add（元数据 + 空 Code 体）/ remove（句柄失效 + 槽位复用
 ///     generation 自增 + 物理平移）/ adopt（跨会话搬移 + 语义重放）；
-///   - A4 字段：FieldId 身份 / commitFieldMetadata / add/remove/adopt 同构；
-///   - A5 从零：makeSession(NewClassSeed) 空类起步 + CP 引导 + 无源写出。
+///   - 字段：FieldId 身份 / commitFieldMetadata / add/remove/adopt 同构；
+///   - 从零建类：makeSession(NewClassSeed) 空类起步 + CP 引导 + 无源写出。
 #include <gtest/gtest.h>
 
 #include <memory>
@@ -106,7 +106,7 @@ std::shared_ptr<ClassSession> sessionOf(const Bytes& bytes)
 }   // namespace
 
 // ===========================================================================
-// A3：方法新增
+// 方法新增
 // ===========================================================================
 
 TEST(MemberOpsA3Test, AddMethodProvisionsMetadataAndEmptyCode)
@@ -190,7 +190,7 @@ TEST(MemberOpsA3Test, AddMethodAbstractShapeHasNoCodeAttr)
 }
 
 // ===========================================================================
-// A3：方法删除与身份失效协议
+// 方法删除与身份失效协议
 // ===========================================================================
 
 TEST(MemberOpsA3Test, RemoveMethodKeepsSiblingIdsAndShiftsBacking)
@@ -279,7 +279,7 @@ TEST(MemberOpsA3Test, RemovedHandleInvalidationAndSlotReuseGeneration)
 }
 
 // ===========================================================================
-// A3：跨会话方法搬移（adopt）
+// 跨会话方法搬移（adopt）
 // ===========================================================================
 
 TEST(MemberOpsA3Test, AdoptMethodReplaysBodyAndInternsCp)
@@ -554,7 +554,7 @@ TEST(MemberOpsA3Test, AdoptMethodReplaysBranchyBodyWithTargetsAndExc)
 }
 
 // ===========================================================================
-// A4：字段身份、元数据提交与增删
+// 字段身份、元数据提交与增删
 // ===========================================================================
 
 TEST(MemberOpsA4Test, FieldIdIdentityAndFind)
@@ -678,7 +678,7 @@ TEST(MemberOpsA4Test, AdoptFieldCarriesMetadata)
 }
 
 // ===========================================================================
-// A5：从零建类
+// 从零建类
 // ===========================================================================
 
 TEST(MemberOpsA5Test, MakeSessionFromSeedRoundtripWritesWithoutSource)

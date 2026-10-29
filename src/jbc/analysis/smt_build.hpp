@@ -8,7 +8,7 @@
 /// 同族 + chop/append/full，与 javac 同取最小形态）。
 ///
 /// 边界（裁决）：显式 API——只有调用本函数才发生生成与 CP 落位；
-/// 不自动接线 lower/write（把属性挂回 Code、maxes 自动采用归 J7）。
+/// 不自动接线 lower/write（把属性挂回 Code、maxes 自动采用）。
 /// 陈述口径：按 Strict 域陈述运行值精确类型（裁决），不做 javac
 /// 的声明投影——死局部不 chop、类型不陈述父类；与 javac 产物按
 /// 「公共前缀逐槽一致」比对（口径）。
@@ -36,7 +36,7 @@ enum class SmtBuildError : ca::u8 {
     TooBig,          ///< 帧数 / delta 超 u2 编码域
     Subroutine,      ///< 帧槽含 ReturnAddress：SMT 无法编码子程序（裁决——
                      ///<   verification_type_info 是封闭 tag 集，无 returnAddress
-                     ///<   形态（JVMS ）；v≤49 不带 SMT 走旧校验是规范
+                     ///<   形态（JVMS §4.7.4）；v≤49 不带 SMT 走旧校验是规范
                      ///<   许可行为，不需要也不得生成 SMT）
 };
 
@@ -46,7 +46,7 @@ const char* to_string(SmtBuildError e) noexcept;
 ///
 /// needed=false = 方法无控制流目标（空表也不写——调用方不得附加空属性）；
 /// needed=true 时 attr 非空且已选好紧凑形态，frames 即编码帧数。
-/// 属性名的 CP Utf8 不在本 API 落位（挂回 Code 属性归 J7 接线）。
+/// 属性名的 CP Utf8 不在本 API 落位（挂回 Code 属性时接线）。
 struct SmtBuildResult
 {
     bool needed = false;
@@ -65,7 +65,7 @@ struct SmtBuildResult
 /// - CP 落位：Object 条目的类名经 session.internClass 落位（CP 只追加 +
 ///   既有条目复用，与指令侧同一 intern 面）；Uninitialized 载荷用帧域
 ///   携带的 new 指令 pc（srcPc 口径——布局已变时由接线方保证帧与新布局
-///   一致，归 J7）。
+///   一致）。
 /// - 版本门：backing major < 50 → Err(ClassTooOld)（SMT 属性自版本 50
 ///   才有定义；是否跳过由调用方决定，本 API 不静默）。
 Result<SmtBuildResult, SmtBuildError>

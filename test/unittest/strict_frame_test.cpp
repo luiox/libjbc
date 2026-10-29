@@ -1,19 +1,19 @@
 /// @file        strict_frame_test.cpp
-/// @brief       Strict 帧计算域测试（design.md §10.1 C1 裁决的验收面）。
+/// @brief       Strict 帧计算域测试。
 ///
 /// 三部分：
 /// 1. 合成样本——策略三态 API、new+\<init\> 翻转、同/异 offset Uninit 合并、
-///    跨类合并经 resolver、jsr/ret 子程序往返（C2 起建模；专项面在
+///    跨类合并经 resolver、jsr/ret 子程序往返（专项面在
 ///    subroutine_test.cpp）、描述符精确注入。冲突/不可算
 ///    样本断言 Err + failAt 指向正确指令。
-/// 2. 异常边精确传播（J5/C3）——Strict 出口边播种 handler 入口（抛出点
+/// 2. 异常边精确传播——Strict 出口边播种 handler 入口（抛出点
 ///    locals + catch_type 精确类）、any 播 Throwable、死 try 的 handler
 ///    不可达、多抛出点合并（同类/resolver/冲突+failAt）；BestEffort 对照
 ///    逐项保持基础播种。
 /// 3. javac oracle——本机 javac 编译带 StackMapTable 的样本（--release 8），
 ///    解码 SMT 条目展开成全帧，与 Strict 域算出的分支目标帧与 handler
 ///    入口帧逐槽比对（验收口径：可算者与 javac 一致）。javac 缺席时 skip。
-///    语料与展开/比对机制在 smt_oracle_util.hpp（与 J6 生成器 oracle 共用）。
+///    语料与展开/比对机制在 smt_oracle_util.hpp（与生成器 oracle 共用）。
 /// 4. 语料全量两态 oracle——自产语料 + golden 语料类逐方法两态统计：
 ///    可算 → 与 SMT 展开公共前缀逐槽一致（可指派性口径）；不可算 → 显式
 ///    Err 带指令定位；断言零伪帧。stub resolver 用语料自收层级 + JDK 种子，
@@ -69,7 +69,7 @@ namespace fs = std::filesystem;
 
 namespace {
 
-/// oracle 语料根（相对运行目录；J6 生成器 oracle 用独立根，语料同源）。
+/// oracle 语料根（相对运行目录；生成器 oracle 用独立根，语料同源）。
 fs::path oracleRoot()
 {
     return fs::path("test") / "libjbc_strict_oracle";
@@ -130,7 +130,7 @@ TEST(StrictFrameTest, StrictWithoutResolverFailsLoud)
 
 TEST(StrictFrameTest, PreserveComputeRefusesReadSideIsSeparate)
 {
-    // J7 起 Preserve 不再是占位：读侧实现在 smt_read.hpp 的独立入口
+    // Preserve 读侧实现在 smt_read.hpp 的独立入口
     // （读属性不是数据流）。compute 对 Preserve 恒显式拒绝——语义路由不
     // 误导，本测试锁死该拒绝面。
     auto s = trivialClass();
@@ -488,7 +488,7 @@ TEST(StrictFrameTest, ResolverFailureIsExplicitAtMergePoint)
 }
 
 // ---------------------------------------------------------------------------
-// jsr/ret：Strict 域建模子程序数据流（C2；专项覆盖在 subroutine_test.cpp）
+// jsr/ret：Strict 域建模子程序数据流（专项覆盖在 subroutine_test.cpp）
 // ---------------------------------------------------------------------------
 
 namespace {
@@ -520,7 +520,7 @@ std::shared_ptr<ClassSession> jsrClass()
 
 TEST(StrictFrameTest, JsrRetStrictComputesSingleCallerRoundtrip)
 {
-    // C2 起行为变化（曾为 Subroutine 显式拒绝）：jsr 压 ReturnAddress{0}，
+    // 行为变化（曾为 Subroutine 显式拒绝）：jsr 压 ReturnAddress{0}，
     // astore 存入 local2，ret 跳回调用方 jsr 的顺序后继（pc3）。最小往返
     // 钉在主 strict 测试面，语义细节归 subroutine_test。
     auto s = jsrClass();
@@ -697,7 +697,7 @@ TEST(StrictFrameTest, CtorThisIsUninitThisUntilSuperCall)
 }
 
 // ---------------------------------------------------------------------------
-// 异常边精确传播（J5/C3）：Strict 出口边播种 handler 入口，BestEffort 原样
+// 异常边精确传播：Strict 出口边播种 handler 入口，BestEffort 原样
 // ---------------------------------------------------------------------------
 
 namespace {
@@ -1135,7 +1135,7 @@ TEST(StrictFrameOracle, ComputedFramesMatchJavacSmt)
                 << clsPath.filename() << "." << sig.name << ": strict compute failed: "
                 << jbc::analysis::to_string(sum.fail);
 
-            // handler 入口 pc 集合：不再豁免（J5 起入口帧纳入比对），仅用于
+            // handler 入口 pc 集合：不再豁免（入口帧纳入比对），仅用于
             // 计量「含 handler 帧 N 个」的验证口径。
             std::set<ca::u32> handlerPcs;
             for (const jbc::ir::CodeUnit::Exc& e : p.unwrap()->exc) {

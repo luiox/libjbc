@@ -146,7 +146,7 @@ Result<std::vector<ca::u8>, WriteError> writeClass(const ClassFile& cf)
 {
     const ByteView source = cf.source();
     // 源字节缺席只在「确实要走 copy-through」时才是错误：全合成模型每个
-    // 条目都在重编码态，照常写出（从零建类 A5 的写出路径）。
+    // 条目都在重编码态，照常写出（从零建类的写出路径）。
     if (!cf.hasSource() && writeNeedsSource(cf)) {
         return Err(WriteError::MissingSource);
     }

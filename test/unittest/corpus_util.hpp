@@ -1,5 +1,5 @@
 /// @file        corpus_util.hpp
-/// @brief       F1 主门语料解析：env 注入 > 仓内自产（javac 现场编译）。
+/// @brief       语料解析：env 注入 > 仓内自产（javac 现场编译）。
 ///
 /// 最强护栏（>1000 方法帧 oracle、语料往返、attr/ir/insn 语料门）基于
 /// 「仓内自产、JDK-only 依赖」的语料设施，仓内缺席即 skip：

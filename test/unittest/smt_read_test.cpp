@@ -571,7 +571,7 @@ TEST(MaxesApi, BeyondU16NotAdopted)
 TEST(MaxesApi, AdoptedMaxesFlowToLowerWriteBackAndReread)
 {
     // 显式 API → CodeUnit → lower 脏检查分支 → backing → 写出重读：
-    // A2 手动链路的上游补全（本测试锁全链）。
+    // 手动链路的上游补全（本测试锁全链）。
     auto s = paramsClass(2, 4);   // 文件声明 maxStack=2
     ASSERT_NE(s, nullptr);
     auto p = promoteMethod(*s, 0);
@@ -719,7 +719,7 @@ TEST(SmtReadOracle, ReadSideMatchesStrictCompute)
     std::printf(
         "[smt-read-oracle] methods=%zu framesChecked=%zu mismatch=%zu\n", methods,
         framesChecked, mismatch);
-    EXPECT_GE(methods, 10u);         // 语料护栏（与 J6 oracle 同源）
+    EXPECT_GE(methods, 10u);         // 语料护栏（与生成器 oracle 同源）
     EXPECT_GE(framesChecked, 30u);
     EXPECT_EQ(mismatch, 0u);         // 验收口径：读侧视图与计算帧一致
 }

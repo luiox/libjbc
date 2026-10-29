@@ -1,11 +1,11 @@
 /// @file        change_set.hpp
-/// @brief       E2 ChangeSet 协议：会话变更收集与按粒度查询。
+/// @brief       ChangeSet 协议：会话变更收集与按粒度查询。
 ///
 /// 消费者（引用索引/摘要/调用图）在一次会话/一批变换后按粒度决定失效重建
 /// 范围，而不是每次全量重扫。会话的各变更通道在实改发生时向本会话的
 /// ChangeSet 记账；查询面给三类出口：类级（classChange）、成员级存活折叠
 /// （memberChanges）、成员级消失（removedMembers）。身份坐标是文本三段
-/// （与 E1 消费者索引同构），不是会话内 MethodId/FieldId。
+/// （指向会话驻留存储，只增不移），不是会话内 MethodId/FieldId。
 #pragma once
 
 #include <cstddef>

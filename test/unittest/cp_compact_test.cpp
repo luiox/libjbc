@@ -1,5 +1,5 @@
 /// @file        cp_compact_test.cpp
-/// @brief       A8：CP 显式压缩的单元门。
+/// @brief       CP 显式压缩的单元门。
 ///
 /// 覆盖面：稳序映射钉面（新旧索引逐条目断言）、规范去重（Utf8/String/Class
 /// 内容复用）、死条目清除、wide 双槽、指令 CP 操作数（LDC/LDC_W/LDC2_W，
@@ -982,7 +982,7 @@ TEST(CpCompact, PromotedCodeUnitStaysInSync)
 
 TEST(CpCompact, NewClassSeedSessionCompactAndWrite)
 {
-    // A5 无源类：全合成模型压缩后照常无源写出（writer 从零分支）。
+    // 无源类：全合成模型压缩后照常无源写出（writer 从零分支）。
     NewClassSeed seed;
     seed.thisName = "p/Fresh";
     seed.superName = "java/lang/Object";

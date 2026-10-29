@@ -1,5 +1,5 @@
 /// @file        frame.hpp
-/// @brief       帧引擎：操作数栈/局部变量的数据流（/）。
+/// @brief       帧引擎：操作数栈/局部变量的数据流。
 ///
 /// 单一起原则：写出与 analysis 用同一实现。两条计算档位（FramePolicy）：
 /// BestEffort（缺省）是形状数据流——类型只到尺寸类（cat1/cat2/引用），
@@ -9,9 +9,9 @@
 /// 诊断显式拒绝（验收口径：可算者与 javac 一致、不可算者显式拒绝并给
 /// 指令定位）。ITypeResolver 可注入：公共父类求解需要类层级，默认
 /// ShapeResolver 不区分引用子类型；真实现归上层消费方（层次图求解）。
-/// Strict 域自 C2 起建模 jsr/ret 子程序数据流（JVMS ：
+/// Strict 域建模 jsr/ret 子程序数据流（JVMS §4.10.2.5：
 /// jsr 压返回地址、ret 经局部槽跳回；单调用点精确，多调用点共享入口
-/// 显式拒绝——见 ）。
+/// 显式拒绝）。
 #pragma once
 
 #include <memory>
@@ -57,7 +57,7 @@ enum class VKind : ca::u8 {
 /// - BestEffort：只有 k（+ Ref 的 cls 诊断）有效，name 恒空。
 /// - Strict：Ref 携带精确内部名（name，借用 CP 视图，寿命 = 常量池）；
 ///   Uninitialized 的 cls 字段承载产生方 new 指令的 pc（uninitOffset()）；
-///   ReturnAddress 的 cls 字段承载调用方 jsr 指令的 pc（jsrPc()，C2）。
+///   ReturnAddress 的 cls 字段承载调用方 jsr 指令的 pc（jsrPc()）。
 ///   UninitThis 只出现在构造器超调用前的 this 槽。
 struct VType
 {
@@ -105,7 +105,7 @@ enum class TypeMergeError : ca::u8 {
     Unresolvable,     ///< resolver 无法求解（类层级缺席、外部查询失败等）
 };
 
-/// @brief 引用合并策略接口（merge 单方法面，A1 契约）。
+/// @brief 引用合并策略接口（merge 单方法面）。
 ///
 /// 只解决「两个具体引用类型的公共父类」；结构性规则（Top 吸收、Null 底、
 /// Uninitialized 按 offset 判等）由计算域内置，不经此接口。实现体归
