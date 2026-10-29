@@ -7,5 +7,5 @@
 TEST(LibJbcEntryTest, ReportsLibraryVersion)
 {
     EXPECT_FALSE(std::string_view(jbc::get_lib_version()).empty());
-    EXPECT_EQ(std::string_view(jbc::get_lib_version()), "0.4.22");
+    EXPECT_EQ(std::string_view(jbc::get_lib_version()), "0.4.23");
 }

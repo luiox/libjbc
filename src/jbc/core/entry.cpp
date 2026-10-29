@@ -4,7 +4,7 @@ namespace jbc {
 
 const char* get_lib_version() noexcept
 {
-    return "0.4.22";
+    return "0.4.23";
 }
 
 }   // namespace jbc
