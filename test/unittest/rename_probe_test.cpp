@@ -437,7 +437,7 @@ renameStripWrite(const fs::path& inPath, const fs::path& outDir,
     return Ok(st);
 }
 
-// ---- B3 嵌套类真跑探针（design.md §32.9 分派接线批的 JVM 门）------------
+// ---- 嵌套类真跑探针（分派面的 JVM 门）------------
 
 constexpr std::string_view kNestOldName = "demo/Nest";
 constexpr std::string_view kNestNewName = "demo/NestR";
@@ -473,7 +473,7 @@ std::string expectedNestOutput(std::string_view outer)
     return out;
 }
 
-/// B3 + Nest 族结构元数据 typed 面验证统计。
+/// Nest 族结构元数据 typed 面验证统计。
 struct StructAttrStats
 {
     ca::u32 innerClasses = 0;         ///< 触达的 InnerClasses 属性数
@@ -485,7 +485,7 @@ struct StructAttrStats
     ca::u32 nestOuterRows = 0;        ///< outer 槽命中新外围名 NestR 的行数
 };
 
-/// @brief B3 + Nest 族结构元数据的分派面验证 + 强制重编码。
+/// @brief Nest 族结构元数据的分派面验证 + 强制重编码。
 ///
 /// 逐槽走 decodeAttr 分派（接线后必须给出 typed 体——Raw 形即接线失效），
 /// 槽语义对改名断言：InnerClasses 行 outer 槽与 EnclosingMethod class 槽、
@@ -784,8 +784,8 @@ TEST(RealClassRenameProbe, DebugStripAfterRenameStillRuns)
     EXPECT_EQ(runMain(strippedDir), expectedOutput("demo.Renamed"));
 }
 
-// ---- B3 嵌套类真跑门：改名后 getDeclaringClass / isAnonymousClass 反射
-//      语义存活（design.md §32.9 分派接线批挂账点名的断言）----
+// ---- 嵌套类真跑门：改名后 getDeclaringClass / isAnonymousClass 反射
+//      语义存活（分派面点名的断言）----
 //
 // 改名 pass 重写 InnerClasses 行 outer 槽与 EnclosingMethod class 槽指向的
 // 外围类名（CP Class 条目改名自动跟随），三件随后经分派 typed 面验证 +
@@ -956,8 +956,8 @@ TEST(RealClassRelocProbe, LayoutChangeJvmRealRunAndDebugAttrsSurvive)
     }
 
     // 3) CRT 携带类 JVM 照单全收：给 demo/Add 的 Code 注入一条合成
-    //    CharacterRangeTable（New 槽，1 行）——现代 javac 不产出 CRT
-    //    （design.md §32.8），「JVM 忽略但接受携带 CRT 的类」由此补位。
+    //    CharacterRangeTable（New 槽，1 行）——现代 javac 不产出 CRT，
+    //    「JVM 忽略但接受携带 CRT 的类」由此补位。
     const fs::path crtDir = fs::path("test") / "libjbc_reloc_probe" / "crt";
     fs::remove_all(crtDir, ec);
     fs::copy(relocDir, crtDir, fs::copy_options::recursive, ec);

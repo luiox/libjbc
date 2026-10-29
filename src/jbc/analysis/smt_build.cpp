@@ -36,7 +36,7 @@ ca::core::Result<SmtVType, SmtBuildError> toVerif(ir::ClassSession& s, const VTy
         return R(ca::core::Ok(SmtVType{SmtVType::kUninitialized, v.uninitOffset()}));
     case VKind::ReturnAddress:
         // C2 裁决：full_frame 的 verification_type_info 无 returnAddress 形态
-        //（JVMS §4.7.4 封闭 tag 集）——SMT 生成对子程序方法显式拒绝，不静默
+        //（JVMS  封闭 tag 集）——SMT 生成对子程序方法显式拒绝，不静默
         // 改码为 Top/Int 伪造帧（v≤49 无 SMT 走旧校验是规范许可行为）。
         return R(ca::core::Err(SmtBuildError::Subroutine));
     case VKind::Ref:
@@ -49,7 +49,7 @@ ca::core::Result<SmtVType, SmtBuildError> toVerif(ir::ClassSession& s, const VTy
     }
 }
 
-/// @brief Uninitialized 载荷必须落在方法内某个 new 指令 pc 上（§10.4：
+/// @brief Uninitialized 载荷必须落在方法内某个 new 指令 pc 上（
 ///        帧域携带的是 srcPc 口径，这里守住「指向 new」这一条不变量）。
 ca::core::Result<void, SmtBuildError>
 checkUninitPayloads(const Entries& es, const std::set<ca::u32>& newPcs)
@@ -178,7 +178,7 @@ buildStackMapTable(ir::ClassSession& s, const ir::CodeUnit& u,
     using ca::core::Err;
     using ca::core::Ok;
 
-    // 版本门（§10.4）：SMT 属性自 classfile 50 才有定义；显式 Err，不静默。
+    // 版本门：SMT 属性自 classfile 50 才有定义；显式 Err，不静默。
     if (s.backing().major < 50) {
         return R(Err(SmtBuildError::ClassTooOld));
     }
@@ -190,7 +190,7 @@ buildStackMapTable(ir::ClassSession& s, const ir::CodeUnit& u,
         return R(Err(SmtBuildError::FramesNotOk));
     }
 
-    // 目标集合（§10.4）：分支/switch 全部目标 + 异常 handler 入口。不可达
+    // 目标集合：分支/switch 全部目标 + 异常 handler 入口。不可达
     // 目标随后按帧的 reachable 过滤——verifier 跳过不可达代码，不要求帧。
     std::set<ca::u32> targetPcs;
     const auto addTarget = [&](ir::LabelId label) {

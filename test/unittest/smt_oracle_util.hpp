@@ -1,9 +1,9 @@
 /// @file        smt_oracle_util.hpp
 /// @brief       SMT oracle 测试设施：javac 样本语料 + SMT 解码展开比对。
 ///
-/// 由 strict_frame_test（J4/J5）与 smt_build_test（J6）共用：同一份
+/// 由 strict_frame_test 与 smt_build_test 共用：同一份
 /// javac（--release 8）语料、同一套「SMT 帧链 → 全帧展开」机制、同一套
-/// 「公共前缀逐槽一致」比对判据（§10.2.6/§10.3.6 陈述口径）。语料在
+/// 「公共前缀逐槽一致」比对判据（/ 陈述口径）。语料在
 /// J6 扩入 loop 与 switch 两样本（回边与 switch 目标帧此前无覆盖）。
 #pragma once
 
@@ -209,7 +209,7 @@ inline bool writeOracleSamples(const fs::path& srcDir)
     return true;
 }
 
-/// 现场编译语料（--release 8，与 J4/J5 oracle 同一口径）。
+/// 现场编译语料（--release 8，与帧 oracle 同一口径）。
 inline bool compileOracleSamples(const fs::path& root)
 {
     const fs::path srcDir = root / "src";
@@ -230,7 +230,7 @@ inline bool compileOracleSamples(const fs::path& root)
     return std::system(cmd.c_str()) == 0;
 }
 
-/// 最小 stub resolver（§10.1：真实现归上层消费方，测试内只配最小层）：
+/// 最小 stub resolver（真实现归上层消费方，测试内只配最小层）：
 /// 同类返回本类；跨类沿父链求首个公共祖先（缺省父 = Object）；
 /// 空名参与跨类合并视为不可解（防止「无名 Ref 被静默兜底」掩盖缺陷）。
 /// 求解结果经内部驻留表交付——VType.name 是借用视图，不得指向临时串。

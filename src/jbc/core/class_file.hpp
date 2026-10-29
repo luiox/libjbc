@@ -2,7 +2,7 @@
 /// @brief       单类 DOM：libjbc core 的模型本体。
 ///
 /// 一个 @ref ClassFile 就是一个 class 的完整、可独立析构的所有者。它不持有
-/// Jar、不持有 JDK、不持有全局索引——那些是上层消费方的事（design.md §14）。
+/// Jar、不持有 JDK、不持有全局索引——那些是上层消费方的事。
 ///
 /// 模型关系是一条单纯的拥有链，没有 visitor，也不把控制流标签作为低层
 /// classfile 对象图的一部分：
@@ -69,7 +69,7 @@ public:
 
     /// @brief 类级属性表之后的非标准尾部字节（畸形输入的保真形态）。
     ///
-    /// 与 @ref CodeAttr::trailing 同族（design.md §27.1）：合法 classfile 在
+    /// 与 @ref CodeAttr::trailing 同族：合法 classfile 在
     /// 类属性表后应当结束，多余字节属于畸形输入，但结构与边界都可确定——
     /// 因此保留为副本而不是 Err 或静默丢弃。未修改时写回走 copy 路径天然
     /// 无损；任何属性被修改触发重编码后，writer 仍把这段字节原样附在末尾，

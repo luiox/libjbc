@@ -39,7 +39,7 @@ constexpr std::string_view kAnnotationDefaultName = "AnnotationDefault";
 constexpr std::string_view kMethodParametersName  = "MethodParameters";
 constexpr std::string_view kConstantValueName     = "ConstantValue";
 
-/// @brief u16 域宽检查：编码闸门的基础谓词（design.md §27.2——超界显式
+/// @brief u16 域宽检查：编码闸门的基础谓词（——超界显式
 ///        Err，禁止 static_cast 静默截断）。
 bool fitsU16(ca::u32 v) noexcept
 {
@@ -330,7 +330,7 @@ public:
     }
 
     /// @brief 剩余未读字节的视图（游标不前进）。声明结构读完后的 trailing
-    ///        保留（design.md §27.1）据此取字节；仅在 ok() 时有意义。
+    ///        保留据此取字节；仅在 ok() 时有意义。
     ByteView rest() const noexcept
     {
         return cur_.view().subOrEmpty(cur_.pos(), cur_.remaining());
@@ -388,7 +388,7 @@ Ard makeReader(const ClassFile& cf, const AttrSlot& slot, bool& spanOk)
     return Ard{data};
 }
 
-/// @brief 声明结构读完后的 trailing 保留（design.md §27.1）。
+/// @brief 声明结构读完后的 trailing 保留。
 ///
 /// 合法属性在声明结构之后应正好结束；多余字节属于畸形输入，但边界可确定——
 /// 保留进属性体的 trailing 副本并降级记录，mutate 触发重编码时原样写回，
@@ -643,7 +643,7 @@ Result<std::unique_ptr<AttrBody>, ReadError> decodeSignature(ClassFile& cf, cons
 /// @brief CharacterRangeTable 解码（javac -Xjcov 私有属性，规格见属性体
 ///        注释）：u2 行数 + 每行 {u2, u2, u4, u4, u2}。行数声明与剩余字节
 ///        不符（半截行 / 声明超出实际）时 Ard 置 Truncated，显式失败——
-///        边界可确定的部分不猜测容忍（§27 同纪律）。
+///        边界可确定的部分不猜测容忍（同纪律）。
 Result<std::unique_ptr<AttrBody>, ReadError> decodeCharacterRangeTable(ClassFile& cf,
                                                                        const AttrSlot& slot)
 {
@@ -671,11 +671,11 @@ Result<std::unique_ptr<AttrBody>, ReadError> decodeCharacterRangeTable(ClassFile
     return Ok(std::unique_ptr<AttrBody>(std::move(b)));
 }
 
-/// @brief B3 四件结构元数据（SourceFile/InnerClasses/EnclosingMethod/
+/// @brief 四件结构元数据（SourceFile/InnerClasses/EnclosingMethod/
 ///        Exceptions）解码器族，形状与既有 typed 解码同铁律（半截体 Err、
 ///        trailing 保留）。只挂类级/成员级属性表、无 pc 载荷，relocation
-///        契约（§33 封闭集）不涉及。四件均已接 decodeAttrBody 分派
-///        （design.md §32.9）；公开入口保留为直接解码面（不触碰槽状态）。
+///        契约（封闭集）不涉及。四件均已接 decodeAttrBody 分派
+///        ；公开入口保留为直接解码面（不触碰槽状态）。
 Result<std::unique_ptr<AttrBody>, ReadError> decodeSourceFile(ClassFile& cf, const AttrSlot& slot)
 {
     bool spanOk = false;
@@ -766,7 +766,7 @@ Result<std::unique_ptr<AttrBody>, ReadError> decodeExceptionsBody(ClassFile& cf,
 /// @brief Nest 族三件（NestHost/NestMembers/PermittedSubclasses）typed 解码
 ///        族，形状与既有 typed 解码同铁律（半截体 Err、trailing 保留）。
 ///        只挂类级属性表、载荷全为 CP Class 索引、无 pc 载荷，relocation
-///        契约（§33 封闭集）不涉及。三件均已接 decodeAttrBody 分派；公开
+///        契约（封闭集）不涉及。三件均已接 decodeAttrBody 分派；公开
 ///        入口保留为直接解码面（不触碰槽状态）。
 Result<std::unique_ptr<AttrBody>, ReadError> decodeNestHostBody(ClassFile& cf,
                                                                 const AttrSlot& slot)
@@ -1126,7 +1126,7 @@ readTypePath(Ard& r)
 
 /// @brief target_info 读取：按 target_type 分派（JVMS 4.7.20.1 表）；
 ///        未定义的 target_type 显式拒绝（结构与边界都可确定之外的东西
-///        不猜测容忍，§27.2 同纪律）。
+///        不猜测容忍， 同纪律）。
 Result<void, ReadError> readTargetInfo(Ard& r, TypeAnnotationsAttr::Annotation& a)
 {
     using TA = TypeAnnotationsAttr;
@@ -1864,7 +1864,7 @@ Result<void, WriteError> encodeAttr(const ClassFile& cf,
             break;
         }
         case AttrKind::CharacterRangeTable: {
-            // u2 域宽闸门（§27.2）：start_pc/end_pc/flags 是 u2 编码，超界
+            // u2 域宽闸门：start_pc/end_pc/flags 是 u2 编码，超界
             // 显式 Err；char_start/char_end 本就是 u4 编码，无闸门。
             const auto& b = static_cast<const CharacterRangeTableAttr&>(*slot.body);
             if (b.rows.size() > std::numeric_limits<ca::u16>::max()) {
@@ -1887,7 +1887,7 @@ Result<void, WriteError> encodeAttr(const ClassFile& cf,
             break;
         }
         case AttrKind::SourceFile: {
-            // u2 域宽闸门（§27.2）：sourcefile_index 超 u16 显式 Err。
+            // u2 域宽闸门：sourcefile_index 超 u16 显式 Err。
             const auto& b = static_cast<const SourceFileAttr&>(*slot.body);
             if (!fitsU16(b.sourceFileCp)) {
                 return Err(WriteError::Unencodable);
@@ -1945,7 +1945,7 @@ Result<void, WriteError> encodeAttr(const ClassFile& cf,
             break;
         }
         case AttrKind::NestHost: {
-            // u2 域宽闸门（§27.2）：host_class_index 超 u16 显式 Err。
+            // u2 域宽闸门：host_class_index 超 u16 显式 Err。
             const auto& b = static_cast<const NestHostAttr&>(*slot.body);
             if (!fitsU16(b.hostClassCp)) {
                 return Err(WriteError::Unencodable);
@@ -1955,7 +1955,7 @@ Result<void, WriteError> encodeAttr(const ClassFile& cf,
             break;
         }
         case AttrKind::NestMembers: {
-            // u2 域宽闸门（§27.2）：条目数与每条目索引超界显式 Err。
+            // u2 域宽闸门：条目数与每条目索引超界显式 Err。
             const auto& b = static_cast<const NestMembersAttr&>(*slot.body);
             if (b.memberCps.size() > std::numeric_limits<ca::u16>::max()) {
                 return Err(WriteError::Unencodable);
@@ -1973,7 +1973,7 @@ Result<void, WriteError> encodeAttr(const ClassFile& cf,
             break;
         }
         case AttrKind::PermittedSubclasses: {
-            // u2 域宽闸门（§27.2）：条目数与每条目索引超界显式 Err。
+            // u2 域宽闸门：条目数与每条目索引超界显式 Err。
             const auto& b = static_cast<const PermittedSubclassesAttr&>(*slot.body);
             if (b.permittedCps.size() > std::numeric_limits<ca::u16>::max()) {
                 return Err(WriteError::Unencodable);
@@ -1991,7 +1991,7 @@ Result<void, WriteError> encodeAttr(const ClassFile& cf,
             break;
         }
         case AttrKind::Record: {
-            // u2 域宽闸门（§27.2）：组件数、name/desc 索引与嵌套属性表长
+            // u2 域宽闸门：组件数、name/desc 索引与嵌套属性表长
             // 超界显式 Err；嵌套属性逐槽经 encodeAttr（失败向上传播）。
             const auto& b = static_cast<const RecordAttr&>(*slot.body);
             const Result<void, WriteError> rb = encodeRecordBody(cf, b, body, source);
@@ -2001,7 +2001,7 @@ Result<void, WriteError> encodeAttr(const ClassFile& cf,
             break;
         }
         case AttrKind::Module: {
-            // u2 域宽闸门（§27.2）：名/版本索引、段旗语、段计数与全部条目
+            // u2 域宽闸门：名/版本索引、段旗语、段计数与全部条目
             // 索引超界显式 Err。exports/opens 共用写出模板（与解码同构）。
             const auto& b = static_cast<const ModuleAttr&>(*slot.body);
             if (!fitsU16(b.moduleNameCp) || !fitsU16(b.moduleVersionCp) ||
@@ -2093,7 +2093,7 @@ Result<void, WriteError> encodeAttr(const ClassFile& cf,
             break;
         }
         case AttrKind::ModulePackages: {
-            // u2 域宽闸门（§27.2）：条目数与每条目索引超界显式 Err。
+            // u2 域宽闸门：条目数与每条目索引超界显式 Err。
             const auto& b = static_cast<const ModulePackagesAttr&>(*slot.body);
             if (b.packageCps.size() > std::numeric_limits<ca::u16>::max()) {
                 return Err(WriteError::Unencodable);
@@ -2111,7 +2111,7 @@ Result<void, WriteError> encodeAttr(const ClassFile& cf,
             break;
         }
         case AttrKind::ModuleMainClass: {
-            // u2 域宽闸门（§27.2）：main_class_index 超 u16 显式 Err。
+            // u2 域宽闸门：main_class_index 超 u16 显式 Err。
             const auto& b = static_cast<const ModuleMainClassAttr&>(*slot.body);
             if (!fitsU16(b.mainClassCp)) {
                 return Err(WriteError::Unencodable);
@@ -2121,7 +2121,7 @@ Result<void, WriteError> encodeAttr(const ClassFile& cf,
             break;
         }
         case AttrKind::ParameterAnnotations: {
-            // u1 参数数 + 逐参数 u2 注解数（§27.2 闸门：外层超 u8、内层超
+            // u1 参数数 + 逐参数 u2 注解数（闸门：外层超 u8、内层超
             // u16 显式 Err）；注解体写面与 Runtime{Visible,Invisible}-
             // Annotations 共用 writeAnnotation（同一模型不造第二套）。
             const auto& b = static_cast<const ParameterAnnotationsAttr&>(*slot.body);
@@ -2158,7 +2158,7 @@ Result<void, WriteError> encodeAttr(const ClassFile& cf,
             break;
         }
         case AttrKind::MethodParameters: {
-            // u1 行数（§27.2 闸门）+ 每行 {name（0 = 无名）, flags}；行字段
+            // u1 行数（闸门）+ 每行 {name（0 = 无名）, flags}；行字段
             // 超界显式 Err，旗语按不透明 u16 原样写出。
             const auto& b = static_cast<const MethodParametersAttr&>(*slot.body);
             if (b.rows.size() > std::numeric_limits<ca::u8>::max()) {
@@ -2178,7 +2178,7 @@ Result<void, WriteError> encodeAttr(const ClassFile& cf,
             break;
         }
         case AttrKind::ConstantValue: {
-            // u2 域宽闸门（§27.2）：constantvalue_index 超 u16 显式 Err。
+            // u2 域宽闸门：constantvalue_index 超 u16 显式 Err。
             const auto& b = static_cast<const ConstantValueAttr&>(*slot.body);
             if (!fitsU16(b.constantValueCp)) {
                 return Err(WriteError::Unencodable);

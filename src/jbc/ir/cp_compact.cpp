@@ -1,5 +1,5 @@
 /// @file        cp_compact.cpp
-/// @brief       A8：CP 显式压缩——计划/应用两相的全量重索引（design.md §36）。
+/// @brief       A8：CP 显式压缩——计划/应用两相的全量重索引。
 ///
 /// 计划相只读：解码全部属性面 → 按封闭集分派 → 以规范根序遍历引用面 intern
 /// 出新池与旧→新映射（任何 Err 不留半截模型）。应用相按映射一次性换池并重写
@@ -27,10 +27,10 @@ using core::ClassFile;
 using core::CodeAttr;
 using core::ConstantPool;
 
-// ---- 压缩侧结构化属性（§36.1 第 2 层）--------------------------------
-// 封闭集属性已全部立 typed 模型并收编进两相 switch 的 typed 分支（B3 四件
+// ---- 压缩侧结构化属性（第 2 层）--------------------------------
+// 封闭集属性已全部立 typed 模型并收编进两相 switch 的 typed 分支（四件结构元数据
 // → Nest 族/Record/Module 族 → 注解族四件 + ConstantValue）；Raw 名字分派
-// 的本地解析随 ConstantValue 接线批整体退役（§36.5 收口）——Raw 体只剩零
+// 的本地解析随 ConstantValue 接线整体退役——Raw 体只剩零
 // 长透传，非零长一律显式拒绝（属性名定位）。
 
 /// @brief 指令是否携带 CP 操作数（CP1/CP2/CP2Count/CP2Zero2/CP2Dims 五形）。
@@ -62,7 +62,7 @@ public:
 
     // ---- 计划相 · 第一步：闭包标记（只读模型；解码置 Decoded 不改字节）----
     //
-    // 映射核心采用「子序 + 代表去重」方案（§36.2）：新池 = 活条目按老索引
+    // 映射核心采用「子序 + 代表去重」方案：新池 = 活条目按老索引
     // 升序的子序列，等价类只保留最小老索引作代表。由此 map_[k] ≤ k 对一切
     // 活条目恒成立（代表：升序秩不超自身老下标；重复：并入更小老下标的代表
     // 槽），CP1（ldc）操作数域宽因此从不变宽——这是宽形态不收缩裁决的安全
@@ -127,7 +127,7 @@ public:
         // 升格体的引用面在这里进场（非陈旧面）：DOM 指令操作数可能是会话期
         // 语义 intern、backing 字节面尚未引用的条目（如 setString 后未 lower）。
         // backing 侧的陈旧指令/异常表已在 planAttr(staleCode) 中跳过，两边
-        // 合起来才是升格方法的完整引用面（§36.3）。
+        // 合起来才是升格方法的完整引用面。
         for (MethodUnit& mu : s_.unit().methods) {
             if (mu.code == nullptr) {
                 continue;
@@ -366,7 +366,7 @@ public:
     }
 
     /// @brief Code 体操作数重编码：秩完备后按映射换字面量（形态不收缩，
-    ///        尺寸逐指令不变，§36.2 挂账）。
+    ///        尺寸逐指令不变，暂不收缩）。
     void fillCodeBodies()
     {
         for (auto& kv : insnPlan_) {
@@ -447,7 +447,7 @@ public:
         applyMemberAttrs(cf_.fields, false);
         applyMemberAttrs(cf_.methods, true);
 
-        // 3) 已升格方法：IR 与 backing 保持同一索引坐标系（§36.3）。
+        // 3) 已升格方法：IR 与 backing 保持同一索引坐标系。
         for (MethodUnit& mu : s_.unit().methods) {
             if (mu.code == nullptr) {
                 continue;
@@ -503,7 +503,7 @@ private:
 
     /// @brief backing 物理位置上的方法是否处于升格态（CodeUnit 非空）。
     ///        升格方法的 backing 指令面是陈旧面：DOM 才是指令流的权威来源，
-    ///        lower 时整体重建（§36.3）。
+    ///        lower 时整体重建。
     bool backingMethodPromoted(const ca::usize backingIdx) const
     {
         for (const MethodUnit& mu : s_.unit().methods) {
@@ -547,7 +547,7 @@ private:
         }
     }
 
-    // ---- 计划相：引用面遍历（封闭集分派，§36.1）----
+    // ---- 计划相：引用面遍历（封闭集分派）----
 
     std::string_view attrNameOf(const AttrSlot& slot) const noexcept
     {
@@ -641,7 +641,7 @@ private:
                 return Ok();
             }
             case AttrKind::SourceFile: {
-                // B3 接分派后 SourceFile 为 typed 体（Raw 形不再可达）；
+                // SourceFile 为 typed 体（Raw 形不再可达）；
                 // 单 u2 槽直接标记，trailing 不含 CP 引用。
                 auto& b = static_cast<core::SourceFileAttr&>(body);
                 const Result<void, CompactFailure> r = markCp(b.sourceFileCp);
@@ -1010,10 +1010,10 @@ private:
     {
         const auto& raw = static_cast<const core::RawAttr&>(*slot.body);
         if (raw.bytes().empty()) {
-            // 零长体构造上不可能携带 CP 引用（无字节）：透传放行（§36.1 第 3 层）。
+            // 零长体构造上不可能携带 CP 引用（无字节）：透传放行（第 3 层）。
             return Ok();
         }
-        // 封闭集收编完成后 Raw 名单分派整体退役（§36.5 收口）：名单外非零长
+        // 封闭集收编完成后 Raw 名单分派整体退役（收口）：名单外非零长
         // Raw 体显式拒绝，属性名定位。
         return Err(failOf(CompactError::AttrNotModeled, attrNameOf(slot)));
     }
@@ -1505,10 +1505,10 @@ Result<void, CompactFailure> compactConstantPool(ClassSession& s)
         return Err(f);
     }
     if (c.isNoop()) {
-        return Ok();   // 池已紧凑：不换池、不改槽、不记账（§36.2 无变化早退）
+        return Ok();   // 池已紧凑：不换池、不改槽、不记账（无变化早退）
     }
     c.apply();
-    // 换池：旧池退居会话侧（§35.2 文本视图存活期不被压缩破坏）。
+    // 换池：旧池退居会话侧（文本视图存活期不被压缩破坏）。
     s.retiredPools_.push_back(std::move(s.backing().cp));
     s.backing().cp = c.takeNewPool();
     // 语义 intern 索引缓存的是旧池索引，强制重建。
@@ -1519,7 +1519,7 @@ Result<void, CompactFailure> compactConstantPool(ClassSession& s)
         f.code = CompactError::Internal;
         return Err(f);
     }
-    // 记账（§36.3）：类级实改 → 消费者按「重扫整类」失效。
+    // 记账：类级实改 → 消费者按「重扫整类」失效。
     ChangeRecord r;
     r.kind = ChangeKind::ClassMetadata;
     s.noteChange(r);

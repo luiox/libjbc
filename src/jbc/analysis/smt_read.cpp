@@ -41,7 +41,7 @@ const StackMapTableAttr* findSmtAttr(core::ClassFile& cf, core::CodeAttr& code)
 }
 
 /// verification_type 条目 → 语义 VType。Object 经 CP 解析精确类名（借用
-/// 视图，寿命 = 常量池）；tag-8 载荷按写侧 §10.4.5 同规校验落点。
+/// 视图，寿命 = 常量池）；tag-8 载荷按写侧  同规校验落点。
 ca::core::Result<VType, SmtReadError>
 toSemantic(const SmtVType& e, const core::ConstantPool& cp,
            const std::set<ca::u32>& newPcs)
@@ -72,7 +72,7 @@ toSemantic(const SmtVType& e, const core::ConstantPool& cp,
     }
 }
 
-/// 条目序列 → 槽语义（cat2 = 值槽 + Top 垫底槽；§10.5 交付口径，与
+/// 条目序列 → 槽语义（cat2 = 值槽 + Top 垫底槽； 交付口径，与
 /// FrameEngine 的 deliverFrames 同构）。
 void expandSlots(const std::vector<VType>& entries, std::vector<VType>& slots)
 {
@@ -125,7 +125,7 @@ readFramesFromSmt(ir::ClassSession& s, const ir::CodeUnit& u)
         return R(Ok(std::vector<SmtFrameView>{}));   // 属性缺席（合法）：空视图
     }
 
-    // 链头 = 隐式初始帧（§10.5）：this 形态 + 描述符参数，条目口径——链
+    // 链头 = 隐式初始帧：this 形态 + 描述符参数，条目口径——链
     // 算术（chop/append）在条目空间进行，不按 maxLocals 预垫 Top（预垫会把
     // append 载荷推到垫顶之后，错位全部槽号）。
     MethodSig sig;

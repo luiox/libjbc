@@ -3,9 +3,9 @@
 ///              解码/编码、半截体显式失败、trailing 保持、u16 域宽闸门，
 ///              以及「typed 读写与既有 Raw 手术口径一致」的对拍。
 ///
-/// 分派已接线（design.md §32.9）：decodeAttrBody 对 "Exceptions" 返回
-/// typed 体（B3 接线批与消费方迁移同批落地）；Raw 手术 oracle 从
-/// 槽源 span 直接取体字节，是旧栈 remapExceptionsAttr 字节手术的测试
+/// 分派已接线：decodeAttrBody 对 "Exceptions" 返回
+/// typed 体；Raw 手术 oracle 从
+/// 槽源 span 直接取体字节，是字节手术语义的测试
 /// 内镜像（口径对齐用，非第二套手术）。
 #include <gtest/gtest.h>
 
@@ -95,7 +95,7 @@ ca::u32 internClass(ClassFile& cf, std::string_view internalName)
 }
 
 /// typed 手术路径：typed 解码 → 逐条目类名重映射（命中才动）→ makeNew
-/// 置 New → 写回。语义镜像旧栈 remapExceptionsAttr。
+/// 置 New → 写回。
 Bytes typedSurgery(const Bytes& cls)
 {
     auto cf = jbc::test::readOk(cls);
@@ -117,7 +117,7 @@ Bytes typedSurgery(const Bytes& cls)
     return jbc::test::writeOk(*cf);
 }
 
-/// Raw 手术 oracle：旧栈 remapExceptionsAttr 字节手术的测试内逐字节
+/// Raw 手术 oracle：字节手术语义的测试内逐字节
 /// 镜像（口径对齐用，非第二套手术——生产手术已迁 typed）。体字节从槽源
 /// span 直接取，不依赖 decodeAttr 的分派形态。
 Bytes rawSurgeryOracle(const Bytes& cls)
@@ -170,8 +170,8 @@ Bytes rawSurgeryOracle(const Bytes& cls)
 
 // ---- 分派接线钉门：decodeAttrBody 对 Exceptions 返回 typed 体 ----
 //
-// B3 接线批翻转分派（与消费方迁移同批，design.md §32.9）：本用例
-// 在挂账期钉 Raw 形、接线时翻红对账，现钉 typed 形。
+// 分派钉门：本用例
+// 原钉 Raw 形、分派翻转时翻红对账，现钉 typed 形。
 
 TEST(ExceptionsAttrTest, TypedDispatchWiredAfterConsumerMigration)
 {
@@ -259,7 +259,7 @@ TEST(ExceptionsAttrTest, TypedEncodeIsCanonical)
     EXPECT_EQ(jbc::test::writeOk(*cf), cls);
 }
 
-// ---- trailing（design.md §27.1）：多余尾部字节保留 + 重编码原样写回 ----
+// ---- trailing：多余尾部字节保留 + 重编码原样写回 ----
 
 TEST(ExceptionsAttrTest, TrailingSurvivesReencode)
 {
@@ -279,7 +279,7 @@ TEST(ExceptionsAttrTest, TrailingSurvivesReencode)
     EXPECT_EQ(jbc::test::writeOk(*cf), cls) << "re-encode dropped trailing";
 }
 
-// ---- 编码闸门（design.md §27.2）：u2 编码列超域宽显式 Err ----
+// ---- 编码闸门：u2 编码列超域宽显式 Err ----
 
 TEST(ExceptionsAttrTest, EncoderRejectsOutOfRangeFields)
 {

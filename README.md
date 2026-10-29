@@ -11,9 +11,8 @@ node-first 的 JVM 字节码 C++ 建模库：
 
 ## 文档
 
-- `docs/design.md` — 设计真源（统一拓扑 + 分批次落地记录，按 § 编号引用）；代码注释里的「design.md §N」引用以此为准。
-- `doc_ai/design.md` — 开源快照：属性面摘编（§ 编号与全量版大多同义，§32 除外，见其前言说明）。
-- `dev_plan.md` — 滚动批次账目（堆叠期里程碑与发版纪律）。
+- `docs/design.md` — 设计真源（现行架构拓扑与硬契约，只写现状不记过程史）。
+- `docs/instruction-dom-design.md` — 指令 DOM 与标签身份的设计依据。
 
 ## 构建
 

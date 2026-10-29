@@ -26,7 +26,7 @@ bool isSignatureSlot(const core::ClassFile& cf, const core::AttrSlot& slot) noex
 /// @brief 解码并读出属性体：Signature 体 = u2 signature_index（JVMS 4.7.9）。
 ///
 /// Signature 是已建模属性（@ref SignatureAttr，typed 解码按属性名分派）；
-/// 体不足 2 字节属畸形，解码即 Err（未触碰写回仍走 copy 逐字节无损，§29）。
+/// 体不足 2 字节属畸形，解码即 Err（未触碰写回仍走 copy 逐字节无损）。
 Result<ca::u32, SigAttrError> readSignatureIndex(core::ClassFile& cf, core::AttrSlot& slot)
 {
     const Result<core::AttrBody*, core::ReadError> d = cf.decodeAttr(slot);

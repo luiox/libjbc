@@ -1,5 +1,5 @@
 /// @file        bsm_intern_test.cpp
-/// @brief       BSM 语义 intern 家族（dev_plan 批 2）双模式门：
+/// @brief       BSM 语义 intern 家族双模式门：
 ///
 ///   1. 纯模型门（无 JDK 也全跑）：句柄 / MethodType / Module / Package /
 ///      条件常量的去重 intern 与池形态走查（tag + 链路逐跳）；BootstrapMethods

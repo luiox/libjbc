@@ -736,7 +736,7 @@ TEST(ModuleCompact, ModuleFamilySlotsRemapAndDedupe)
 
 TEST(ModuleCompact, UnmodeledModuleHashesStillRejected)
 {
-    // ModuleHashes（JDK 内部件，非 JVMS 条目，本批不建模）：Raw 透传 + 压缩
+    // ModuleHashes（JDK 内部件，非 JVMS 条目，不建模）：Raw 透传 + 压缩
     // 封闭集外显式拒绝，拒绝点名属性名（诚实性）。
     ClassBuilder cb;
     cb.setThis(cb.classRef(cb.utf8("p/T")));

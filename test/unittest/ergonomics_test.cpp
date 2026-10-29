@@ -1,5 +1,5 @@
 /// @file        ergonomics_test.cpp
-/// @brief       v0.4 人体工学补口测试（doc_ai/ergonomics.md）：
+/// @brief       v0.4 人体工学补口测试：
 ///        F1 hasCode/collectCodeUnits、F2 makeSessionFromBytes、F4 findMethod。
 ///
 /// 全部用关内建的 ClassBuilder 字节构造（不依赖本机语料），畸形输入逐字节

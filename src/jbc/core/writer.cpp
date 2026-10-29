@@ -203,7 +203,7 @@ Result<std::vector<ca::u8>, WriteError> writeClass(const ClassFile& cf)
         }
     }
 
-    // 类级 trailing（design.md §27.1）：畸形输入的尾部字节原样写回，
+    // 类级 trailing：畸形输入的尾部字节原样写回，
     // 与属性体 trailing 同族——copy-through 保真，不丢尾。
     if (!cf.trailing.empty()) {
         out.raw(ByteView{cf.trailing});

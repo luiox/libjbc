@@ -418,7 +418,7 @@ Result<std::vector<ca::u8>, WriteError> encodeInsns(std::vector<RawInsn>& insns)
     // 操作数域宽校验：i16 放不下的分支偏移、u1 放不下的 LDC 索引都必须
     // 显式失败——静默截断会产出貌似合法但跳错位置 / 引用错条目的 class。
     // goto→goto_w、LDC→LDC_W 拓宽是 editor 的显式变换（loadConst 已自动选）；
-    // 其余域宽（design.md §27.2）同理：CP2 族超 u16、u8/i8/i16 操作数越界
+    // 其余域宽同理：CP2 族超 u16、u8/i8/i16 操作数越界
     // 一律 Err，唯一的合法出路是显式拓宽（wide 前缀 / 宽形状指令）。
     for (const RawInsn& in : insns) {
         const Shape sh = shapeOf(in.op);

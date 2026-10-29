@@ -1,7 +1,7 @@
 /// @file        code_editor.hpp
 /// @brief       变换协议：编辑便利、删除策略与基本块视图。
 ///
-/// design.md §7.3 的最小可用集：结构化变更全部经过句柄与策略表达；
+///  的最小可用集：结构化变更全部经过句柄与策略表达；
 /// 「摘链但忘记 delete」「label 池旁路」在这套 API 上没有入口。基本块
 /// 是按需计算的只读视图（入口 = 顺序头/跳转目标/异常处理器起点），
 /// 不是持久结构——v0.3 尚未引入 BlockId 域，块操作走指令句柄。
@@ -117,7 +117,7 @@ public:
     };
     Result<void, EditError> erase(InsnId id, ErasePolicy p = ErasePolicy::kRejectIfUsed);
 
-    /// @brief 批量删除（D3）：一次校验规划、单趟重建，替代循环单删。
+    /// @brief 批量删除：一次校验规划、单趟重建，替代循环单删。
     ///
     /// 策略语义与单条 erase 对齐的批量推广：
     ///   - kRejectIfUsed：任一存活引用即 StillUsed，什么都不删（全有或全无）。

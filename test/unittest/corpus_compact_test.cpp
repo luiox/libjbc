@@ -1,5 +1,5 @@
 /// @file        corpus_compact_test.cpp
-/// @brief       CP 显式压缩的语料扫——封闭集诚实性与确定性的行为级门（A8）。
+/// @brief       CP 显式压缩的语料扫——封闭集诚实性与确定性的行为级门。
 ///
 /// 对语料逐类 compactConstantPool：
 /// 1. 拒绝诚实性：每个 AttrNotModeled 拒绝点名的属性在原类上 decodeAttr

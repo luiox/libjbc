@@ -4,10 +4,9 @@
 ///              typed 解码/编码、半截体显式失败、trailing 保持、u16 域宽闸门，
 ///              以及「typed 读写与既有 Raw 手术口径一致」的对拍。
 ///
-/// 三件均为类级挂载、载荷全为 CP Class 索引（design.md §32.10）：分派接线与
-/// 消费方迁移同批落地；Raw 手术 oracle 从槽源 span 直接取体字节，是
-/// 旧栈 remapSingleClassAttr/remapClassListAttr 字节手术的测试内镜像
-/// （口径对齐用，非第二套手术）。
+/// 三件均为类级挂载、载荷全为 CP Class 索引；
+/// Raw 手术 oracle 从槽源 span 直接取体字节，与 typed 路径
+/// 逐字节对拍（口径镜像，非第二套手术）。
 #include <gtest/gtest.h>
 
 #include <memory>
@@ -110,7 +109,7 @@ ca::u32 internClass(ClassFile& cf, std::string_view internalName)
 }
 
 /// typed 手术路径（NestHost）：typed 解码 → 宿主类名映射（Old* 前缀命中才动）
-/// → makeNew 置 New。语义镜像旧栈 remapSingleClassAttr。
+/// → makeNew 置 New。
 Bytes typedNestHostSurgery(const Bytes& cls)
 {
     auto cf = jbc::test::readOk(cls);
@@ -130,8 +129,8 @@ Bytes typedNestHostSurgery(const Bytes& cls)
     return jbc::test::writeOk(*cf);
 }
 
-/// Raw 手术 oracle（NestHost）：remapSingleClassAttr 旧字节手术的测试内
-/// 逐字节镜像。体字节从槽源 span 直接取，不依赖 decodeAttr 的分派形态。
+/// Raw 手术 oracle（NestHost）：与 typed 路径逐字节对拍的镜像面。
+/// 体字节从槽源 span 直接取，不依赖 decodeAttr 的分派形态。
 Bytes rawNestHostSurgeryOracle(const Bytes& cls)
 {
     auto cf = jbc::test::readOk(cls);
@@ -166,8 +165,8 @@ Bytes rawNestHostSurgeryOracle(const Bytes& cls)
 }
 
 /// typed 手术路径（u2 类列表）：NestMembers/PermittedSubclasses 共形共用
-/// （AttrT 区分体类型，cpsMember 指向各自的条目表成员）。语义镜像
-/// 旧栈 remapClassListAttr：命中才动，miss 原样。
+/// （AttrT 区分体类型，cpsMember 指向各自的条目表成员）。
+/// 命中才动，miss 原样。
 template <typename AttrT, typename DecodeFn>
 Bytes typedClassListSurgery(const Bytes& cls, std::string_view attrName, DecodeFn decode,
                             std::vector<ca::u32> AttrT::* cpsMember)
@@ -191,7 +190,7 @@ Bytes typedClassListSurgery(const Bytes& cls, std::string_view attrName, DecodeF
     return jbc::test::writeOk(*cf);
 }
 
-/// Raw 手术 oracle（u2 类列表）：remapClassListAttr 旧字节手术的测试内镜像。
+/// Raw 手术 oracle（u2 类列表）：与 typed 路径逐字节对拍的镜像面。
 Bytes rawClassListSurgeryOracle(const Bytes& cls, std::string_view attrName)
 {
     auto cf = jbc::test::readOk(cls);

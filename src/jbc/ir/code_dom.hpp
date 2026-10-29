@@ -1,7 +1,7 @@
 /// @file        code_dom.hpp
 /// @brief       可编辑的指令 DOM：InstructionStore + 有序序列 + owner/generation 句柄。
 ///
-/// 这是 v0.2 入口闸门冻结的形状（dev_plan）：
+/// 这是 v0.2 入口闸门冻结的形状：
 ///   - 身份 = @ref InsnId {owner, slot, generation}——owner 是每个 CodeDom
 ///     构造时获得的进程级唯一代号；跨 CodeDom 的同号句柄被结构性拒绝。
 ///   - 存储 = slot 表（追加式，永不回收槽位）；删除只置死并递增 generation，
@@ -10,7 +10,7 @@
 ///   - 分支/switch 的操作数是 **LabelId 边界句柄，不是指令句柄或字节偏移**：
 ///     插入/删除后导出时统一重算，调用方永远不手改偏移。
 ///
-/// use 语义（design.md §7.3）：erase 遇到 incoming use 返回 StillUsed；
+/// use 语义：erase 遇到 incoming use 返回 StillUsed；
 /// 先 replaceAllUses 归零引用再删。反向 use 索引当前按需扫描（方法体规模
 /// 下足够），CodeEditor 的批量协议在此之上构建。
 #pragma once
@@ -189,7 +189,7 @@ public:
     /// 不要逐条盲删。
     Result<void, EditError> erase(InsnId id);
 
-    /// @brief 批量删除（D3）：一次校验、一趟扫序、单趟重建，替代 N 次
+    /// @brief 批量删除：一次校验、一趟扫序、单趟重建，替代 N 次
     ///        erase 的 O(N×n)。
     ///
     /// 全有或全无：ids 中任一句柄无效、任一存活指令的字段仍锚定批内成员
@@ -253,7 +253,7 @@ public:
     ///
     /// 整体重放（ClassSession::adoptMethod 的 replayMethodBody）按源顺序
     /// 逐条搬运：前向分支的目标指令尚未重放，其占位标签必然未锚定——
-    /// append 期的控制目标防呆在该路径上机制性不可满足（design.md §34.3）。
+    /// append 期的控制目标防呆在该路径上机制性不可满足。
     /// 受控态只放开「分支/switch 目标须已锚定到本 DOM 存活指令」这一条
     /// （switch 形状校验保留），退出时对全量存活指令补同一套校验，仍悬垂
     /// 的目标显式失败。正常编辑路径不进入此态，checkHandles 对外语义不变；

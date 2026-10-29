@@ -1,17 +1,17 @@
 /// @file        smt_build_test.cpp
-/// @brief       StackMapTable 生成器测试（design.md §10.4，A1/J6 验收面）。
+/// @brief       StackMapTable 生成器测试。
 ///
 /// 三部分：
 /// 1. 单元——紧凑形态选择表驱动（same/same1/chop/append/full + delta 边界）、
 ///    cat2 展开、Uninit offset 落 new pc、CP intern 复用、无控制流空产出、
 ///    版本门、防御拒绝路径。
-/// 2. javac oracle——对 J4/J5 同源语料（loop/switch 扩展）剥原 SMT →
+/// 2. javac oracle——对同源语料（loop/switch 扩展）剥原 SMT →
 ///    重生成 → maxes 覆盖 + lower 写回 → 组装写回 → 重读解码展开，与原 SMT
-///    展开按公共前缀逐槽比对（§10.3.6 口径：多槽/更精确不判分歧）。javac
+///    展开按公共前缀逐槽比对（口径：多槽/更精确不判分歧）。javac
 ///    缺席时 skip。
 /// 3. JVM 真跑——javac 样本（异常/循环/switch/构造器链）+ 手拼 uninit
 ///    样本，J7 全链（剥 SMT + maxes 覆盖 + lower 写回 + 重生成 SMT）后
-///    java 执行验收（A1 整链端到端的最强门）。JDK 缺席时 skip。
+///    java 执行验收（整链端到端的最强门）。JDK 缺席时 skip。
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -353,7 +353,7 @@ std::string regenSmtInSession(ClassSession& s, StubResolver& res, RegenStats& st
 
         // J7 全链：maxes 覆盖（显式 API）→ lower 写回——布局未变，lower 不
         // 触碰指令与嵌套属性；maxes 变化走手动链路的同一脏检查分支（覆盖
-        // 语义，§10.5），与 JVM 真跑门共同锁「重算 maxes 可运行」。
+        // 语义），与 JVM 真跑门共同锁「重算 maxes 可运行」。
         if (!applyComputedMaxes(*p.unwrap(), sum, sig)) {
             return std::string("maxes adopt failed (") + std::string(sig.name) + ")";
         }
@@ -739,7 +739,7 @@ TEST(SmtBuildApi, BranchMergeFrameIsSame1WithInternedObject)
               "java/lang/String");
 }
 
-/// 汇合单边赋值槽 → 陈述 Top（§10.4.8 裁决口径的常规边直测）：只在分支
+/// 汇合单边赋值槽 → 陈述 Top（裁决口径的常规边直测）：只在分支
 /// 臂赋值的 local，汇合帧按 verifier 合并陈述 Top（append 载荷 [top]）。
 TEST(SmtBuildApi, MixedJoinSlotAppendsTop)
 {
@@ -874,7 +874,7 @@ TEST(SmtBuildApi, HandlerFrameCarriesExceptionStack)
 
 namespace {
 
-/// 公共前缀逐槽比对（§10.3.6 口径：多槽/更精确不判分歧；oracle 双侧都经
+/// 公共前缀逐槽比对（口径：多槽/更精确不判分歧；oracle 双侧都经
 /// fromSmtTag 展开，cls 恒 0，逐槽即比 tag 语义）。
 void compareExpanded(const char* ctx,
                      const std::vector<jbc::test::FullFrame>& expect,
@@ -990,13 +990,13 @@ TEST(SmtBuildOracle, RegeneratedSmtMatchesOriginal)
     }
     std::printf("[smt-build-oracle] methods=%zu framesChecked=%zu mismatch=%zu\n",
                 methods, framesChecked, mismatch);
-    EXPECT_GE(methods, 10u);   // 语料护栏（J4/J5 语料 + loop/switch 扩展）
+    EXPECT_GE(methods, 10u);   // 语料护栏（帧语料 + loop/switch 扩展）
     EXPECT_GE(framesChecked, 30u);
     EXPECT_EQ(mismatch, 0u);   // 验收口径：重生成与 javac 原产物公共前缀一致
 }
 
 // ---------------------------------------------------------------------------
-// JVM 真跑（A1 裁决 2）：重生成 SMT 的类必须在真实 JVM 上加载执行
+// JVM 真跑：重生成 SMT 的类必须在真实 JVM 上加载执行
 // ---------------------------------------------------------------------------
 
 namespace {
@@ -1092,7 +1092,7 @@ TEST(SmtBuildJvmProbe, FullChainRegeneratedClassesRunOnJvm)
     res.seedJdkParents();
 
     // 2) 逐类：剥原 SMT → Strict 帧 → maxes 覆盖 + lower 写回 → 重生成 →
-    //    挂回 → 写出（A1 整链第一次端到端）。
+    //    挂回 → 写出。
     ca::usize classes = 0;
     ca::usize generated = 0;
     std::error_code iterEc;

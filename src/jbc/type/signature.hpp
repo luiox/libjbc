@@ -8,7 +8,7 @@
 /// 零分配（树节点字符串全部借用输入串的字节），只在实际产出新串的反解/手术
 /// 入口才分配。
 ///
-/// 三条层契约（成文于 design.md §32，全量拓扑版见 docs/design.md）：
+/// 三条层契约（全量拓扑真源见 docs/design.md）：
 ///   1. **roundtrip 恒等**：合法输入 parse→unparse 逐字节恒等（树不做任何
 ///      归一化，一切字节各归其位）；
 ///   2. **畸形显式 Err**：解析失败返回 @ref SigError{码, 字节偏移}，绝不静默
@@ -16,7 +16,7 @@
 ///   3. **手术显式调用**：类名手术只经本模块 API 发生（span 坐标 / rename
 ///      便捷面），改写其余字节原样保留；Signature 属性的定位与写回在本纯
 ///      函数层不做（copy-through 纪律），属性层接线见 jbc::ir::sig_attr
-///      （design.md §32.4）。
+///      。
 ///
 /// 语法真源 JVMS 4.7.9.1，产生式一一对应（注释逐条标注）。
 #pragma once
@@ -110,7 +110,7 @@ struct SigTypeArg
     Kind kind = Kind::Invariant;
     std::unique_ptr<struct SigType> bound;  ///< kind != Unbounded 时有效
 
-    /// @brief 是否携带类型载荷（ '*' 返回 false）。
+    /// @brief 是否携带类型载荷（'*' 返回 false）。
     bool hasBound() const noexcept { return kind != Kind::Unbounded; }
 };
 
@@ -269,7 +269,7 @@ struct SigRenameResult
 /// （`Outer$Inner`，javac 常规产物）——统一按全名相等匹配（见 @ref
 /// SigClassType）。形态纪律（v1 后收窄到段链形态轴）：**扁平段链**（单个
 /// 段名、无 '.' 后缀段）允许跨 '$' 段形态替换——new 内部名按 '$' 合成写
-/// 满本段（javac/kotlinc 通行非规范 $ 形式，JVM 签名词法可读），Grunt 系
+/// 满本段（javac/kotlinc 通行非规范 $ 形式，JVM 签名词法可读），部分$
 /// 混淆器把嵌套类抹平段数，跨混淆器映射还原赖此；**真嵌套段链**不做结构
 /// 重排——部件按段对齐，越界即不命中（原字节原样，零改写）。其余字节原
 /// 样保留；未命中返回 hits==0 与原串。

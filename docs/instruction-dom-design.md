@@ -46,11 +46,11 @@ owner 是跨 `CodeDom` 安全所必需的身份信息，但它不应该是指令
 
 删除指令时，仍被 branch/switch 操作数字段引用（`usersOf`）或被存活 `Boundary` 标签锚定的指令返回 `StillUsed`。`replaceAllUses(from, to)` 只改写 branch/switch 操作数字段：每个字段获得一枚锚定 to 的新 `ControlFlow` 标签，锚定同一指令的 `Boundary` 标签保持原位，导入产生的旧 `ControlFlow` 标签随后销毁。字段改写后遗留的历史控制流标签不再保护锚点——`CodeEditor::setTarget` 替换目标后删除旧目标不应被这类残留标签阻止。若异常表、局部变量表或行号表仍引用某边界，必须显式处理；这个规则保证“删节点后留下悬垂 label”在 API 层不可达。
 
-## 与上层 IR 和 mbase 的边界
+## 与上层 IR 和上层索引的边界
 
-`libjbc` 只负责单方法 DOM 的身份、顺序、边界和写回重定位。基本块、可达性、调用图、交叉引用和全局重排属于 `mbase`，它们读取稳定的 `MethodId`、方法签名和引用站点，不保存 `Insn*`、`Label*` 或 `ClassFile*`。
+`libjbc` 只负责单方法 DOM 的身份、顺序、边界和写回重定位。基本块、可达性、调用图、交叉引用和全局重排属于上层索引，它们读取稳定的 `MethodId`、方法签名和引用站点，不保存 `Insn*`、`Label*` 或 `ClassFile*`。
 
-`mbase` 需要在方法编辑完成后重新扫描受影响 class 的引用事实。未来可以根据 `ChangeSet` 做局部重建，但局部重建必须与全量扫描得到相同的 `ReferenceSite` 和 `SymbolKey`；在这个等价性没有测试证明前，默认使用全量索引重建。
+上层索引需要在方法编辑完成后重新扫描受影响 class 的引用事实。未来可以根据 `ChangeSet` 做局部重建，但局部重建必须与全量扫描得到相同的 `ReferenceSite` 和 `SymbolKey`；在这个等价性没有测试证明前，默认使用全量索引重建。
 
 ## 迁移顺序
 

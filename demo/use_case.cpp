@@ -6,7 +6,7 @@
 ///                maxStack 不变、字节增长统计）。
 /// 任务 3（往返）：未变换类 writeClass 与原字节逐字节一致。
 ///
-/// 本文件同时是 doc_ai/ergonomics.md 的证据来源：写它时遇到的每一处
+/// 本文件同时是 的证据来源：写它时遇到的每一处
 /// 别扭都会记进摩擦点清单，不为了好看而绕开。
 #include <cstdio>
 #include <cstdlib>

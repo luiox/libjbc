@@ -1,5 +1,5 @@
 /// @file        struct_attrs_corpus_test.cpp
-/// @brief       结构元数据属性语料门：B3 四件（SourceFile/InnerClasses/
+/// @brief       结构元数据属性语料门：四件（SourceFile/InnerClasses/
 ///              EnclosingMethod/Exceptions）+ Nest 族三件（NestHost/
 ///              NestMembers/PermittedSubclasses）+ Record + Module 族三件
 ///              （Module/ModulePackages/ModuleMainClass）。全量扫描 +
@@ -9,7 +9,7 @@
 /// 匿名类的 EnclosingMethod；Nest 族三件由独立 --release 17 小语料保证、
 /// Record 由独立 --release 16 小语料保证、Module 由独立 --release 17 小语
 /// 料保证——主语料 --release 8 产物是 v52，构造上不带这些面）；env 注入
-/// （混淆产物）可能剥属性，分布是显式事实而非覆盖缺口（§32.7 同款
+/// （混淆产物）可能剥属性，分布是显式事实而非覆盖缺口（同款
 /// 处理），恒等门两种模式一律生效。
 #include <gtest/gtest.h>
 
@@ -258,7 +258,7 @@ TEST(StructAttrsCorpusGate, AllStructAttrsTypedRoundtripByteIdentity)
 
     EXPECT_GT(filesChecked, 0u);
 
-    // 分布断言：自产语料（javac 产物）保证 B3 四件齐备。局部类/匿名类样本
+    // 分布断言：自产语料（javac 产物）保证四件齐备。局部类/匿名类样本
     // （VolInner 等）产出 EnclosingMethod；带 throws 方法产出 Exceptions。
     if (src.stage == jbc::test::corpus::Stage::SelfProduced) {
         EXPECT_GT(counts.sourceFile, 0u);
@@ -276,8 +276,8 @@ TEST(StructAttrsCorpusGate, AllStructAttrsTypedRoundtripByteIdentity)
     }
     // Record 分布断言：自产 record 语料（--release 16）保证属性与两个组件
     // 嵌套面（Signature/注解）齐备——泛型组件产出组件 Signature、RECORD_
-    // COMPONENT 目标注解产出组件 RuntimeVisibleAnnotations。主语料（
-    // --release 8）构造上不带 Record，硬断言只钉 record 语料可用时；env
+    // COMPONENT 目标注解产出组件 RuntimeVisibleAnnotations。主语料（--release 8）
+    // 构造上不带 Record，硬断言只钉 record 语料可用时；env
     // 注入模式分布只记录（实测注入语料 54 类携带）。
     if (record.stage == jbc::test::corpus::Stage::SelfProduced) {
         EXPECT_GT(counts.recordAttrs, 0u) << "record corpus lost record samples?";

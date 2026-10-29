@@ -1,5 +1,5 @@
 /// @file        attr_build.cpp
-/// @brief       类构建挂载面（A7 定形 + dev_plan 批 1/批 2）：注解族/简单
+/// @brief       类构建挂载面：注解族/简单
 ///              注解的语义合成与 typed 属性挂载 + BSM 语义 intern 家族
 ///              （ClassSession 成员实现文件）。
 //
@@ -10,7 +10,7 @@
 //   - 其余（含未知名）至多一条；重复挂载 Err(AlreadyMounted)，替换语义走
 //     既有 decodeAttr + mutate() 通路。
 //
-// 错误族分流（LowerError，§27.2 域宽闸门的合成侧同源纪律）：
+// 错误族分流（LowerError， 域宽闸门的合成侧同源纪律）：
 //   DomainOverflow = 声明结构行数写不下（u1/u16）；
 //   InvalidSeed    = 规格本身不合法（空描述符/描述符形态不符/深度越界/
 //                    与成员描述符 arity 失配）；
@@ -179,7 +179,7 @@ Utf8Known resolveUtf8(const SemIndex& ix, std::string_view s)
     return it == ix.utf8.end() ? Utf8Known{} : Utf8Known{it->second, true};
 }
 
-/// @brief BSM 编目计数器（miss 才计、保守超计可行、漏计不可——与批 1
+/// @brief BSM 编目计数器（miss 才计、保守超计可行、漏计不可——与
 ///        countScalarElem 同一纪律）。与带去重 intern 的查找序列严格同构：
 ///        utf8→下游键；utf8 命中才查二级表，miss 直接按全链计加。
 ca::u32 countHandleAdditions(const SemIndex& ix, core::CpTag refTag,
@@ -973,7 +973,7 @@ Result<void, LowerError> ClassSession::attachConstantValue(FieldId field,
 }
 
 // ---------------------------------------------------------------------------
-// 通用挂载（A7 定形）：调用方自构造 typed 体的直挂入口
+// 通用挂载：调用方自构造 typed 体的直挂入口
 // ---------------------------------------------------------------------------
 
 Result<void, LowerError> ClassSession::attachAttr(MethodId method,
@@ -1048,7 +1048,7 @@ Result<void, LowerError> ClassSession::attachClassAttr(std::string_view attrName
 }
 
 // ---------------------------------------------------------------------------
-// BSM 语义 intern 家族（批 2）：句柄/MethodType/Module/Package/Dynamic 的
+// BSM 语义 intern 家族：句柄/MethodType/Module/Package/Dynamic 的
 // 去重 intern（命中既有池不膨胀，miss 才追加）+ BootstrapMethods 条目面。
 // ---------------------------------------------------------------------------
 

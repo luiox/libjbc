@@ -40,12 +40,12 @@ enum class WriteError {
 
 /// @brief 模型的解析状态：描述能力，而非合法性。
 ///
-/// 两态语义（design.md §4.3）：
+/// 两态语义：
 /// - Validated：骨架与全部可见引用通过校验，且没有已知的不合规区段；
 /// - Recovered：结构主体可读，但存在「结构可确定、语义不合规」的降级区段
 ///   （trailing 同族等），降级事实记录在 Diagnostics 里，模型仍可原样写回。
 ///
-/// 结构损坏（边界无法确定）不走本枚举：reader 阶段一律 Err（design.md §27.3），
+/// 结构损坏（边界无法确定）不走本枚举：reader 阶段一律 Err，
 /// 不产出半截模型——「降级」与「拒绝」两类不可混用。
 enum class ParseState {
     Validated,  ///< 全部必要结构通过校验，可安全做任何变换

@@ -1,6 +1,6 @@
 /// @file        type_annotation_attr_test.cpp
 /// @brief       Runtime*TypeAnnotations typed 建模与类名手术的表驱动单测
-///              （design.md §32.7）：解码保真（roundtrip）、无映射字节不动
+///              ：解码保真（roundtrip）、无映射字节不动
 ///              （硬门禁）、命中改写（type_index 与 'c' 元素值）、失败显式、
 ///              全有或全无、trailing 保持，以及语料门。
 #include <gtest/gtest.h>

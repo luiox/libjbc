@@ -5,7 +5,7 @@
 ///              传播，以及组件名/描述符 typed 手术往返。
 ///
 /// Record 是第 17 个 typed 属性，也是第一个**体上带嵌套属性表**的非 Code
-/// 属性（design.md §32.11）：组件嵌套槽与 Code 嵌套同款 lazy/copy-through/
+/// 属性：组件嵌套槽与 Code 嵌套同款 lazy/copy-through/
 /// 置脏语义，本文件逐面钉死。
 #include <gtest/gtest.h>
 

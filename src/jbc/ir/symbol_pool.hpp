@@ -1,7 +1,7 @@
 /// @file        symbol_pool.hpp
 /// @brief       ClassUnit 自持的符号池：去重、按 slot 寻址、生命周期即池。
 ///
-/// design.md §7.2：字符串与描述符不存指向 reader 临时区的裸视图，而是
+/// ：字符串与描述符不存指向 reader 临时区的裸视图，而是
 /// SymbolId；对外返回受池生命周期约束的 Utf8StringRef。实现上用
 /// Utf8StringArena（整批共存）+ slot 表 + 去重索引；字节走 intern_raw
 /// （classfile 的 modified UTF-8 与 arena 1:1 往返，不校验不失真）。

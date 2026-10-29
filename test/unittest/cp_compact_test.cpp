@@ -1,5 +1,5 @@
 /// @file        cp_compact_test.cpp
-/// @brief       A8：CP 显式压缩的单元门（design.md §36）。
+/// @brief       A8：CP 显式压缩的单元门。
 ///
 /// 覆盖面：稳序映射钉面（新旧索引逐条目断言）、规范去重（Utf8/String/Class
 /// 内容复用）、死条目清除、wide 双槽、指令 CP 操作数（LDC/LDC_W/LDC2_W，
@@ -75,7 +75,7 @@ TEST(CpCompact, StableMappingPinnedFace)
     ASSERT_NE(sess, nullptr);
     ASSERT_TRUE(compactConstantPool(*sess).is_ok());
 
-    // 子序映射（§36.2）：活条目按老索引升序原位保留，死条目 8/9/10 不落入
+    // 子序映射：活条目按老索引升序原位保留，死条目 8/9/10 不落入
     // 新池——本例活面无重复，映射逐条恒等：1→1 … 7→7。
     const ClassFile& cf = sess->backing();
     ASSERT_EQ(cf.cp.size(), 8u);
@@ -385,7 +385,7 @@ TEST(CpCompact, CompactClosedSetSideAttrsRemapped)
     auto rd = std::move(rr).unwrap();
     auto& cf = *rd.file;
 
-    // SourceFile：语义恒等。B3 接分派后为 typed 体（Raw 形不可达），
+    // SourceFile：语义恒等。分派接线后为 typed 体（Raw 形不可达），
     // 直接按 typed 模型读索引。
     const AttrSlot* sf = cf.findClassAttr("SourceFile");
     ASSERT_NE(sf, nullptr);
@@ -395,7 +395,7 @@ TEST(CpCompact, CompactClosedSetSideAttrsRemapped)
     const ca::u32 sfIdx = sfAttr.sourceFileCp;
     EXPECT_EQ(cf.utf8(sfIdx), "p/T.java");
 
-    // InnerClasses：四列中前三列重映射、access 列不动。B3 接分派后为
+    // InnerClasses：四列中前三列重映射、access 列不动。分派接线后为
     // typed 体（Raw 形不可达），直接按 typed 模型读三槽。
     const AttrSlot* ic = cf.findClassAttr("InnerClasses");
     ASSERT_NE(ic, nullptr);
