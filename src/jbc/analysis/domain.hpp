@@ -1150,11 +1150,54 @@ DomainResult<V> DomainEngine<V>::analyze(const ir::CodeUnit& u, const MethodSig*
         return true;
     };
 
-    // 行级并入：短侧补 top 后逐行过域合并（状态副本进，融合结果出）。
+    // 异常 handler 入口槽集（两档通用）：这些位置的汇合沿用既有宽容口径
+    // ——异常边入口栈被重置为 [throwable]，fake-try 连续体的顺序边深侧
+    // 合并是既有契约（HandlerSeedKeepsFallthroughEdge 一族测试钉死），
+    // 栈深守卫对其豁免。
+    std::unordered_set<ca::u32> excEntrySlots;
+    excEntrySlots.reserve(u.exc.size() * 2);
+    for (const ir::CodeUnit::Exc& e : u.exc) {
+        const auto target = u.dom.resolveLabel(e.handler);
+        if (target.is_ok() && !target.unwrap().isEnd()) {
+            excEntrySlots.insert(target.unwrap().insn.slot);
+        }
+    }
+
+    // 不建模子程序的域（BestEffort）遇 jsr/ret 方法整体退回 legacy 口径：
+    // 传统双后继传播使落空边多携带一个返回地址（形态域里退化为 Int，
+    // 与普通 int 不可区分），栈深守卫无法逐点判定，整个方法豁免——
+    // 「BestEffort 现状行为逐位不变」契约优先。建模子程序的域（Strict）
+    // 的 jsr 联跳栈深恒等，真正畸形的子程序形态由 Subroutine 拒绝面兜住。
+    bool hasLegacySubInsn = false;
+    if (!dom_.modelsSubroutines()) {
+        for (const ir::InsnId id : order) {
+            const ir::Insn* in = u.dom.peek(id);
+            if (in != nullptr && (in->op == core::Op::JSR || in->op == core::Op::JSR_W
+                                  || in->op == core::Op::RET)) {
+                hasLegacySubInsn = true;
+                break;
+            }
+        }
+    }
+    const bool legacySubroutine = hasLegacySubInsn;
+
+    // 行级并入：locals 短侧补 top 后逐行过域合并（状态副本进，融合结果出）。
     // Strict 域合并失败时置 fail 并定位到合并点指令，返回 false = 整个
     // analyze 终止（不伪造帧，§10.1）。
+    // 栈深守卫：非 handler 汇合点的可达入边操作数栈深必须相等（JVMS
+    // §4.10.1 汇合不变量）；此前短栈侧补 top 继续逐行合并，形状格下 top
+    // 被吸收 = 静默选中深侧，把 Verifier 必拒的形态算成 ok。两档位同规
+    // 显式拒绝，不选边。豁免面见 excEntrySlots / legacySubroutine 注释。
     const auto mergeInto = [&](detail::DomState<V>& merged, const detail::DomState<V>& incoming,
                                const ir::InsnId& at) -> bool {
+        if (!legacySubroutine && excEntrySlots.count(at.slot) == 0
+            && merged.stack.size() != incoming.stack.size()) {
+            out.fail   = FrameSummary::Fail::StackMismatch;
+            out.failAt = at;
+            out.ok     = false;
+            result.frames.clear();
+            return false;
+        }
         const ca::usize nL = merged.locals.size() > incoming.locals.size()
                                  ? merged.locals.size()
                                  : incoming.locals.size();

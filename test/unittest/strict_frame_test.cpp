@@ -381,6 +381,33 @@ std::shared_ptr<ClassSession> refBranchMergeClass()
     return sessionOf(cb.build());
 }
 
+/// 0 aconst_null / 1 ifnull→8 / 4 iconst_1 / 5 goto→8 / 8 nop / 9 return（()V）——
+/// 汇合点 8 的两条可达入边栈深不一致：ifnull 弹空边 [] vs goto 携值边 [int]。
+/// Verifier 必拒形态（JVMS §4.10.1 汇合不变量），帧引擎必须显式拒绝。
+/// 合并点取 nop 而非消费指令：首边到达即转移不失败，失败面留给 join 守卫。
+std::shared_ptr<ClassSession> stackDepthMismatchClass()
+{
+    ClassBuilder cb = baseClass();
+    const ca::u16 codeIdx = cb.utf8("Code");
+    const ca::u16 mIdx    = cb.utf8("m");
+    const ca::u16 voidIdx = cb.utf8("()V");
+
+    Bytes code;
+    code.push_back(0x01);              // 0 aconst_null
+    code.push_back(0xc6);              // 1 ifnull -> 8
+    put2(code, 7);
+    code.push_back(0x04);              // 4 iconst_1
+    code.push_back(0xa7);              // 5 goto -> 8
+    put2(code, 3);
+    code.push_back(0x00);              // 8 nop（合并点）
+    code.push_back(0xb1);              // 9 return
+
+    std::vector<AttrSpec> ma;
+    ma.push_back(AttrSpec{codeIdx, jbc::test::codeContent(1, 1, code)});
+    cb.addMethod(0x0009, mIdx, voidIdx, std::move(ma));
+    return sessionOf(cb.build());
+}
+
 }   // namespace
 
 TEST(StrictFrameTest, SameOffsetUninitMergeKeeps)
@@ -440,6 +467,38 @@ TEST(StrictFrameTest, DiffOffsetUninitMergeBestEffortUnchanged)
     FrameEngine fe(s->backing().cp);   // BestEffort：现行降级路径不变
     const FrameSummary sum = fe.compute(*p.unwrap());
     EXPECT_TRUE(sum.ok);
+}
+
+TEST(StrictFrameTest, StackDepthMismatchStrictRejectsAtMergePoint)
+{
+    auto s = stackDepthMismatchClass();
+    ASSERT_NE(s, nullptr);
+    auto p = promoteMethod(*s, 0);
+    ASSERT_TRUE(p.is_ok());
+
+    StubResolver res;
+    FrameEngine fe(s->backing().cp, res, FramePolicy::Strict);
+    const FrameSummary sum = fe.compute(*p.unwrap());
+    EXPECT_FALSE(sum.ok);
+    EXPECT_EQ(sum.fail, FrameSummary::Fail::StackMismatch);
+    const ca::usize atMerge = indexAtPc(*p.unwrap(), 8);
+    ASSERT_NE(atMerge, static_cast<ca::usize>(-1));
+    EXPECT_EQ(sum.failAt, p.unwrap()->dom.order()[atMerge]);   // 定位到合并点指令
+}
+
+TEST(StrictFrameTest, StackDepthMismatchBestEffortAlsoRejects)
+{
+    // 栈深不一致是结构性数据流缺陷而非类型精度问题——BestEffort 同规显式
+    // 拒绝（此前短侧补 top 被深侧吸收 = 静默选边，把必拒形态算成 ok）。
+    auto s = stackDepthMismatchClass();
+    ASSERT_NE(s, nullptr);
+    auto p = promoteMethod(*s, 0);
+    ASSERT_TRUE(p.is_ok());
+
+    FrameEngine fe(s->backing().cp);
+    const FrameSummary sum = fe.compute(*p.unwrap());
+    EXPECT_FALSE(sum.ok);
+    EXPECT_EQ(sum.fail, FrameSummary::Fail::StackMismatch);
 }
 
 // ---------------------------------------------------------------------------

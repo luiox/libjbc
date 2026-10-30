@@ -160,6 +160,9 @@ struct FrameSummary
                        ///<   returnAddress 合并冲突（JVMS 4.10.2.5：只与自身
                        ///<   合并）；jsr/ret 数据流本身已建模，不再整体拒绝
         TypeConflict,  ///< Strict：跨类合并/异 offset Uninit 合并等不可算冲突
+        StackMismatch, ///< 汇合点入边栈深不一致（JVMS §4.10.1 各路径到达同一
+                       ///<   指令的操作数栈深度必须相等；两档位同规显式拒绝，
+                       ///<   不按深侧补 top 选边）
         NoResolver,    ///< Strict：未注入 ITypeResolver（fail loud，不降级）
         NotSupported,  ///< Preserve：占位档被选入计算路径（读侧归 smt_read）
     } fail = Fail::None;

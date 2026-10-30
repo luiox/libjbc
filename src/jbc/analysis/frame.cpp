@@ -142,6 +142,7 @@ const char* to_string(FrameSummary::Fail f) noexcept
     case FrameSummary::Fail::NoFixpoint: return "no fixpoint";
     case FrameSummary::Fail::Subroutine: return "subroutine path malformed";
     case FrameSummary::Fail::TypeConflict: return "type conflict";
+    case FrameSummary::Fail::StackMismatch: return "inconsistent stack depth at merge";
     case FrameSummary::Fail::NoResolver: return "strict without type resolver";
     case FrameSummary::Fail::NotSupported: return "policy not supported";
     }
