@@ -343,6 +343,22 @@ inline VKind storeKind(core::Op op) noexcept
     }
 }
 
+/// 单类型描述符 → 尺寸类（J→Long、D→Double、F→Float、L/[→Ref、其余
+/// cat1 原始类（I/Z/B/C/S）→ Int）。空串只在描述符整体病态时出现——
+/// 那类形态由槽计数侧先行 BadCpRef 拒绝，这里按 cat1 兜底。
+inline VKind typeKind(std::string_view t) noexcept
+{
+    if (t.empty()) return VKind::Int;
+    switch (t[0]) {
+    case 'J': return VKind::Long;
+    case 'D': return VKind::Double;
+    case 'F': return VKind::Float;
+    case 'L':
+    case '[': return VKind::Ref;
+    default: return VKind::Int;
+    }
+}
+
 /// 成员引用的描述符（Methodref/InterfaceMethodref/Fieldref → NaT.b；
 /// InvokeDynamic 的 b 直接是 NaT）。
 inline std::string_view memberDesc(const core::ConstantPool& cp, ca::u32 cpIdx, bool& ok)
@@ -797,10 +813,9 @@ void Machine<V>::apply(const ir::Insn& in, ir::InsnId id, FrameSummary::Fail& fa
                 fail = FrameSummary::Fail::BadCpRef;
                 return;
             }
-            if (n == 2) {
-                pushVal(dom.newValue(in, id, VKind::Long), fail);
-            } else if (n == 1) {
-                pushVal(dom.newValue(in, id, VKind::Ref), fail);
+            // 字段类型按描述符精确到尺寸类（J/D/F/L/[；槽数只定推入宽度）。
+            if (n == 2 || n == 1) {
+                pushVal(dom.newValue(in, id, typeKind(d)), fail);
             }
             return;
         }
@@ -827,10 +842,9 @@ void Machine<V>::apply(const ir::Insn& in, ir::InsnId id, FrameSummary::Fail& fa
             if (fail != FrameSummary::Fail::None) {
                 return;
             }
-            if (n == 2) {
-                pushVal(dom.newValue(in, id, VKind::Long), fail);
-            } else if (n == 1) {
-                pushVal(dom.newValue(in, id, VKind::Ref), fail);
+            // 字段类型按描述符精确到尺寸类（同 GETSTATIC）。
+            if (n == 2 || n == 1) {
+                pushVal(dom.newValue(in, id, typeKind(d)), fail);
             }
             return;
         }
@@ -889,10 +903,16 @@ void Machine<V>::apply(const ir::Insn& in, ir::InsnId id, FrameSummary::Fail& fa
                     }
                 }
             }
-            if (ret == 2) {
-                pushVal(dom.newValue(in, id, VKind::Long), fail);
-            } else if (ret == 1) {
-                pushVal(dom.newValue(in, id, VKind::Ref), fail);
+            // 返回类型按描述符精确到尺寸类（I/Z/B/C/S→Int、F→Float、
+            // J→Long、D→Double、L/[→Ref）；槽数只定推入宽度。此前按
+            // 「1 槽→Ref、2 槽→Long」的粗化让 ()I 结果以 Ref 入帧——
+            // 与 LDC 位的 CP tag 精确映射不一致，读↔算对拍系统性误报。
+            if (ret == 2 || ret == 1) {
+                const ca::usize close = d.find(')');
+                const std::string_view rt =
+                    close == std::string_view::npos ? std::string_view{}
+                                                    : oneType(d, close + 1);
+                pushVal(dom.newValue(in, id, typeKind(rt)), fail);
             }
             return;
         }

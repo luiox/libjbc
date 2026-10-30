@@ -408,6 +408,83 @@ std::shared_ptr<ClassSession> stackDepthMismatchClass()
     return sessionOf(cb.build());
 }
 
+/// CP 装载结果形状回归载体一：invokestatic ()I 结果跨分支边界入帧。
+///   0 invokestatic p/H.g:()I    [Int]
+///   3 invokestatic p/H.h:()I    [Int,Int]
+///   6 ifeq 13                   跳边 [Int]（g 结果留在栈下）
+///   9 goto 13                   直落边 [Int]
+///  13 istore_0（合并点帧 = [Int]；此前 1 槽粗化成 Ref）
+///  14 return
+std::shared_ptr<ClassSession> invokeRetShapeClass()
+{
+    ClassBuilder cb = baseClass();
+    const ca::u16 codeIdx = cb.utf8("Code");
+    const ca::u16 mIdx    = cb.utf8("m");
+    const ca::u16 voidIdx = cb.utf8("()V");
+    const ca::u16 hCls    = cb.classRef(cb.utf8("p/H"));
+    const ca::u16 gNat    = cb.nameAndType(cb.utf8("g"), cb.utf8("()I"));
+    const ca::u16 hNat    = cb.nameAndType(cb.utf8("h"), cb.utf8("()I"));
+    const ca::u16 gRef    = cb.methodref(hCls, gNat);
+    const ca::u16 hRef    = cb.methodref(hCls, hNat);
+
+    Bytes code;
+    code.push_back(0xb8);              // 0 invokestatic
+    put2(code, gRef);
+    code.push_back(0xb8);              // 3 invokestatic
+    put2(code, hRef);
+    code.push_back(0x99);              // 6 ifeq -> 13
+    put2(code, 7);
+    code.push_back(0xa7);              // 9 goto -> 13
+    put2(code, 4);
+    code.push_back(0x3b);              // 13 istore_0（合并点）
+    code.push_back(0xb1);              // 14 return
+
+    std::vector<AttrSpec> ma;
+    ma.push_back(AttrSpec{codeIdx, jbc::test::codeContent(2, 1, code)});
+    cb.addMethod(0x0009, mIdx, voidIdx, std::move(ma));
+    return sessionOf(cb.build());
+}
+
+/// CP 装载结果形状回归载体二：getstatic F 与 invokestatic ()D。
+///   m: 0 getstatic p/H.sf:F; 3 goto 6; 6 fstore_0; 7 return
+///   n: 0 invokestatic p/H.d:()D; 3 goto 6; 6 dstore_0; 7 return
+std::shared_ptr<ClassSession> fieldRetShapeClass()
+{
+    ClassBuilder cb = baseClass();
+    const ca::u16 codeIdx = cb.utf8("Code");
+    const ca::u16 mIdx    = cb.utf8("m");
+    const ca::u16 nIdx    = cb.utf8("n");
+    const ca::u16 voidIdx = cb.utf8("()V");
+    const ca::u16 hCls    = cb.classRef(cb.utf8("p/H"));
+    const ca::u16 sfNat   = cb.nameAndType(cb.utf8("sf"), cb.utf8("F"));
+    const ca::u16 dNat    = cb.nameAndType(cb.utf8("d"), cb.utf8("()D"));
+    const ca::u16 sfRef   = cb.fieldref(hCls, sfNat);
+    const ca::u16 dRef    = cb.methodref(hCls, dNat);
+
+    Bytes m;
+    m.push_back(0xb2);                 // 0 getstatic
+    put2(m, sfRef);
+    m.push_back(0xa7);                 // 3 goto -> 6
+    put2(m, 3);
+    m.push_back(0x44);                 // 6 fstore_0
+    m.push_back(0xb1);                 // 7 return
+    std::vector<AttrSpec> ma;
+    ma.push_back(AttrSpec{codeIdx, jbc::test::codeContent(1, 1, m)});
+    cb.addMethod(0x0009, mIdx, voidIdx, std::move(ma));
+
+    Bytes n;
+    n.push_back(0xb8);                 // 0 invokestatic
+    put2(n, dRef);
+    n.push_back(0xa7);                 // 3 goto -> 6
+    put2(n, 3);
+    n.push_back(0x47);                 // 6 dstore_0
+    n.push_back(0xb1);                 // 7 return
+    std::vector<AttrSpec> na;
+    na.push_back(AttrSpec{codeIdx, jbc::test::codeContent(2, 2, n)});
+    cb.addMethod(0x0009, nIdx, voidIdx, std::move(na));
+    return sessionOf(cb.build());
+}
+
 }   // namespace
 
 TEST(StrictFrameTest, SameOffsetUninitMergeKeeps)
@@ -499,6 +576,60 @@ TEST(StrictFrameTest, StackDepthMismatchBestEffortAlsoRejects)
     const FrameSummary sum = fe.compute(*p.unwrap());
     EXPECT_FALSE(sum.ok);
     EXPECT_EQ(sum.fail, FrameSummary::Fail::StackMismatch);
+}
+
+// ---------------------------------------------------------------------------
+// CP 装载结果形状（invoke/getstatic 按描述符精确到尺寸类）
+// ---------------------------------------------------------------------------
+
+TEST(StrictFrameTest, InvokeRetKindFollowsDescriptor)
+{
+    // 形状域的 CP 装载结果此前按「1 槽→Ref、2 槽→Long」粗化——()I 结果以
+    // Ref 入帧，与 LDC 位按 CP tag 的精确映射不一致，读↔算对拍系统性误报。
+    auto s = invokeRetShapeClass();
+    ASSERT_NE(s, nullptr);
+    auto p = promoteMethod(*s, 0);
+    ASSERT_TRUE(p.is_ok());
+
+    FrameEngine fe(s->backing().cp);   // BestEffort：形状域直测
+    std::vector<FrameAt> frames;
+    const FrameSummary sum = fe.compute(*p.unwrap(), frames);
+    ASSERT_TRUE(sum.ok) << jbc::analysis::to_string(sum.fail);
+
+    const ca::usize atMerge = indexAtPc(*p.unwrap(), 13);
+    ASSERT_NE(atMerge, static_cast<ca::usize>(-1));
+    ASSERT_EQ(frames[atMerge].stack.size(), 1u);
+    EXPECT_EQ(frames[atMerge].stack[0].k, VKind::Int);   // ()I → Int 非 Ref
+}
+
+TEST(StrictFrameTest, FieldRetKindsFollowDescriptor)
+{
+    auto s = fieldRetShapeClass();
+    ASSERT_NE(s, nullptr);
+    {
+        auto p = promoteMethod(*s, 0);
+        ASSERT_TRUE(p.is_ok());
+        FrameEngine fe(s->backing().cp);
+        std::vector<FrameAt> frames;
+        const FrameSummary sum = fe.compute(*p.unwrap(), frames);
+        ASSERT_TRUE(sum.ok) << jbc::analysis::to_string(sum.fail);
+        const ca::usize at = indexAtPc(*p.unwrap(), 6);
+        ASSERT_NE(at, static_cast<ca::usize>(-1));
+        ASSERT_EQ(frames[at].stack.size(), 1u);
+        EXPECT_EQ(frames[at].stack[0].k, VKind::Float);   // getstatic F → Float
+    }
+    {
+        auto p = promoteMethod(*s, 1);
+        ASSERT_TRUE(p.is_ok());
+        FrameEngine fe(s->backing().cp);
+        std::vector<FrameAt> frames;
+        const FrameSummary sum = fe.compute(*p.unwrap(), frames);
+        ASSERT_TRUE(sum.ok) << jbc::analysis::to_string(sum.fail);
+        const ca::usize at = indexAtPc(*p.unwrap(), 6);
+        ASSERT_NE(at, static_cast<ca::usize>(-1));
+        ASSERT_EQ(frames[at].stack.size(), 2u);            // cat2 双槽
+        EXPECT_EQ(frames[at].stack[0].k, VKind::Double);   // ()D → Double 非 Long
+    }
 }
 
 // ---------------------------------------------------------------------------
