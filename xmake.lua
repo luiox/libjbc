@@ -28,7 +28,7 @@ if has_config("with_tests") then
     add_requires("libjdk_finder 0.0.1")
     ca_modules = ca_modules .. ",test"          -- test_helper 的 ca::test 仅测试态需要
 end
-add_requires("libca 0.0.13", {configs = {modules = ca_modules}})
+add_requires("libca 0.0.16", {configs = {modules = ca_modules}})
 -- libca_zip 的消费方自带 zlib（libca 包不传递声明，上游 unittest 靶同姿势）。
 add_requires("zlib")
 
