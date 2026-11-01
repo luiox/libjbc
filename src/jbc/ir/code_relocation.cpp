@@ -116,12 +116,12 @@ relocateSmt(const core::StackMapTableAttr& smt,
     using SmtFrame = core::StackMapTableAttr::Frame;
     using SmtVType = core::StackMapTableAttr::VType;
     std::vector<core::StackMapTableAttr::Frame> frames = smt.frames;
-    // 1) 旧绝对 pc 链。
+    // 1. 旧绝对 pc 链。
     std::vector<ca::u32> abs(frames.size(), 0);
     for (ca::usize i = 0; i < frames.size(); ++i) {
         abs[i] = i == 0 ? frames[i].offset : core::smtAbsPc(abs[i - 1], frames[i].offset);
     }
-    // 2) 映射到新 pc。
+    // 2. 映射到新 pc。
     std::vector<ca::u32> fresh(frames.size(), 0);
     for (ca::usize i = 0; i < frames.size(); ++i) {
         const auto it = pcmap.find(abs[i]);
@@ -130,7 +130,7 @@ relocateSmt(const core::StackMapTableAttr& smt,
         }
         fresh[i] = it->second;
     }
-    // 3) verification_type_info 的 Uninitialized(8) 载荷也是旧 code 中的
+    // 3. verification_type_info 的 Uninitialized(8) 载荷也是旧 code 中的
     //    指令偏移，必须和 frame 目标使用同一张 pcmap；Object(7) 的载荷则
     //    是常量池索引，不能误重定位。
     const auto relocateVType = [&](core::StackMapTableAttr::VType& v)
@@ -160,7 +160,7 @@ relocateSmt(const core::StackMapTableAttr& smt,
         }
     }
 
-    // 4) 重算 delta；紧凑形态的 delta 越界时升格为 extended 形态，仍在
+    // 4. 重算 delta；紧凑形态的 delta 越界时升格为 extended 形态，仍在
     //    紧凑范围内时必须同步更新 type（编码器从 type 取 delta）。
     for (ca::usize i = 0; i < frames.size(); ++i) {
         if (i != 0 && fresh[i] <= fresh[i - 1]) {
