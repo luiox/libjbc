@@ -9,6 +9,8 @@
 #include "jbc/core/attribute.hpp"
 #include "jbc/core/constant_pool.hpp"
 
+#include "jbc/ir/cp_rewrite.hpp"
+
 namespace jbc::ir {
 
 namespace {
@@ -16,39 +18,11 @@ namespace {
 constexpr std::string_view kRvtaName = "RuntimeVisibleTypeAnnotations";
 constexpr std::string_view kRitaName = "RuntimeInvisibleTypeAnnotations";
 
-/// @brief CP u16 索引域上限（constant_pool_count 的合法最大值）。
-constexpr ca::u32 kMaxCpCount = 0xFFFF;
-
 bool isTaSlot(const core::ClassFile& cf, const core::AttrSlot& slot) noexcept
 {
     return cf.cp.utf8Equals(slot.nameCp, kRvtaName) ||
            cf.cp.utf8Equals(slot.nameCp, kRitaName);
 }
-
-/// @brief 查重落位：命中既有池返回原索引，miss 才追加（追加前做容量预检）。
-Result<ca::u32, TaAttrError> internDescriptor(core::ClassFile& cf, std::string_view s)
-{
-    core::ConstantPool& cp = cf.cp;
-    if (const ca::u32 hit = cp.findUtf8(s); hit != 0) {
-        return Ok(hit);
-    }
-    if (cp.size() > kMaxCpCount) {
-        return Err(TaAttrError{TaAttrError::Kind::CpCapacity,
-                               jbc::type::DescError::Empty});
-    }
-    return Ok(cp.addUtf8(s));
-}
-
-/// @brief 一个待落位项：CP 索引槽位（已解码体内的 u32）+ 改写后的新描述符
-///        + 命中数。槽位指针在预检与落位两阶段间有效（两阶段之间不改写
-///        任何体结构，向量不重分配）。
-struct PendingCpRewrite
-{
-    core::AttrSlot* slot;
-    ca::u32* field;
-    std::string newDesc;
-    ca::u32 hits;
-};
 
 /// @brief 对一个承载字段描述符的 CP 槽位做纯预检（解析 + span 命中 + 改写
 ///        串计算），不改写、不 intern。
@@ -208,17 +182,7 @@ Result<ca::u32, TaAttrError> planTaBody(core::ClassFile& cf, core::AttrSlot& slo
     return Ok(hits);
 }
 
-/// @brief 落位一个待改写项：intern 去重 + 改 CP 索引 + 槽置脏。
-Result<void, TaAttrError> applyPending(core::ClassFile& cf, const PendingCpRewrite& p)
-{
-    auto idx = internDescriptor(cf, p.newDesc);
-    if (idx.is_err()) {
-        return Err(std::move(idx).unwrap_err());
-    }
-    *p.field = std::move(idx).unwrap();
-    (void)p.slot->mutate();
-    return Ok();
-}
+const TaAttrError capacityError{TaAttrError::Kind::CpCapacity, jbc::type::DescError::Empty};
 
 /// @brief 属性表扫描（一层的全部 Runtime*TypeAnnotations 槽）。
 Result<ca::u32, TaAttrError> planAttrList(core::ClassFile& cf,
@@ -311,25 +275,17 @@ renameClassInTypeAnnotations(core::ClassFile& cf, std::string_view old_internal,
         }
     }
 
-    // ---- 阶段二：容量预检（先算后写；新串经查重后仍 miss 的条目数）----
-    ca::u32 additions = 0;
-    for (const PendingCpRewrite& p : pending) {
-        if (cf.cp.findUtf8(p.newDesc) == 0) {
-            ++additions;
-        }
+    // ---- 阶段二/三：容量预检 + 统一落位（先算后写；机制单源 cp_rewrite.hpp）。
+    const Result<void, TaAttrError> r = precheckPendingCapacity(cf, pending, capacityError);
+    if (r.is_err()) {
+        return Err(std::move(r).unwrap_err());
     }
-    if (cf.cp.size() + additions > kMaxCpCount) {
-        return Err(TaAttrError{TaAttrError::Kind::CpCapacity,
-                               jbc::type::DescError::Empty});
+    const Result<void, TaAttrError> applied =
+        applyPendingRewrites(cf, pending, capacityError);
+    if (applied.is_err()) {
+        return Err(std::move(applied).unwrap_err());
     }
-
-    // ---- 阶段三：统一落位（容量已过，intern 不再失败；错误通道保留是
-    //      如实传播，不静默吞）----
     for (const PendingCpRewrite& p : pending) {
-        auto r = applyPending(cf, p);
-        if (r.is_err()) {
-            return Err(std::move(r).unwrap_err());
-        }
         st.hits += p.hits;
     }
     return Ok(st);
