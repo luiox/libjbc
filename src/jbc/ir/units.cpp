@@ -37,6 +37,7 @@ const char* to_string(LowerError e) noexcept
     case LowerError::Ok: return "ok";
     case LowerError::BadInstructions: return "bad instructions";
     case LowerError::BranchOverflow: return "branch overflow";
+    case LowerError::CodeTooLarge: return "code too large";
     case LowerError::CpAppendFailed: return "cp append failed";
     case LowerError::NotPromoted: return "not promoted";
     case LowerError::RelocationNotModeled: return "relocation not modeled";
