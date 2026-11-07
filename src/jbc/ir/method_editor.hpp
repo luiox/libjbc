@@ -1,3 +1,7 @@
+/// @defgroup ir_method_editor 建方法门面
+///
+/// open/append/commit 一步编辑面，Result-only；见 doc:design-method-editor。
+
 /// @file        method_editor.hpp
 /// @brief       从零建方法的一步编辑面：Result-only 门面，不持有错误状态。
 ///

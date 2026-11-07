@@ -1,3 +1,7 @@
+/// @defgroup ir_error ir 层错误码
+///
+/// 编辑、promote/lower 的失败原因。
+
 /// @file        error.hpp
 /// @brief       ir 层错误码：编辑、promote/lower 的失败原因。
 #pragma once

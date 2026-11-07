@@ -1,15 +1,19 @@
+/// @defgroup core_constant_pool 常量池
+///
+/// 零拷贝 UTF8 视图 + 只追加 + 原样 span 写回；契约见 doc:design-cp。
+
 /// @file        constant_pool.hpp
 /// @brief       常量池：零拷贝 UTF8 视图 + 只追加 + 原样 span 写回。
 ///
 /// 三条设计决定，各对应旧库的一个痛点：
 ///
 /// 1. **UTF8 零拷贝**——Utf8 条目只记 {指针, 长度} 指向源字节流，解析不复制、
-///    不解码。扫描几万个类时属性名/类名的比较走 @ref utf8Equals 的 memcmp，
+///    不解码。扫描几万个类时属性名/类名的比较走 utf8Equals 的 memcmp，
 ///    既不分配也不算码点。需要文本语义时调用方再显式构造 Utf8StringRef。
 /// 2. **只追加**——新条目一律 append，已有 index 永不改变。旧库里「重排 CP
 ///    导致存量引用失效」这一类问题从结构上不存在，未知属性里的 CP 引用因此
 ///    天然保持有效。
-/// 3. **原样 span 写回**——每个条目记住自己在源字节流中的编码范围 @ref Entry::raw，
+/// 3. **原样 span 写回**——每个条目记住自己在源字节流中的编码范围 Entry::raw ，
 ///    未修改的条目写回就是 copy 这段字节。保真不依赖重编码正确。
 ///
 /// 字符串的存储分两路，各自匹配一种生命周期：
@@ -91,7 +95,7 @@ public:
         const ca::u8* utf8 = nullptr;
         ca::u32 utf8Len = 0;
 
-        /// @brief utf8 是否位于 @ref arena_ 内（即本条目是变换中新增的）。
+        /// @brief utf8 是否位于 arena_ 内（即本条目是变换中新增的）。
         ///        用于归属断言：解析来的条目为 false，新增的为 true。
         bool utf8InArena = false;
 
@@ -125,14 +129,14 @@ public:
     ///
     /// @warning 返回的 Entry& 是 vector 内部存储：下一次 append（intern 家族 /
     ///          addXxx）可能触发扩容搬迁，届时旧引用悬垂——跨追加请只持 u32
-    ///          索引，用前重新 at()。改写字段请走 @ref mutateAt（置脏入口）。
+    ///          索引，用前重新 at()。改写字段请走 @ref mutateAt （置脏入口）。
     const Entry& at(ca::u32 i) const noexcept;
 
     /// @brief 可变访问；越界返回静态无效条目。**不置脏**。
     ///
     /// writeClass 只重编码 dirty 条目，未脏条目一律 copy 源 span——经本函数
     /// 改字段而忘记置脏，写回会静默还原为源字节（copy-through 的既定语义，
-    /// 不是 bug，但是消费者陷阱）。语义改写一律走 @ref mutateAt；本重载仅供
+    /// 不是 bug，但是消费者陷阱）。语义改写一律走 @ref mutateAt ；本重载仅供
     /// 「遍历中需要可变视图、脏标记由改写点统一处理」的场合使用。
     /// @warning 生命周期约束同 const 版：Entry& 不得跨 append 存活。
     Entry& at(ca::u32 i) noexcept;

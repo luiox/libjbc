@@ -1,8 +1,12 @@
+/// @defgroup ir_code_dom 指令 DOM
+///
+/// 值语义槽 + 程序序 + owner-scoped 句柄；目标形状见 doc:instruction-dom。
+
 /// @file        code_dom.hpp
 /// @brief       可编辑的指令 DOM：InstructionStore + 有序序列 + owner/generation 句柄。
 ///
 /// 这是 v0.2 入口闸门冻结的形状：
-///   - 身份 = @ref InsnId {owner, slot, generation}——owner 是每个 CodeDom
+///   - 身份 = InsnId {owner, slot, generation}——owner 是每个 CodeDom
 ///     构造时获得的进程级唯一代号；跨 CodeDom 的同号句柄被结构性拒绝。
 ///   - 存储 = slot 表（追加式，永不回收槽位）；删除只置死并递增 generation，
 ///     旧句柄立即失效，不存在 ABA。
@@ -184,7 +188,7 @@ public:
     /// （其句柄此后解析为 InvalidHandle，也不能被新指令引用）。
     ///
     /// 成本模型：use 检查按需全序扫描（O(n)），erase 自身也走一遍——
-    /// 循环里做 N 次 erase 是 O(N×n)。批量场景用 @ref eraseBatch；散点
+    /// 循环里做 N 次 erase 是 O(N×n)。批量场景用 @ref eraseBatch ；散点
     /// 删除先一次 usersOf 规划（无引用者成批删，有引用者先 replaceAllUses），
     /// 不要逐条盲删。
     Result<void, EditError> erase(InsnId id);

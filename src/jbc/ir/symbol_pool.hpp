@@ -1,3 +1,7 @@
+/// @defgroup ir_symbol_pool 符号池
+///
+/// ClassUnit 自持、去重、寿命即池。
+
 /// @file        symbol_pool.hpp
 /// @brief       ClassUnit 自持的符号池：去重、按 slot 寻址、生命周期即池。
 ///

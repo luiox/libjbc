@@ -1,3 +1,7 @@
+/// @defgroup ir_sig_attr 签名属性手术
+///
+/// Signature/LVTT 类名改写的属性层接线；见 doc:design-type。
+
 /// @file        sig_attr.hpp
 /// @brief       泛型签名的属性层手术：类名改写的属性层接线。
 ///
@@ -9,9 +13,9 @@
 /// 才 promote（解码属性体 + 解析签名树）→ 改写 → lower（intern 新串 +
 /// 重编码）；不触发则槽保持 Untouched，字节逐字节 copy-through。
 ///
-/// 属性模型：Signature 是 typed 属性（@ref core::SignatureAttr，属性体
+/// 属性模型：Signature 是 typed 属性（core::SignatureAttr ，属性体
 /// `u2 signature_index`，JVMS 4.7.9；签名串在 CP Utf8）。手术面经 typed 解码
-/// 读索引、经 @ref core::AttrSlot::mutate 改索引置脏，写回走既有重编码路径。
+/// 读索引、经 core::AttrSlot::mutate 改索引置脏，写回走既有重编码路径。
 ///
 /// 契约：
 ///   1. **显式调用出活**：库不发明会话级 rename 编排（跨类映射计划属
@@ -41,8 +45,8 @@ using ca::core::Result;
 /// @brief Signature 属性手术的失败事实。
 ///
 /// 三个失败族如实分立，不做跨族映射：签名层失败（解析失败/形态不一致/
-/// 坏名）原样携带 @ref jbc::type::SigError（含字节偏移）；槽解码失败
-/// （属性体半截等，降级事实见 @ref ClassFile::diagnostics）与 CP 容量预检
+/// 坏名）原样携带 jbc::type::SigError （含字节偏移）；槽解码失败
+/// （属性体半截等，降级事实见 ClassFile::diagnostics ）与 CP 容量预检
 /// 失败各自成族——三者发生时都未改写任何槽；CpCapacity 另未追加任何条目。
 struct SigAttrError
 {
@@ -70,9 +74,9 @@ struct SigAttrRename
 ///   setMember 对 op 族不符返回 false 同款探测纪律，不视为失败）。
 /// - 未命中（签名里没有该内部名）→ 槽保持原状态（不置脏），字节零改写。
 /// - 命中 → 新签名串经 findUtf8/addUtf8 去重落位（CP 只追加），改写
-///   sigCp 并经 @ref AttrSlot::mutate 置脏，写回走重编码。
+///   sigCp 并经 AttrSlot::mutate 置脏，写回走重编码。
 /// - 失败（槽解码失败 / 签名解析失败 / CP 容量不足）→ 显式
-///   @ref SigAttrError，槽保持原样（不置脏）。跨 '$' 形态不匹配不再产生
+///   @ref SigAttrError ，槽保持原样（不置脏）。跨 '$' 形态不匹配不再产生
 ///   失败：扁平段链按跨形态替换、真嵌套链不命中（见签名层契约）。
 Result<SigAttrRename, SigAttrError>
 renameClassInSignatureAttr(core::ClassFile& cf, core::AttrSlot& slot,
@@ -111,10 +115,10 @@ struct LvttRenameSummary
 ///
 /// LVTT 的 descriptor 列承载**字段形态签名**（JVMS 4.7.9.1
 /// FieldTypeSignature）——泛型签名在类文件中的第二处宿主。
-/// 逐行走 @ref renameClassInSignature（form 固定 Field），
+/// 逐行走 renameClassInSignature （form 固定 Field），
 /// 双形态全名匹配 / 扁平段链跨形态 / 真嵌套链不命中零改写逐字适用。
 ///
-/// **全有或全无**（与 @ref renameClassInSignatureAttrs 同款三阶段）：先做
+/// **全有或全无**（与 renameClassInSignatureAttrs 同款三阶段）：先做
 /// 解码 + 解析 + 改名全量预检（纯读；Code/LVTT 槽解码失败或任一行签名
 /// 解析失败即 Err，未改写任何槽、未追加任何 CP 条目），再统一容量预检，
 /// 最后才 intern 落位置脏。未命中的表不置脏，写回逐字节 copy-through。

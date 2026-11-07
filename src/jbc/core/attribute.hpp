@@ -1,7 +1,11 @@
+/// @defgroup core_attribute 属性槽（四态）
+///
+/// Untouched/Decoded/Modified/New，mutate 唯一置脏入口；见 doc:design-attrs。
+
 /// @file        attribute.hpp
 /// @brief       属性槽：目录 eager、内容 lazy、状态驱动写回。
 ///
-/// 整个 lazy 设计收敛在 @ref AttrSlot 这一个结构体上：
+/// 整个 lazy 设计收敛在 AttrSlot 这一个结构体上：
 ///
 /// ```text
 /// 解析期：读到 {name_index, length} 就记录 span 并 skip(length)
@@ -13,7 +17,7 @@
 ///
 /// 由此得到两条旧库没有的性质：
 ///   - **保真不依赖重编码正确**：没碰过的东西根本不经过编码器；
-///   - **改动不可能被忘记记录**：可变访问只有 @ref AttrSlot::mutate 一个入口，
+///   - **改动不可能被忘记记录**：可变访问只有 AttrSlot::mutate 一个入口，
 ///     它顺手置脏，不存在「改了但状态还是 Decoded」的悬空状态。
 #pragma once
 
@@ -404,8 +408,8 @@ public:
 /// @brief Signature 属性（JVMS 4.7.9）：泛型签名的单 u2 载荷。
 ///
 /// 类/方法/字段三级挂载点各至多一个；属性体是 `u2 signature_index`，签名串
-/// 在 CP Utf8，语法与手术语义归 @ref jbc::type::signature，
-/// 属性层手术入口见 @ref jbc::ir::sig_attr。
+/// 在 CP Utf8，语法与手术语义归 jbc::type::signature ，
+/// 属性层手术入口见 jbc::ir::sig_attr 。
 class SignatureAttr : public AttrBody
 {
 public:
@@ -430,7 +434,7 @@ public:
 /// nameCp 承载，体不感知），RuntimeVisibleTypeAnnotations 与
 /// RuntimeInvisibleTypeAnnotations 共用本模型。挂载点：类/字段/方法属性表
 /// 与 Code 嵌套属性表。类名手术面（type_index 与 'c' 元素值的类描述符）见
-/// @ref jbc::ir::type_annotation_attr。
+/// jbc::ir::type_annotation_attr 。
 class TypeAnnotationsAttr : public AttrBody
 {
 public:
@@ -700,7 +704,7 @@ public:
 /// 在泛型组件上挂 Signature、在带注解组件上挂 Runtime{Visible,Invisible}-
 /// Annotations 等嵌套属性。
 ///
-/// 与 @ref CodeAttr 同构的嵌套持有形态：组件嵌套属性也是 @ref AttrSlot，
+/// 与 @ref CodeAttr 同构的嵌套持有形态：组件嵌套属性也是 @ref AttrSlot ，
 /// span 是源字节流中的绝对偏移，解码时只读目录（lazy 照旧），写回按槽状态
 /// copy-through 或重编码。组件名/描述符两槽是改名手术面；嵌套属性面
 /// （Signature/注解）由上层消费方在槽上直接手术。
@@ -872,7 +876,7 @@ public:
 /// @brief AnnotationDefault 属性（JVMS 4.7.22）：注解类型方法的默认值
 ///        （方法级挂载，仅 @interface 的带默认值方法携带）。
 ///
-/// 体是单个 element_value，与 @ref AnnotationsAttr::ElemValue 完全同构（全
+/// 体是单个 element_value，与 AnnotationsAttr::ElemValue 完全同构（全
 /// tag 形态：const/'e' 枚举/'c' 类字面量/'@' 嵌套注解/'[' 数组），直接复用
 /// 同一模型。
 class AnnotationDefaultAttr : public AttrBody

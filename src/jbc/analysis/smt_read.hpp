@@ -1,3 +1,7 @@
+/// @defgroup analysis_smt_read SMT 读侧语义帧
+///
+/// Preserve 档独立入口 readFramesFromSmt，与计算帧对拍；见 doc:design-analysis。
+
 /// @file        smt_read.hpp
 /// @brief       StackMapTable 读侧语义帧视图。
 ///
@@ -53,7 +57,7 @@ struct SmtFrameView
 
 /// @brief 读取方法既有 StackMapTable 并展开为逐目标语义帧（显式 API）。
 ///
-/// - 链头（隐式初始帧）= @ref initialLocalsOf（this 形态 + 描述符参数，与
+/// - 链头（隐式初始帧）= @ref initialLocalsOf （this 形态 + 描述符参数，与
 ///   引擎 MethodSig 播种同源）；链算术在 SMT 条目空间进行（chop/append 按
 ///   条目计数），**不按 maxLocals 预垫 Top**——预垫会把 append 载荷推到
 ///   垫顶之后、错位全部槽号（成文）。

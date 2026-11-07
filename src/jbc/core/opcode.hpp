@@ -1,3 +1,7 @@
+/// @defgroup core_opcode JVM 指令码表
+///
+/// 枚举、操作数形状与助记符。
+
 /// @file        opcode.hpp
 /// @brief       JVM 指令码表：枚举、操作数形状、助记符。
 ///
