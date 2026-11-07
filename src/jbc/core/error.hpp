@@ -1,9 +1,13 @@
+/// @defgroup core_error 错误码与诊断
+///
+/// Result 值语义、ParseState 与诊断收集；失败语义见 doc:design-reader。
+
 /// @file        error.hpp
 /// @brief       错误码、解析状态与诊断收集。
 ///
 /// 与旧库的三点分歧：
 ///   - 解析失败用返回值（Result）而非异常抛出，恶意输入是预期输入而非异常；
-///   - @ref ParseState 描述「这个模型有什么能力」，不把输入武断判成合法/非法；
+///   - ParseState 描述「这个模型有什么能力」，不把输入武断判成合法/非法；
 ///   - 诊断是解析产物的一部分，不是 stderr 副作用——调用方决定怎么处理。
 #pragma once
 

@@ -793,6 +793,156 @@ TEST(CodeDomTest, LookupSwitchKeyTargetMismatchIsRejected)
 }
 
 // ---------------------------------------------------------------------------
+// 自动加宽：goto/jsr 的 Branch2 溢出在导出期换 _W 形式，模型不动
+// ---------------------------------------------------------------------------
+
+namespace {
+
+/// [goto→ret] nop×N [ret]：goto 初排 3 字节，N 够大时偏移必然超 i16。
+struct FarGotoDom
+{
+    CodeDom dom;
+    LabelId ret{};
+};
+
+void makeFarGotoDom(ca::usize nops, FarGotoDom& out)
+{
+    for (ca::usize i = 0; i < nops; ++i) {
+        Insn n;
+        n.op = Op::NOP;
+        ASSERT_TRUE(out.dom.append(std::move(n)).is_ok());
+    }
+    Insn ret;
+    ret.op = Op::RETURN;
+    ASSERT_TRUE(out.dom.append(std::move(ret)).is_ok());
+    auto lbl = out.dom.createLabel(out.dom.order().back());
+    ASSERT_TRUE(lbl.is_ok());
+    out.ret = std::move(lbl).unwrap();
+    Insn gt;
+    gt.op     = Op::GOTO;
+    gt.target = out.ret;
+    ASSERT_TRUE(out.dom.insertBefore(out.dom.first(), std::move(gt)).is_ok());
+}
+
+}   // namespace
+
+TEST(CodeDomTest, FarGotoAutoWidensOnExport)
+{
+    // 39995 个 nop：初排 goto 3 字节时偏移 39998 放不下 i16；加宽后
+    // goto_w(5) + 39995 nop + return = 40001 字节，goto 偏移 40000——
+    // 与手工 goto_w 夹具 longGotoWCode() 逐字节同构。
+    FarGotoDom d;
+    makeFarGotoDom(39995, d);
+
+    auto raw = d.dom.exportRaw();
+    ASSERT_TRUE(raw.is_ok()) << jbc::ir::to_string(raw.unwrap_err());
+    EXPECT_EQ(raw.unwrap().front().op, Op::GOTO_W);
+    EXPECT_EQ(raw.unwrap().front().t, 40000);
+    EXPECT_EQ(raw.unwrap().back().pc, 40000u);
+
+    auto size = d.dom.encodedSize();
+    ASSERT_TRUE(size.is_ok());
+    EXPECT_EQ(size.unwrap(), 40001u);
+    auto bytes = d.dom.encode();
+    ASSERT_TRUE(bytes.is_ok());
+    EXPECT_EQ(bytes.unwrap(), longGotoWCode());
+
+    // 模型不动：DOM 里的 op 仍是窄形式 GOTO。
+    EXPECT_EQ(d.dom.peek(d.dom.order().front())->op, Op::GOTO);
+}
+
+TEST(CodeDomTest, GotoWideningCascadeReachesFixpoint)
+{
+    // 正向远跳 A（goto→ret）加宽后，后向跳 B（goto→A）的 |偏移| 被挤出
+    // i16——加宽发生在 B 与其目标之间。B 初排 -32765 压线合法，
+    // A 加宽 +2 后超限，第二轮才加宽：验证 fixpoint 不止跑一轮。
+    // 布局：[A: goto→ret] nop×32764 [B: goto→A] ret。
+    CodeDom dom;
+    for (int i = 0; i < 32764; ++i) {
+        Insn n;
+        n.op = Op::NOP;
+        ASSERT_TRUE(dom.append(std::move(n)).is_ok());
+    }
+    Insn ret;
+    ret.op = Op::RETURN;
+    ASSERT_TRUE(dom.append(std::move(ret)).is_ok());
+    auto lblRet = dom.createLabel(dom.order().back());
+    ASSERT_TRUE(lblRet.is_ok());
+    Insn a;
+    a.op     = Op::GOTO;
+    a.target = lblRet.unwrap();
+    ASSERT_TRUE(dom.append(std::move(a)).is_ok());
+    ASSERT_TRUE(dom.moveBefore(dom.last(), dom.first()).is_ok());
+    auto lblA = dom.createLabel(dom.order().front());   // B 的目标：A 所在 pc0
+    ASSERT_TRUE(lblA.is_ok());
+    Insn b;
+    b.op     = Op::GOTO;
+    b.target = lblA.unwrap();
+    ASSERT_TRUE(dom.insertBefore(dom.order().back(), std::move(b)).is_ok());
+
+    // 初排：A at 0（3B）、nop 1..32764、B at 32765、ret at 32768。
+    // A 偏移 32768 溢出；B 偏移 -32765 合法。
+    auto raw = dom.exportRaw();
+    ASSERT_TRUE(raw.is_ok()) << jbc::ir::to_string(raw.unwrap_err());
+    EXPECT_EQ(raw.unwrap().front().op, Op::GOTO_W);       // A 第一轮加宽
+    EXPECT_EQ(raw.unwrap()[32765].op, Op::GOTO_W);        // B 第二轮加宽
+    EXPECT_EQ(raw.unwrap().front().t, 32774);
+    EXPECT_EQ(raw.unwrap()[32765].t, -32769);
+
+    auto size = dom.encodedSize();
+    ASSERT_TRUE(size.is_ok());
+    EXPECT_EQ(size.unwrap(), 5u + 32764u + 5u + 1u);
+}
+
+TEST(CodeDomTest, ConditionalBranchOverflowStillRejected)
+{
+    // 条件分支没有宽形式：加宽须反转条件 + goto_w 桥接（插入指令），
+    // 导出期不做——仍然 Err(BranchOverflow)。
+    FarGotoDom d;
+    makeFarGotoDom(39995, d);
+    auto id = d.dom.get(d.dom.order().front());
+    ASSERT_TRUE(id.is_ok());
+    id.unwrap()->op = Op::IFEQ;
+
+    auto raw = d.dom.exportRaw();
+    ASSERT_TRUE(raw.is_err());
+    EXPECT_EQ(raw.unwrap_err(), EditError::BranchOverflow);
+}
+
+TEST(CodeDomTest, EncodedSizeMatchesEncodeAndRoundtrip)
+{
+    // 评估器与 encode 同源：未编辑时等于源字节数（无虚假加宽），编辑
+    // 加宽后等于实际编码字节数。
+    {
+        const Bytes code = mk({0x04, 0x57, 0xb1});
+        auto d      = CodeDom::importFrom(ByteView{code});
+        CodeDom dom = std::move(d).unwrap();
+        auto size   = dom.encodedSize();
+        ASSERT_TRUE(size.is_ok());
+        EXPECT_EQ(size.unwrap(), code.size());
+        EXPECT_TRUE(dom.roundtripEquals(ByteView{code}));
+    }
+    {
+        const Bytes wide = longGotoWCode();
+        auto d           = CodeDom::importFrom(ByteView{wide});
+        CodeDom dom      = std::move(d).unwrap();
+        auto size        = dom.encodedSize();
+        ASSERT_TRUE(size.is_ok());
+        EXPECT_EQ(size.unwrap(), wide.size());   // 已宽形式不再二次加宽
+        EXPECT_TRUE(dom.roundtripEquals(ByteView{wide}));
+    }
+    {
+        FarGotoDom d;
+        makeFarGotoDom(39995, d);
+        auto size = d.dom.encodedSize();
+        ASSERT_TRUE(size.is_ok());
+        auto bytes = d.dom.encode();
+        ASSERT_TRUE(bytes.is_ok());
+        EXPECT_EQ(size.unwrap(), bytes.unwrap().size());
+    }
+}
+
+// ---------------------------------------------------------------------------
 // 真实 class：全量指令级往返（v0.2 核心验收）
 // ---------------------------------------------------------------------------
 

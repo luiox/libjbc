@@ -1,3 +1,7 @@
+/// @defgroup ir_change_set ChangeSet 协议
+///
+/// 会话变更收集与按粒度查询；记账面见 doc:design-change-set。
+
 /// @file        change_set.hpp
 /// @brief       ChangeSet 协议：会话变更收集与按粒度查询。
 ///
@@ -85,7 +89,7 @@ struct RemovedMember
 class ChangeSet
 {
 public:
-    /// @brief 追加一条记录（库内记账通道：ClassSession 通道与 units.cpp 的
+    /// @brief 追加一条记录（库内记账通道：ClassSession 通道与 lower.cpp 的
     ///        lowerMethod 调用；消费者只读查询面，不伪造记录）。
     void record(ChangeRecord r) { records_.push_back(r); }
 

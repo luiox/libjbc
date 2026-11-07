@@ -1,3 +1,7 @@
+/// @defgroup type_descriptor 类型描述符系统
+///
+/// 解析、类名手术坐标、槽宽与名字换算；见 doc:design-type。
+
 /// @file        descriptor.hpp
 /// @brief       JVM 类型/描述符系统：解析、类名手术坐标、槽宽与名字换算。
 ///

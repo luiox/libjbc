@@ -1,3 +1,7 @@
+/// @defgroup analysis_frame 帧引擎
+///
+/// BestEffort/Strict/Preserve 三态与异常边两档的数据流；见 doc:design-analysis。
+
 /// @file        frame.hpp
 /// @brief       帧引擎：操作数栈/局部变量的数据流。
 ///

@@ -1,8 +1,12 @@
+/// @defgroup ir_code_dom 指令 DOM
+///
+/// 值语义槽 + 程序序 + owner-scoped 句柄；目标形状见 doc:instruction-dom。
+
 /// @file        code_dom.hpp
 /// @brief       可编辑的指令 DOM：InstructionStore + 有序序列 + owner/generation 句柄。
 ///
 /// 这是 v0.2 入口闸门冻结的形状：
-///   - 身份 = @ref InsnId {owner, slot, generation}——owner 是每个 CodeDom
+///   - 身份 = InsnId {owner, slot, generation}——owner 是每个 CodeDom
 ///     构造时获得的进程级唯一代号；跨 CodeDom 的同号句柄被结构性拒绝。
 ///   - 存储 = slot 表（追加式，永不回收槽位）；删除只置死并递增 generation，
 ///     旧句柄立即失效，不存在 ABA。
@@ -16,6 +20,7 @@
 #pragma once
 
 #include <deque>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -184,7 +189,7 @@ public:
     /// （其句柄此后解析为 InvalidHandle，也不能被新指令引用）。
     ///
     /// 成本模型：use 检查按需全序扫描（O(n)），erase 自身也走一遍——
-    /// 循环里做 N 次 erase 是 O(N×n)。批量场景用 @ref eraseBatch；散点
+    /// 循环里做 N 次 erase 是 O(N×n)。批量场景用 @ref eraseBatch ；散点
     /// 删除先一次 usersOf 规划（无引用者成批删，有引用者先 replaceAllUses），
     /// 不要逐条盲删。
     Result<void, EditError> erase(InsnId id);
@@ -303,12 +308,22 @@ public:
 
     /// @brief 导出为 codec 层指令序列：顺序排布、重算 pc 与偏移。
     ///
-    /// i16 分支放不下时 Err(BranchOverflow)——调用方决定显式拓宽
-    /// （改写为 goto_w 形状）还是放弃。
+    /// Branch2 的 goto/jsr 偏移放不下 i16 时**自动加宽**为 goto_w/jsr_w
+    /// （导出期形状替换，模型不动；fixpoint 迭代到收敛，允许过量加宽）。
+    /// 其余放不下——条件分支超 i16，或任意分支/switch 超 i32——
+    /// Err(BranchOverflow)：条件分支的加宽需要反转条件 + goto_w 桥接
+    /// （插入指令），无法在导出期保持 dom↔raw 一一对应，调用方自行改写
+    /// 结构或放弃。
     Result<std::vector<core::RawInsn>, EditError> exportRaw() const;
 
     /// @brief 一步导出为 code 字节（exportRaw + encodeInsns）。
     Result<std::vector<ca::u8>, EditError> encode() const;
+
+    /// @brief 尺寸评估器：与 @ref encode 完全同源的导出管线字节数
+    ///        （含 goto/jsr 自动加宽），供落盘前的容量预检——JVMS 4.7.3
+    ///        的 code_length ≤ 65535。只报大小不做上限判断，闸门在
+    ///        lowerMethod 与 writeClass 两端。
+    Result<ca::u32, EditError> encodedSize() const;
 
     /// @brief 未编辑时导出必须与源字节一致（往返自检入口）。
     /// @param code 导入时的源字节
@@ -344,6 +359,9 @@ private:
     Result<InsnId, EditError> appendSlot(Insn&& in);
     Result<InsnId, EditError> insertAt(InsnId at, Insn in, bool before);
     Result<LabelId, EditError> createLabel(InsnId anchor, LabelRole role);
+    Result<std::vector<core::RawInsn>, EditError> exportLayout(
+        const std::unordered_set<ca::u32>& widened,
+        std::vector<ca::u32>* widenWanted) const;
     const Slot* slotOf(InsnId id) const noexcept;
     Slot* slotOf(InsnId id) noexcept;
     const LabelSlot* labelSlotOf(LabelId id) const noexcept;

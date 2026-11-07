@@ -1,3 +1,7 @@
+/// @defgroup analysis_domain 值域搭车引擎
+///
+/// DomainEngine<V> + IValueDomain<V>：形状迁移知识与值域载荷分离；见 doc:design-analysis。
+
 /// @file        domain.hpp
 /// @brief       值域搭车引擎：DomainEngine<V> + IValueDomain<V>。
 ///
@@ -20,6 +24,8 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
+
+#include "jbc/core/cp_resolve.hpp"
 
 #include "jbc/analysis/frame.hpp"
 #include "jbc/ir/units.hpp"
@@ -68,7 +74,7 @@ public:
         return newParameter(localIdx, shape);
     }
 
-    /// invokespecial <init> 完成：receiver 的已初始化形态（§10.1 翻转）。
+    /// invokespecial &lt;init&gt; 完成：receiver 的已初始化形态（§10.1 翻转）。
     /// 引擎把该值替换进状态里全部与 receiver 相等的行；默认恒等
     /// （形状域无 Uninitialized 语义，翻转即无操作——best-effort 零漂移）。
     virtual V initializedForm(const V& receiver, const ir::Insn& call, ir::InsnId id)
@@ -361,6 +367,10 @@ inline VKind typeKind(std::string_view t) noexcept
 
 /// 成员引用的描述符（Methodref/InterfaceMethodref/Fieldref → NaT.b；
 /// InvokeDynamic 的 b 直接是 NaT）。
+///
+/// 与 core::resolveMemberRef 的分工：此处是逐面宽松读（每面独立 ok 位，
+/// 一面断链另一面仍可读，InvokeDynamic 特例），engine 用它做失败定位；
+/// 全有全无的严格三跳校验归 cp_resolve.hpp，勿混用。
 inline std::string_view memberDesc(const core::ConstantPool& cp, ca::u32 cpIdx, bool& ok)
 {
     ok = false;
@@ -384,7 +394,7 @@ inline std::string_view memberDesc(const core::ConstantPool& cp, ca::u32 cpIdx, 
 }
 
 /// 成员引用的名字（Methodref/InterfaceMethodref/Fieldref → NaT.a）。
-/// invokespecial 的 "<init>" 识别（§10.1 翻转触发判定）用。
+/// invokespecial 的 "&lt;init&gt;" 识别（§10.1 翻转触发判定）用。
 inline std::string_view memberName(const core::ConstantPool& cp, ca::u32 cpIdx, bool& ok)
 {
     ok = false;
@@ -408,13 +418,11 @@ inline std::string_view memberName(const core::ConstantPool& cp, ca::u32 cpIdx, 
 }
 
 /// CP Class 条目的内部名；无效/非 Class 返回空。
+///
+/// 单源 core::resolveClassName（同语义；core 的 CP 解析原语面在此复用）。
 inline std::string_view classNameOf(const core::ConstantPool& cp, ca::u32 cpIdx)
 {
-    if (!cp.valid(cpIdx) || cp.tagOf(cpIdx) != core::CpTag::Class) {
-        return {};
-    }
-    const auto& e = cp.at(cpIdx);
-    return cp.isUtf8(e.a) ? cp.utf8Of(e.a) : std::string_view{};
+    return core::resolveClassName(cp, cpIdx);
 }
 
 /// 成员引用 owner 类的内部名（Methodref/InterfaceMethodref/Fieldref）。
@@ -876,7 +884,7 @@ void Machine<V>::apply(const ir::Insn& in, ir::InsnId id, FrameSummary::Fail& fa
             if (op != Op::INVOKESTATIC && op != Op::INVOKEDYNAMIC) {
                 ++pops;   // 接收者
             }
-            // 接收者值先行捕获：invokespecial <init> 的 Uninitialized 翻转
+            // 接收者值先行捕获：invokespecial &lt;init&gt; 的 Uninitialized 翻转
             // 以它为判定载荷（§10.1——同值出现点全部翻转为已初始化形态）。
             V receiver{};
             const bool initCall = op == Op::INVOKESPECIAL && pops >= 1 &&
@@ -1451,7 +1459,7 @@ DomainResult<V> DomainEngine<V>::analyze(const ir::CodeUnit& u, const MethodSig*
         };
         // 精确档异常出口边：try 范围内可达指令 → 每个覆盖它的
         // handler（异常表序）。入口状态 = 抛出点 in-state locals（transfer
-        // 前形态——<init> 翻转属正常后继效应，异常路径不携带）+
+        // 前形态——&lt;init&gt; 翻转属正常后继效应，异常路径不携带）+
         // [catch_type 对应类型]；栈整体替换为异常值，与 JVM verifier 语义
         // 一致。多抛出点经同一合并协议收敛（异类引用走 resolver）。先于
         // 控制流后继发射，取的是未经自环合并污染的 in-state。
@@ -1622,99 +1630,16 @@ public:
 
     VType top() override { return VType{}; }
 
-    VType merge(const VType& a, const VType& b) override
-    {
-        if (sameAs(a, b)) {
-            return a;   // 同 offset Uninitialized / 同名 Ref：保持
-        }
-        if (a.k == VKind::Top || b.k == VKind::Top) {
-            // Strict verifier 类型格：top = 不可用值，汇合支配（JVMS 4.10.1.4
-            // 帧匹配口径——单边未赋值槽的合并不可指派到具体类型）。与
-            // BestEffort 形状格的吸收语义（ShapeDomain）格分离。
-            return VType{};
-        }
-        if (a.k == VKind::ReturnAddress || b.k == VKind::ReturnAddress) {
-            // returnAddress 只与自身合并（JVMS §4.10.2.5 合并族；同值
-            // 已被上方 sameAs 早退吸收）。异值互并 = 不同 jsr 调用点共享同一
-            // 子程序入口——精确语义需逐调用点状态快照（JVMS §4.10.2.5 的
-            // touched-bit-vector 机制），本域显式拒绝（fail loud，不伪造帧）。
-            rejectSubroutine();
-            return VType{VKind::Bottom, 0, {}};
-        }
-        if (a.k == VKind::Null && b.k == VKind::Ref) {
-            return b;   // null 是万能引用底
-        }
-        if (b.k == VKind::Null && a.k == VKind::Ref) {
-            return a;
-        }
-        if (a.k == VKind::Uninitialized || b.k == VKind::Uninitialized ||
-            a.k == VKind::UninitThis || b.k == VKind::UninitThis) {
-            reject();   // 异 offset Uninit / UninitThis 与其他并：verifier 冲突
-            return VType{VKind::Bottom, 0, {}};
-        }
-        if (a.k == VKind::Ref && b.k == VKind::Ref) {
-            auto r = r_.merge(a, b);
-            if (r.is_err()) {
-                reject();
-                return VType{VKind::Bottom, 0, {}};
-            }
-            return std::move(r).unwrap();
-        }
-        reject();   // 尺寸类冲突 / Null × 原始类型
-        return VType{VKind::Bottom, 0, {}};
-    }
+    /// Strict verifier 类型格：top 汇合支配（JVMS 4.10.1.4 帧匹配口径，与
+    /// BestEffort 形状格的吸收语义格分离）；returnAddress 只与自身合并，
+    /// 异调用点互并显式拒绝；null 是万能引用底；跨类引用交注入 resolver，
+    /// 不可解置 TypeConflict。完整规则见 domain.cpp。
+    VType merge(const VType& a, const VType& b) override;
 
-    VType newValue(const ir::Insn& in, ir::InsnId, VKind shape) override
-    {
-        using core::Op;
-        switch (in.op) {
-        case Op::NEW: return VType::uninitNew(in.srcPc);
-        case Op::CHECKCAST: return nameRef(detail::classNameOf(cp_, in.cp));
-        case Op::GETFIELD:
-        case Op::GETSTATIC: return descValue(fieldDescOf(in), in.cp);
-        case Op::INVOKEVIRTUAL:
-        case Op::INVOKESPECIAL:
-        case Op::INVOKESTATIC:
-        case Op::INVOKEINTERFACE:
-        case Op::INVOKEDYNAMIC: {
-            bool ok = false;
-            const std::string_view d = detail::memberDesc(cp_, in.cp, ok);
-            if (!ok) {
-                return VType{shape, 0, {}};
-            }
-            const ca::usize close = d.find(')');
-            if (close == std::string_view::npos) {
-                return VType{shape, 0, {}};
-            }
-            return descValue(detail::oneType(d, close + 1), in.cp);
-        }
-        case Op::ANEWARRAY: return arrayRef(detail::classNameOf(cp_, in.cp));
-        case Op::NEWARRAY: return primArrayName(in.a);
-        case Op::MULTIANEWARRAY: return nameRef(detail::classNameOf(cp_, in.cp));
-        case Op::LDC:
-        case Op::LDC_W: {
-            if (!cp_.valid(in.cp)) {
-                return VType{VKind::Ref, 0, {}};
-            }
-            switch (cp_.tagOf(in.cp)) {
-            case core::CpTag::String: return nameRef("java/lang/String");
-            case core::CpTag::Class: return nameRef(detail::classNameOf(cp_, in.cp));
-            case core::CpTag::MethodType: return nameRef("java/lang/invoke/MethodType");
-            case core::CpTag::MethodHandle: return nameRef("java/lang/invoke/MethodHandle");
-            case core::CpTag::Dynamic: {
-                // condy 的类型即其 NameAndType 描述符，可精确注入
-                const auto& e = cp_.at(in.cp);
-                bool ok = false;
-                const std::string_view d = natDesc(e.b, ok);
-                return ok ? descValue(detail::oneType(d, 0), in.cp)
-                          : VType{VKind::Ref, 0, {}};
-            }
-            default: return VType{shape, 0, {}};
-            }
-        }
-        default: return VType{shape, 0, {}};
-        }
-    }
+    /// 类型精确注入：new 压 Uninitialized{pc}、checkcast/getfield 族与
+    /// ldc/condy/aaload 按描述符与 CP 字面带精确名；其余形状透传。完整
+    /// 分派见 domain.cpp。
+    VType newValue(const ir::Insn& in, ir::InsnId, VKind shape) override;
 
     VType newParameter(ca::u32, VKind shape) override { return VType{shape, 0, {}}; }
 
@@ -1735,32 +1660,16 @@ public:
                               : nameRef("java/lang/Throwable");   // catch_type 0 = any
     }
 
+    /// aaload 的精确元素类型来自数组操作数描述符（"[L…;"/"[I"）；其余
+    /// 归 newValue。见 domain.cpp。
     VType binary(core::Op op, const VType& a, const VType&, VKind shape,
-                 const ir::Insn& at, ir::InsnId id) override
-    {
-        // aaload 的精确元素类型来自数组操作数描述符（"[L…;"/"[I"）。
-        if (op == core::Op::AALOAD && a.k == VKind::Ref && a.name.size() >= 2 &&
-            a.name.front() == '[') {
-            const std::string_view comp = a.name.substr(1);
-            return comp.front() == 'L' ? nameRef(detail::refNameOfType(comp))
-                                       : descValue(comp, at.cp);
-        }
-        return newValue(at, id, shape);
-    }
+                 const ir::Insn& at, ir::InsnId id) override;
 
     /// §10.1 翻转：Uninitialized → 被调用 \<init\> 的 owner 类；
     /// UninitThis → 本类（构造器链）；其余不变。
-    VType initializedForm(const VType& receiver, const ir::Insn& call, ir::InsnId) override
-    {
-        if (receiver.k == VKind::UninitThis) {
-            return nameRef(thisClass_);
-        }
-        if (receiver.k == VKind::Uninitialized) {
-            bool ok = false;
-            return nameRef(detail::refOwnerOf(cp_, call.cp, ok));
-        }
-        return receiver;
-    }
+    /// §10.1 翻转：Uninitialized → 被调用 \<init\> 的 owner 类；
+    /// UninitThis → 本类（构造器链）；其余不变。
+    VType initializedForm(const VType& receiver, const ir::Insn& call, ir::InsnId) override;
 
     void onRet(const ir::Insn&, ir::InsnId) override {}
 
@@ -1793,84 +1702,29 @@ public:
     bool equal(const VType& a, const VType& b) override { return sameAs(a, b); }
 
 private:
-    static bool sameAs(const VType& a, const VType& b) noexcept
-    {
-        return a.k == b.k && a.cls == b.cls && a.name == b.name;
-    }
+    static bool sameAs(const VType& a, const VType& b) noexcept;
 
     /// 字段/调用描述符 → 值（引用带精确名；原始类别带形状）。
-    VType descValue(std::string_view t, ca::u32) const
-    {
-        const VKind k = detail::kindOfType(t);
-        if (k == VKind::Ref) {
-            return nameRef(detail::refNameOfType(t));
-        }
-        return VType{k, 0, {}};
-    }
+    VType descValue(std::string_view t, ca::u32 cpIdx) const;
 
-    std::string_view fieldDescOf(const ir::Insn& in) const
-    {
-        bool ok = false;
-        return detail::memberDesc(cp_, in.cp, ok);
-    }
+    std::string_view fieldDescOf(const ir::Insn& in) const;
 
     /// 内部名（可空）→ Ref；空名退化为无名引用。
     static VType nameRef(std::string_view n) noexcept { return VType::ref(n); }
 
     /// 数组元素名 → 数组描述符名（"[L…;"），经驻留表交付借用视图。
-    VType arrayRef(std::string_view element)
-    {
-        if (element.empty()) {
-            return VType{VKind::Ref, 0, {}};
-        }
-        std::string s("[");
-        if (element.front() == '[') {
-            s += element;
-        } else {
-            s += 'L';
-            s += element;
-            s += ';';
-        }
-        return VType::ref(intern(std::move(s)));
-    }
+    VType arrayRef(std::string_view element);
 
     /// newarray 的 atype 码 → 原始数组名（"[Z" 等）。
-    VType primArrayName(ca::i32 atype)
-    {
-        static constexpr char kLetters[12] = {'\0', '?', '?', '?', 'Z', 'C',
-                                              'F',  'D', 'B', 'S', 'I', 'J'};
-        if (atype < 4 || atype > 11) {
-            return VType{VKind::Ref, 0, {}};
-        }
-        std::string s(1, '[');
-        s += kLetters[atype];
-        return VType::ref(intern(std::move(s)));
-    }
+    VType primArrayName(ca::i32 atype);
 
-    std::string_view intern(std::string s)
-    {
-        return *interned_.insert(std::move(s)).first;
-    }
+    std::string_view intern(std::string s);
 
     void reject() { fail_ = FrameSummary::Fail::TypeConflict; }
     void rejectSubroutine() { fail_ = FrameSummary::Fail::Subroutine; }
 
     /// NaT 索引 → 描述符（condy 用）。
-    std::string_view natDesc(ca::u32 natIdx, bool& ok) const
-    {
-        ok = false;
-        if (!cp_.valid(natIdx)) {
-            return {};
-        }
-        const auto& nat = cp_.at(natIdx);
-        if (nat.tag != core::CpTag::NameAndType || !cp_.isUtf8(nat.b)) {
-            return {};
-        }
-        ok = true;
-        return cp_.utf8Of(nat.b);
-    }
-
-    static std::string_view primLetter(ca::i32 atype) { return {}; }   // 占位防误用
+    std::string_view natDesc(ca::u32 natIdx, bool& ok) const;
 
     const core::ConstantPool& cp_;
     ITypeResolver& r_;

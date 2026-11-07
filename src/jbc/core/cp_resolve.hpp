@@ -1,3 +1,7 @@
+/// @defgroup core_cp_resolve CP 读侧语义解析
+///
+/// 成员引用一跳、MethodHandle 三段、类名解析原语。
+
 /// @file        cp_resolve.hpp
 /// @brief       CP 读侧语义解析原语：成员引用一跳、MethodHandle 三段、类名。
 ///

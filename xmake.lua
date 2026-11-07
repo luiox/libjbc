@@ -1,4 +1,4 @@
--- libjbc：node-first JVM 字节码统一建模库（架构设计见 docs/design.md）。
+-- libjbc：node-first JVM 字节码统一建模库（架构设计见 docs/design.rst）。
 -- 本文件是独立仓工程根：包仓接线（libca 经 luiox-repo git 直连）、构建
 -- 开关、全局编译纪律（no-RTTI）与链接闭包助手，随后定义全部 target。
 -- core 层：单类 lazy classfile DOM——骨架 eager（头 / CP / 成员元数据 /
@@ -7,7 +7,7 @@
 -- （FrameAt / DomainEngine）、type（描述符/签名树）按层叠加。
 
 set_project("libjbc")
-set_version("0.4.25")
+set_version("0.4.26")
 set_license("MIT")
 set_languages("cxx17")
 
@@ -28,7 +28,7 @@ if has_config("with_tests") then
     add_requires("libjdk_finder 0.0.1")
     ca_modules = ca_modules .. ",test"          -- test_helper 的 ca::test 仅测试态需要
 end
-add_requires("libca 0.0.13", {configs = {modules = ca_modules}})
+add_requires("libca 0.0.16", {configs = {modules = ca_modules}})
 -- libca_zip 的消费方自带 zlib（libca 包不传递声明，上游 unittest 靶同姿势）。
 add_requires("zlib")
 
