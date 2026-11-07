@@ -1,11 +1,15 @@
+/// @defgroup core_attr_codec 属性解码编码（lazy 实现）
+///
+/// decodeAttrBody 按名分派、目录解析与逐字节写回；见 doc:design-attrs。
+
 /// @file        attr_codec.hpp
 /// @brief       属性目录解析与属性内容的按需解码/编码（L2 lazy 的实现）。
 ///
-/// @ref readAttrSlots 是整个 lazy 设计落地的地方，全文只有十几行：
+/// readAttrSlots 是整个 lazy 设计落地的地方，全文只有十几行：
 /// 读到 `attribute_info { name_index, length }` 后，记下内容 span 然后
 /// **skip(length)**——内容一个字节都不读，也不为它分配任何节点。
 ///
-/// 与之对称，@ref encodeAttr 在未修改时把这段 span 原样 copy 回去。解析与写出
+/// 与之对称，encodeAttr 在未修改时把这段 span 原样 copy 回去。解析与写出
 /// 因此都不需要理解属性内容，未知属性既不会被拦住，也不会被改坏。
 #pragma once
 
@@ -58,70 +62,70 @@ Result<void, ReadError> decodeAllAttrs(ClassFile& cf);
 Result<std::unique_ptr<AttrBody>, ReadError> decodeInnerClassesBody(ClassFile& cf,
                                                                     const AttrSlot& slot);
 
-/// @brief EnclosingMethod 属性体的 typed 解码（契约同 @ref decodeInnerClassesBody）。
+/// @brief EnclosingMethod 属性体的 typed 解码（契约同 @ref decodeInnerClassesBody ）。
 Result<std::unique_ptr<AttrBody>, ReadError> decodeEnclosingMethodBody(ClassFile& cf,
                                                                        const AttrSlot& slot);
 
-/// @brief Exceptions 属性体的 typed 解码（契约同 @ref decodeInnerClassesBody）。
+/// @brief Exceptions 属性体的 typed 解码（契约同 @ref decodeInnerClassesBody ）。
 Result<std::unique_ptr<AttrBody>, ReadError> decodeExceptionsBody(ClassFile& cf,
                                                                   const AttrSlot& slot);
 
-/// @brief NestHost 属性体的 typed 解码（契约同 @ref decodeInnerClassesBody）。
+/// @brief NestHost 属性体的 typed 解码（契约同 @ref decodeInnerClassesBody ）。
 Result<std::unique_ptr<AttrBody>, ReadError> decodeNestHostBody(ClassFile& cf,
                                                                 const AttrSlot& slot);
 
-/// @brief NestMembers 属性体的 typed 解码（契约同 @ref decodeInnerClassesBody）。
+/// @brief NestMembers 属性体的 typed 解码（契约同 @ref decodeInnerClassesBody ）。
 Result<std::unique_ptr<AttrBody>, ReadError> decodeNestMembersBody(ClassFile& cf,
                                                                    const AttrSlot& slot);
 
 /// @brief PermittedSubclasses 属性体的 typed 解码（契约同
-///        @ref decodeInnerClassesBody）。
+///        @ref decodeInnerClassesBody ）。
 Result<std::unique_ptr<AttrBody>, ReadError> decodePermittedSubclassesBody(
     ClassFile& cf, const AttrSlot& slot);
 
-/// @brief Record 属性体的 typed 解码（契约同 @ref decodeInnerClassesBody）。
+/// @brief Record 属性体的 typed 解码（契约同 @ref decodeInnerClassesBody ）。
 ///
 /// 组件嵌套属性表只读目录不解内容（与 Code 嵌套同款 lazy）；嵌套属性表的
 /// 长度声明越界（malformed）同样显式 Err——半截组件/越界嵌套表不猜测容忍。
 Result<std::unique_ptr<AttrBody>, ReadError> decodeRecordBody(ClassFile& cf,
                                                               const AttrSlot& slot);
 
-/// @brief Module 属性体的 typed 解码（契约同 @ref decodeInnerClassesBody）。
+/// @brief Module 属性体的 typed 解码（契约同 @ref decodeInnerClassesBody ）。
 ///
 /// requires/exports/opens/uses/provides 全段解出；段表任一半截显式 Err。
 Result<std::unique_ptr<AttrBody>, ReadError> decodeModuleBody(ClassFile& cf,
                                                               const AttrSlot& slot);
 
-/// @brief ModulePackages 属性体的 typed 解码（契约同 @ref decodeInnerClassesBody）。
+/// @brief ModulePackages 属性体的 typed 解码（契约同 @ref decodeInnerClassesBody ）。
 Result<std::unique_ptr<AttrBody>, ReadError> decodeModulePackagesBody(ClassFile& cf,
                                                                       const AttrSlot& slot);
 
-/// @brief ModuleMainClass 属性体的 typed 解码（契约同 @ref decodeInnerClassesBody）。
+/// @brief ModuleMainClass 属性体的 typed 解码（契约同 @ref decodeInnerClassesBody ）。
 Result<std::unique_ptr<AttrBody>, ReadError> decodeModuleMainClassBody(ClassFile& cf,
                                                                        const AttrSlot& slot);
 
 /// @brief Runtime{Visible,Invisible}ParameterAnnotations 属性体的 typed 解码
-///        （契约同 @ref decodeInnerClassesBody）。
+///        （契约同 @ref decodeInnerClassesBody ）。
 ///
 /// 逐参数注解表全解出（空参数表/空注解表均合法）；半截表显式 Err。
 Result<std::unique_ptr<AttrBody>, ReadError> decodeParameterAnnotationsBody(ClassFile& cf,
                                                                             const AttrSlot& slot);
 
 /// @brief AnnotationDefault 属性体的 typed 解码（契约同
-///        @ref decodeInnerClassesBody）。
+///        @ref decodeInnerClassesBody ）。
 ///
 /// 单 element_value 全形态（const/'e'/'c'/'@'/'['）解出；半截显式 Err。
 Result<std::unique_ptr<AttrBody>, ReadError> decodeAnnotationDefaultBody(ClassFile& cf,
                                                                          const AttrSlot& slot);
 
 /// @brief MethodParameters 属性体的 typed 解码（契约同
-///        @ref decodeInnerClassesBody）。
+///        @ref decodeInnerClassesBody ）。
 ///
 /// 行表全解出（name_index==0 合法承载）；半截行显式 Err。
 Result<std::unique_ptr<AttrBody>, ReadError> decodeMethodParametersBody(ClassFile& cf,
                                                                         const AttrSlot& slot);
 
-/// @brief ConstantValue 属性体的 typed 解码（契约同 @ref decodeInnerClassesBody）。
+/// @brief ConstantValue 属性体的 typed 解码（契约同 @ref decodeInnerClassesBody ）。
 Result<std::unique_ptr<AttrBody>, ReadError> decodeConstantValueBody(ClassFile& cf,
                                                                      const AttrSlot& slot);
 

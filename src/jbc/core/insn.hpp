@@ -1,7 +1,11 @@
+/// @defgroup core_insn 指令值类型
+///
+/// codec 层字节格式的忠实表达。
+
 /// @file        insn.hpp
 /// @brief       codec 层的指令值类型：字节格式的忠实表达。
 ///
-/// @ref RawInsn 是「字节格式知识」的结构化投影——分支存原始相对偏移、switch
+/// RawInsn 是「字节格式知识」的结构化投影——分支存原始相对偏移、switch
 /// 存原始 case 表，pc 记录来源位置。它不懂句柄、不懂所有权，因此可以被自由
 /// 拷贝；句柄化（可编辑 DOM）是 ir 层的事，两层之间用 import/export 转换。
 #pragma once
@@ -23,7 +27,7 @@ struct SwitchCase
 
 /// @brief 一条已解码指令。
 ///
-/// 字段语义按 @ref shapeOf(op) 分派：
+/// 字段语义按 shapeOf(op) 分派：
 ///   - Imm1/Imm2  ：a = 立即数
 ///   - Local1     ：a = 局部变量索引
 ///   - Iinc1      ：a = 索引，b = 常量

@@ -1,7 +1,11 @@
+/// @defgroup core_class_file 单类 DOM 本体
+///
+/// ClassFile 拥有一切，析构一次回收；所有权契约见 doc:design-core-ownership。
+
 /// @file        class_file.hpp
 /// @brief       单类 DOM：libjbc core 的模型本体。
 ///
-/// 一个 @ref ClassFile 就是一个 class 的完整、可独立析构的所有者。它不持有
+/// 一个 ClassFile 就是一个 class 的完整、可独立析构的所有者。它不持有
 /// Jar、不持有 JDK、不持有全局索引——那些是上层消费方的事。
 ///
 /// 模型关系是一条单纯的拥有链，没有 visitor，也不把控制流标签作为低层

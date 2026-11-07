@@ -1,3 +1,7 @@
+/// @defgroup core_insn_codec 指令编解码
+///
+/// code 数组与指令序列互转的纯函数面。
+
 /// @file        insn_codec.hpp
 /// @brief       code 数组 ↔ 指令序列的纯函数编解码。
 ///

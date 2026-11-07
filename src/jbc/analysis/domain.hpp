@@ -1,3 +1,7 @@
+/// @defgroup analysis_domain 值域搭车引擎
+///
+/// DomainEngine<V> + IValueDomain<V>：形状迁移知识与值域载荷分离；见 doc:design-analysis。
+
 /// @file        domain.hpp
 /// @brief       值域搭车引擎：DomainEngine<V> + IValueDomain<V>。
 ///
@@ -70,7 +74,7 @@ public:
         return newParameter(localIdx, shape);
     }
 
-    /// invokespecial <init> 完成：receiver 的已初始化形态（§10.1 翻转）。
+    /// invokespecial &lt;init&gt; 完成：receiver 的已初始化形态（§10.1 翻转）。
     /// 引擎把该值替换进状态里全部与 receiver 相等的行；默认恒等
     /// （形状域无 Uninitialized 语义，翻转即无操作——best-effort 零漂移）。
     virtual V initializedForm(const V& receiver, const ir::Insn& call, ir::InsnId id)
@@ -374,7 +378,7 @@ inline std::string_view memberDesc(const core::ConstantPool& cp, ca::u32 cpIdx, 
 }
 
 /// 成员引用的名字（Methodref/InterfaceMethodref/Fieldref → NaT.a）。
-/// invokespecial 的 "<init>" 识别（§10.1 翻转触发判定）用。
+/// invokespecial 的 "&lt;init&gt;" 识别（§10.1 翻转触发判定）用。
 inline std::string_view memberName(const core::ConstantPool& cp, ca::u32 cpIdx, bool& ok)
 {
     ok = false;
@@ -866,7 +870,7 @@ void Machine<V>::apply(const ir::Insn& in, ir::InsnId id, FrameSummary::Fail& fa
             if (op != Op::INVOKESTATIC && op != Op::INVOKEDYNAMIC) {
                 ++pops;   // 接收者
             }
-            // 接收者值先行捕获：invokespecial <init> 的 Uninitialized 翻转
+            // 接收者值先行捕获：invokespecial &lt;init&gt; 的 Uninitialized 翻转
             // 以它为判定载荷（§10.1——同值出现点全部翻转为已初始化形态）。
             V receiver{};
             const bool initCall = op == Op::INVOKESPECIAL && pops >= 1 &&
@@ -1392,7 +1396,7 @@ DomainResult<V> DomainEngine<V>::analyze(const ir::CodeUnit& u, const MethodSig*
         };
         // 精确档异常出口边：try 范围内可达指令 → 每个覆盖它的
         // handler（异常表序）。入口状态 = 抛出点 in-state locals（transfer
-        // 前形态——<init> 翻转属正常后继效应，异常路径不携带）+
+        // 前形态——&lt;init&gt; 翻转属正常后继效应，异常路径不携带）+
         // [catch_type 对应类型]；栈整体替换为异常值，与 JVM verifier 语义
         // 一致。多抛出点经同一合并协议收敛（异类引用走 resolver）。先于
         // 控制流后继发射，取的是未经自环合并污染的 in-state。

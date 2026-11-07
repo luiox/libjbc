@@ -1,12 +1,16 @@
+/// @defgroup core_reader 骨架解析入口
+///
+/// L0L1 eager、L2 lazy；失败语义见 doc:design-reader。
+
 /// @file        reader.hpp
 /// @brief       classfile 骨架解析入口（L0/L1 eager，L2 lazy）。
 ///
-/// @ref readClass 只解析「必须解析才能定位结构」的部分：头、常量池、成员的
+/// readClass 只解析「必须解析才能定位结构」的部分：头、常量池、成员的
 /// access/name/descriptor，以及属性**目录**。属性内容一律只记 span 并跳过，
 /// 因此解析一个类的代价与它有多少方法体无关——这是全量扫描场景的全部收益来源。
 ///
 /// 失败的语义是「无法确定后续结构边界」，不是「输入不合法」：畸形输入的降级
-/// 结果落在 @ref ParseState::Recovered 与 @ref Diagnostics 里，而不是异常。
+/// 结果落在 ParseState::Recovered 与 Diagnostics 里，而不是异常。
 #pragma once
 
 #include <memory>
@@ -30,7 +34,7 @@ struct ReadOptions
     /// @ref readClass 返回后立即释放入参。
     ///
     /// 关掉它可省一份与输入等大的内存，代价有三：属性无法按需解码、写回被
-    /// 拒绝（@ref WriteError::MissingSource）、且所有字节视图改为借用入参
+    /// 拒绝（@ref WriteError::MissingSource ）、且所有字节视图改为借用入参
     /// buffer——调用方必须保证它在模型存活期内有效。扫描场景若只看 summary
     /// 且能管住 buffer 生命周期，关掉是合理选择。
     bool preserveSourceBytes = true;

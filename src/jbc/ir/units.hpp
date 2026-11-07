@@ -1,3 +1,7 @@
+/// @defgroup ir_units ClassSession 与 promote/lower
+///
+/// 方法级单元生命周期与会话状态；见 doc:design-session。
+
 /// @file        units.hpp
 /// @brief       v0.3 高层单元：ClassSession（backing + IR）与方法级 promote/lower。
 ///
@@ -141,7 +145,7 @@ public:
     /// @brief 建骨架期为第 slot 个方法登记身份（generation 0）。
     ///
     /// 仅由 ClassSession 构造期对初始成员按 0..n-1 逐个调用；此后新增走
-    /// @ref nextMethodId。slot 重复登记按重复身份处理（簿记幂等推进）。
+    /// @ref nextMethodId 。slot 重复登记按重复身份处理（簿记幂等推进）。
     MethodId makeMethodId(ca::u32 slot) noexcept
     {
         methodNextSlot_ = methodNextSlot_ > slot + 1 ? methodNextSlot_ : slot + 1;
@@ -490,7 +494,7 @@ struct SemAnnotation
 
 /// @brief 方法句柄合成规格（JVMS 4.4.8）：reference_kind 1..9，目标成员
 ///        owner（内部名 '/' 分隔）/name/desc。类型层一致性（kind 与成员
-///        形态的匹配，如 invokeStatic 对 <init>）归上层并归 JVM 运行时证伪，
+///        形态的匹配，如 invokeStatic 对 &lt;init&gt;）归上层并归 JVM 运行时证伪，
 ///        结构面只做 kind 值域闸（1..9 是 JVM 类解析即拒的垃圾）。
 struct MethodHandleSpec
 {
@@ -572,7 +576,7 @@ public:
     const ChangeSet& changeSet() const noexcept { return changes_; }
 
     /// @brief 记账一条变更（库内通道：成员增删/元数据提交在成员函数内完成，
-    ///        lowerMethod 等自由函数经此落账；消费者只读 @ref changeSet，
+    ///        lowerMethod 等自由函数经此落账；消费者只读 @ref changeSet ，
     ///        不伪造记录）。
     void noteChange(ChangeRecord r) { changes_.record(std::move(r)); }
 
@@ -838,7 +842,7 @@ public:
     // - **记入 ChangeSet**：实改（新建属性/追加条目）记 ClassMetadata，
     //   纯命中复用不记账。
 
-    /// @brief 追加/复用一条 bootstrap 方法条目：句柄经 @ref internMethodHandle，
+    /// @brief 追加/复用一条 bootstrap 方法条目：句柄经 @ref internMethodHandle ，
     ///        静态参数逐个按 loadable 族落位；属性缺则建、条目同形则复用。
     ///        返回条目下标（0 基，即 invokedynamic/condy 的 bootstrap 索引）。
     Result<ca::u32, LowerError> appendBootstrapMethod(const MethodHandleSpec& handle,
@@ -1113,8 +1117,8 @@ ca::u32 insnFamilyBit(core::Op op) noexcept;
 /// @brief collectCodeUnits 的收录过滤器。
 ///
 /// 两个维度独立生效（交集语义，维度掩码为 0 = 该维度不过滤）：
-/// - @ref insnFamilies：方法体内至少含一条命中族的指令；
-/// - @ref attrKinds：Code 属性嵌套属性中至少一个命中 core::AttrKind
+/// - @ref insnFamilies ：方法体内至少含一条命中族的指令；
+/// - @ref attrKinds ：Code 属性嵌套属性中至少一个命中 core::AttrKind
 ///   （嵌套属性解码失败按未命中处理——解码失败的显式暴露在 promote 的
 ///   Failed 通道，本维度不做第二失败面）。
 /// 全缺省（两掩码为 0 且 includeNoCode）= 不过滤，与无参版全量语义逐位

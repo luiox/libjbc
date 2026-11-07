@@ -1,3 +1,7 @@
+/// @defgroup ir_cp_rewrite CP 改写落位机
+///
+/// 属性手术共用的 CP 落位（ir 内部头）。
+
 /// @file        cp_rewrite.hpp
 /// @brief       属性手术共用的 CP 改写落位机（ir 内部头，同 units_internal.hpp 角色）。
 ///

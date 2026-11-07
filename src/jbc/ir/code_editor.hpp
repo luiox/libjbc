@@ -1,3 +1,7 @@
+/// @defgroup ir_code_editor 编辑变换协议
+///
+/// 删除策略、setTarget、moveRange 与基本块视图；见 doc:instruction-dom。
+
 /// @file        code_editor.hpp
 /// @brief       变换协议：编辑便利、删除策略与基本块视图。
 ///

@@ -1,3 +1,7 @@
+/// @defgroup ir_type_annotation_attr TypeAnnotations 手术
+///
+/// Runtime{Visible,Invisible}TypeAnnotations 类名改写接线；见 doc:design-type。
+
 /// @file        type_annotation_attr.hpp
 /// @brief       Runtime{Visible,Invisible}TypeAnnotations 的类名手术接线。
 ///

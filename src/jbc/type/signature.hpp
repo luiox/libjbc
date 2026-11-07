@@ -1,17 +1,21 @@
+/// @defgroup type_signature 泛型签名系统
+///
+/// JVMS 4.7.9.1 结构化签名树与三条层契约；见 doc:design-type。
+
 /// @file        signature.hpp
 /// @brief       JVM 泛型签名系统（JVMS 4.7.9.1）：结构化签名树、解析/反解、
 ///              类名手术坐标。
 ///
-/// 描述符层（@ref descriptor.hpp）之下是擦除后的运行时类型真相；签名层在其
+/// 描述符层（descriptor.hpp ）之下是擦除后的运行时类型真相；签名层在其
 /// 之上表达 javac 写进 Signature 属性的泛型语义（类型参数/实参/通配符/嵌套
 /// 泛型/内部类成员/throws）。本模块与描述符层同一风格：视图进、值出——解析
 /// 零分配（树节点字符串全部借用输入串的字节），只在实际产出新串的反解/手术
 /// 入口才分配。
 ///
-/// 三条层契约（全量拓扑真源见 docs/design.md）：
+/// 三条层契约（全量拓扑真源见 doc:design-type）：
 ///   1. **roundtrip 恒等**：合法输入 parse→unparse 逐字节恒等（树不做任何
 ///      归一化，一切字节各归其位）；
-///   2. **畸形显式 Err**：解析失败返回 @ref SigError{码, 字节偏移}，绝不静默
+///   2. **畸形显式 Err**：解析失败返回 SigError{码, 字节偏移}，绝不静默
 ///      吞——「结构可确定」之前不存在降级形态；
 ///   3. **手术显式调用**：类名手术只经本模块 API 发生（span 坐标 / rename
 ///      便捷面），改写其余字节原样保留；Signature 属性的定位与写回在本纯
@@ -74,7 +78,7 @@ struct SigError
     ca::u32 offset = 0;   ///< 相对输入签名串的字节偏移（错误位置）
 };
 
-/// @brief 基类型原子：与描述符层共用 @ref BaseType（同一 8 字符集）。
+/// @brief 基类型原子：与描述符层共用 @ref BaseType （同一 8 字符集）。
 
 /// @brief 一个类类型签名的段（SimpleClassTypeSignature）：段名 + 可选类型实参。
 ///
@@ -219,7 +223,7 @@ ca::str::Utf8String unparseFieldSignature(const SigType& t);
 
 // ---- 手术面 ----
 
-/// @brief 签名里一个类名的位置（手术坐标，语义对齐描述符层 @ref ClassNameSpan）。
+/// @brief 签名里一个类名的位置（手术坐标，语义对齐描述符层 @ref ClassNameSpan ）。
 struct SigClassNameSpan
 {
     /// @brief span 覆盖的名字形态（决定 replace 时新名的合法字符集）。
@@ -235,7 +239,7 @@ struct SigClassNameSpan
 
 /// @brief 收集树中全部类名 span（按字节序：段名先于其实参内的下级类名）。
 ///
-/// 类签名/方法签名/字段签名通用。@p sig 必须解析自 @p input（树节点视图指向
+/// 类签名/方法签名/字段签名通用。@p sig 必须解析自 @p input （树节点视图指向
 /// 它），span 偏移由视图地址差得出。
 void collectClassNameSpans(const Signature& sig, std::string_view input,
                            std::vector<SigClassNameSpan>& out);
@@ -247,7 +251,7 @@ classNameSpans(std::string_view signature, SignatureForm form);
 
 /// @brief 把签名里 span 指向的类名改写为 new_name，产出新签名串。
 ///
-/// 语义对齐描述符层 @ref replaceClassName：只改 span 覆盖的字节，其余原样
+/// 语义对齐描述符层 @ref replaceClassName ：只改 span 覆盖的字节，其余原样
 /// 保留。new_name 按 span 形态校验（InternalName 禁 . ; [ < > :，SimpleName
 /// 另禁 '/'），越界或非法即 Err。
 Result<ca::str::Utf8String, SigError>
@@ -266,8 +270,7 @@ struct SigRenameResult
 ///
 /// 在签名中找内部名恰为 old_internal 的类类型改写为 new_internal。内部名在
 /// 签名字节里有两种等价形态——'.' 段链（`Outer<T>.Inner`）与段名内嵌 '$'
-/// （`Outer$Inner`，javac 常规产物）——统一按全名相等匹配（见 @ref
-/// SigClassType）。形态纪律（v1 后收窄到段链形态轴）：**扁平段链**（单个
+/// （`Outer$Inner`，javac 常规产物）——统一按全名相等匹配（见 /// SigClassType）。形态纪律（v1 后收窄到段链形态轴）：**扁平段链**（单个
 /// 段名、无 '.' 后缀段）允许跨 '$' 段形态替换——new 内部名按 '$' 合成写
 /// 满本段（javac/kotlinc 通行非规范 $ 形式，JVM 签名词法可读），部分$
 /// 混淆器把嵌套类抹平段数，跨混淆器映射还原赖此；**真嵌套段链**不做结构

@@ -1,3 +1,7 @@
+/// @defgroup ir_units_internal ir 内部共享面
+///
+/// promote/lower 互助原语与重定位计划结构。
+
 /// @file        units_internal.hpp
 /// @brief       ir 内部共享面：promote/lower 的互助原语与重定位计划结构。
 ///
