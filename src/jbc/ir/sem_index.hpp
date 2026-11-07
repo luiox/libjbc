@@ -1,3 +1,7 @@
+/// @defgroup ir_sem_index 语义 intern 去重索引
+///
+/// ClassSession 内部实现细节。
+
 /// @file        sem_index.hpp
 /// @brief       语义 intern 的去重索引（ClassSession 内部实现细节）。
 ///

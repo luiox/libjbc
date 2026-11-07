@@ -1,3 +1,7 @@
+/// @defgroup analysis_smt_build StackMapTable 生成器
+///
+/// 逐字陈述 Strict 域运行值精确类型，javac 极小化策略；见 doc:design-analysis。
+
 /// @file        smt_build.hpp
 /// @brief       StackMapTable 生成器。
 ///

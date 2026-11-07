@@ -1,10 +1,14 @@
+/// @defgroup jbc 统一入口头
+///
+/// core/ir/analysis/type 四层公共面聚合；拓扑见 doc:design-topology。
+
 /// @file        jbc.hpp
 /// @brief       libjbc 统一入口头。
 ///
 /// core 层：单类 lazy classfile DOM（解析骨架 → 按需解码 → 保真写回）+ 指令
 /// codec（code 数组 ↔ 指令序列，字节精确往返）。
 /// ir 层：可编辑指令 DOM（owner/generation 句柄 + 有序序列）；高层
-/// Unit/promote/帧引擎按建造顺序推进，见 docs/design.md。
+/// Unit/promote/帧引擎按建造顺序推进，见 doc:design-topology。
 /// type 层：类型/描述符纯函数（解析/类名手术坐标/槽宽/名字换算）；泛型签名
 /// 结构化树（JVMS 4.7.9.1 三形态 + 解析/反解/类名手术）。
 /// analysis 层：域/帧引擎读面。

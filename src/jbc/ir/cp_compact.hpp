@@ -1,3 +1,7 @@
+/// @defgroup ir_cp_compact CP 显式压缩
+///
+/// 封闭集 + 两相算法的逃生口；契约见 doc:design-cp-compact。
+
 /// @file        cp_compact.hpp
 /// @brief       CP 显式压缩逃生口。
 ///
@@ -7,7 +11,7 @@
 /// CP 坐标、一个管 pc 坐标）。
 ///
 /// 封闭集铁律：可压缩类是封闭集——全部属性可结构化重写时才可用；
-/// 封闭集之外显式 Err 带肇事属性名，不静默丢、不猜。清单与算法契约成文于 docs/design.md，
+/// 封闭集之外显式 Err 带肇事属性名，不静默丢、不猜。清单与算法契约成文于 doc:design-cp-compact，
 /// 本头文件只放消费者可见的错误面。
 #pragma once
 

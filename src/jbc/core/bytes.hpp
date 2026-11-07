@@ -1,9 +1,13 @@
+/// @defgroup core_bytes 字节视图与游标
+///
+/// 零拷贝视图、源字节区段与边界检查游标。
+
 /// @file        bytes.hpp
 /// @brief       字节视图、源字节区段与边界检查游标。
 ///
 /// libjbc core 的底座。三条不变量支撑上层的 lazy 与保真：
-///   - @ref ByteSpan 只记录「在原字节流中的 offset/length」，不复制内容；
-///   - @ref Cursor 的所有读取都返回 Result，越界即 Err，绝不 UB；
+///   - ByteSpan 只记录「在原字节流中的 offset/length」，不复制内容；
+///   - Cursor 的所有读取都返回 Result，越界即 Err，绝不 UB；
 ///   - 大端定长读取集中在此，codec 层不再手写位移。
 #pragma once
 

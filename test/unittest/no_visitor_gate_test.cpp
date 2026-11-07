@@ -1,11 +1,11 @@
 /// @file        no_visitor_gate_test.cpp
-/// @brief       visitor 清零门禁（design.md §11 visitor 清零）：src 内不得出现
+/// @brief       visitor 清零门禁（doc:design-visitor visitor 清零）：src 内不得出现
 ///              visitor 形状——类型名、visit* 方法、std::function 回调 sink。
 ///
-/// 判定标准不是类名里有没有 Visitor，而是数据「拉回来还是推给你」（design.md §11）；
+/// 判定标准不是类名里有没有 Visitor，而是数据「拉回来还是推给你」（doc:design-visitor）；
 /// 本测试把它落成三个机械模式。注释与字符串先被掩蔽（替换为空格、保留换行，
 /// 行号因此仍然准确），所以「设计上拒绝 visitor」这类正当描述不会误伤。
-/// 确需豁免：先改 design.md §11 的条款，再改这里——门禁与文档同源。
+/// 确需豁免：先改 doc:design-visitor 的条款，再改这里——门禁与文档同源。
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -184,5 +184,5 @@ TEST(NoVisitorGate, SrcHasNoVisitorShapes)
     EXPECT_TRUE(hits.empty())
         << "visitor 形状残留（" << hits.size() << " 处 / 扫描 " << scanned
         << " 文件）——libjbc 不含 visitor，无论公共 API、codec 内部还是 adapter"
-           "（design.md §11 visitor 清零）：" << msg.str();
+           "（doc:design-visitor visitor 清零）：" << msg.str();
 }
