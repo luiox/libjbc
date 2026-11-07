@@ -15,7 +15,8 @@ enum class EditError {
     StillUsed,       ///< erase 目标存在 incoming use（分支/switch/边界引用）
     BadTarget,       ///< import 时分支偏移不落在任何指令起点
     Decode,          ///< 底层 code 数组解码失败（截断/保留码等）
-    BranchOverflow,  ///< export 时 i16 分支偏移放不下（需显式 goto_w 拓宽）
+    BranchOverflow,  ///< export 时分支偏移放不下（goto/jsr 已自动加宽仍溢出：
+                     ///<   条件分支超 i16，或任意分支/switch 超 i32）
     BadOperand,      ///< 操作数与指令形状不符（如非法局部变量索引）
     BadRange,        ///< 区间端点不构成非空前向段，或搬移锚点落在段内
 };
@@ -34,8 +35,9 @@ enum class PromoteError {
 /// @brief lower 失败原因（ir 高层 → classfile 低层）。
 enum class LowerError {
     Ok = 0,
-    BadInstructions,   ///< 导出失败（分支溢出/悬垂目标）
+    BadInstructions,   ///< 导出失败（分支溢出/悬垂目标/空方法体）
     BranchOverflow,    ///< 同 EditError::BranchOverflow 的 lower 视角
+    CodeTooLarge,      ///< 方法体编码超出 64KB（JVMS 4.7.3：code_length ≤ 65535）
     CpAppendFailed,    ///< CP 只追加写入失败（容量/类型不符）
     NotPromoted,       ///< lower 的方法没有先 promote
     RelocationNotModeled,  ///< 布局改变且存在无 handler 的受影响属性——明确失败

@@ -116,6 +116,26 @@ TEST(IrSessionTest, PromoteLowerNoopKeepsBytes)
     EXPECT_EQ(jbc::test::writeOk(s->backing()), cls);
 }
 
+TEST(IrSessionTest, LowerRejectsCodeBeyond64K)
+{
+    // 3 + 66000 字节 > 65535：lower 落盘前直接闸住并给出专用错误码，
+    // 不拖到 writeClass 的 Unencodable（无方法名、无大小，排查困难）。
+    const Bytes cls = makeEditableClass(false);
+    auto s = sessionOf(cls);
+    ASSERT_NE(s, nullptr);
+    auto p = promoteMethod(*s, 0);
+    ASSERT_TRUE(p.is_ok()) << jbc::ir::to_string(p.unwrap_err());
+    jbc::ir::CodeUnit& cu = *p.unwrap();
+    for (int i = 0; i < 66000; ++i) {
+        jbc::ir::Insn n;
+        n.op = Op::NOP;
+        ASSERT_TRUE(cu.dom.append(std::move(n)).is_ok());
+    }
+    auto r = lowerMethod(*s, 0);
+    ASSERT_TRUE(r.is_err());
+    EXPECT_EQ(r.unwrap_err(), jbc::ir::LowerError::CodeTooLarge);
+}
+
 TEST(IrSessionTest, EditLowerRewriteAndSemanticPreservation)
 {
     const Bytes cls = makeEditableClass(false);

@@ -7,6 +7,7 @@
 #include <atomic>
 #include <limits>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "jbc/core/insn_codec.hpp"
 
@@ -14,6 +15,25 @@ namespace jbc::ir {
 
 namespace {
 std::atomic<ca::u32> g_ownerCounter{1};
+
+/// @brief goto/jsr 的宽形式（Branch2 → Branch4）。仅这两个 opcode 存在
+///        同语义宽形式；条件分支没有——加宽须反转条件 + goto_w 桥接
+///        （插入指令），无法在保持 dom↔raw 一一对应的前提下于导出期完成。
+core::Op wideFormOf(core::Op op) noexcept
+{
+    if (op == core::Op::GOTO) {
+        return core::Op::GOTO_W;
+    }
+    if (op == core::Op::JSR) {
+        return core::Op::JSR_W;
+    }
+    return op;
+}
+
+bool isNarrowBranch(core::Op op) noexcept
+{
+    return op == core::Op::GOTO || op == core::Op::JSR;
+}
 }
 
 ca::u32 nextOwnerId() noexcept
@@ -793,6 +813,34 @@ Result<CodeDom, EditError> CodeDom::importFrom(core::ByteView code)
 
 Result<std::vector<core::RawInsn>, EditError> CodeDom::exportRaw() const
 {
+    // 自动加宽 fixpoint：Branch2 的 goto/jsr 偏移放不下 i16 时，导出期改用
+    // _W 宽形式（3→5 字节）重排。加宽使后续指令 pc 后移，可能让原本合法
+    // 的分支变溢出，故迭代到无新增加宽为止。每轮 widenWanted 只收集尚为
+    // 窄形式的槽位（已宽形式走 i32 域，不会进集合），集合严格单调增大且
+    // 有上界（每条指令至多加宽一次），必然终止。
+    // 允许过量加宽（被前面加宽挤溢出的分支本可保持窄形式）——正确性不受
+    // 影响，最小加宽集需要约束求解，不做。
+    std::unordered_set<ca::u32> widened;
+    for (;;) {
+        std::vector<ca::u32> want;
+        auto pass = exportLayout(widened, &want);
+        if (pass.is_err()) {
+            return Err(pass.unwrap_err());
+        }
+        if (want.empty()) {
+            return Ok(std::move(pass).unwrap());
+        }
+        widened.insert(want.begin(), want.end());
+    }
+}
+
+/// @brief 单轮布局导出：pc 推进 + 偏移换算。goto/jsr 的 Branch2 溢出记入
+///        *widenWanted（下轮按 _W 宽形式重排）而不报错；widened 集合内的
+///        goto/jsr 按 _W 形式计尺寸与域宽。模型不改——加宽是导出期变换。
+Result<std::vector<core::RawInsn>, EditError>
+CodeDom::exportLayout(const std::unordered_set<ca::u32>& widened,
+                      std::vector<ca::u32>* widenWanted) const
+{
     // 第一遍：pc 推进（长度与操作数取值无关，单遍即可）。
     std::unordered_map<ca::u32, ca::u32> pcOf;   // slot → 新 pc
     pcOf.reserve(slots_.size() * 2);
@@ -806,7 +854,7 @@ Result<std::vector<core::RawInsn>, EditError> CodeDom::exportRaw() const
         // 尺寸只看 op/wide 与 case 数；用壳 RawInsn 复用同一实现，避免第二套
         // 尺寸表分叉。
         core::RawInsn sz;
-        sz.op   = s->insn.op;
+        sz.op = widened.count(id.slot) != 0 ? wideFormOf(s->insn.op) : s->insn.op;
         sz.wide = s->insn.wide;
         if (core::shapeOf(s->insn.op) == core::Shape::TableSwitch) {
             sz.offs.resize(s->insn.targets.size());
@@ -826,7 +874,7 @@ Result<std::vector<core::RawInsn>, EditError> CodeDom::exportRaw() const
         }
         const Insn& in = s->insn;
         core::RawInsn r;
-        r.op   = in.op;
+        r.op   = widened.count(id.slot) != 0 ? wideFormOf(in.op) : in.op;
         r.wide = in.wide;
         r.pc   = pcOf[id.slot];
         r.a    = in.a;
@@ -866,12 +914,20 @@ Result<std::vector<core::RawInsn>, EditError> CodeDom::exportRaw() const
                 return Err(tp.unwrap_err());
             }
             const ca::i64 off = static_cast<ca::i64>(tp.unwrap()) - static_cast<ca::i64>(r.pc);
-            const bool fits = sh == core::Shape::Branch2
+            const core::Shape shEff =
+                core::shapeOf(r.op);   // 加宽后偏移域宽跟随有效形状
+            const bool fits = shEff == core::Shape::Branch2
                                   ? off >= -32768 && off <= 32767
                                   : off >= static_cast<ca::i64>(std::numeric_limits<ca::i32>::min()) &&
                                         off <= static_cast<ca::i64>(std::numeric_limits<ca::i32>::max());
             if (!fits) {
-                return Err(EditError::BranchOverflow);
+                // goto/jsr 尚为窄形式且 i16 放不下：仅标记，交给外层 fixpoint
+                // 加宽后重排（本轮产物整体丢弃，出界的 r.t 不外泄）；其余
+                // （条件分支、已宽形式仍溢出）照旧报错。
+                if (!(shEff == core::Shape::Branch2 && isNarrowBranch(in.op))) {
+                    return Err(EditError::BranchOverflow);
+                }
+                widenWanted->push_back(id.slot);
             }
             r.t = static_cast<ca::i32>(off);
             if (isSwitch) {
@@ -927,6 +983,15 @@ Result<std::vector<ca::u8>, EditError> CodeDom::encode() const
         return Err(EditError::BranchOverflow);
     }
     return Ok(std::move(bytes).unwrap());
+}
+
+Result<ca::u32, EditError> CodeDom::encodedSize() const
+{
+    auto bytes = encode();
+    if (bytes.is_err()) {
+        return Err(bytes.unwrap_err());
+    }
+    return Ok(static_cast<ca::u32>(std::move(bytes).unwrap().size()));
 }
 
 bool CodeDom::roundtripEquals(core::ByteView code) const

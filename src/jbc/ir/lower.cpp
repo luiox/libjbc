@@ -62,6 +62,17 @@ Result<void, LowerError> lowerMethod(ClassSession& s, MethodId method)
     }
     std::vector<ca::u8> bytes = std::move(bytesR).unwrap();
 
+    // JVMS 4.7.3：code_length 必须 > 0 且 ≤ 65535。在 lower 闸住而不是拖到
+    // writeClass 的 Unencodable——那里既无方法名也无实际大小，排查困难。
+    // 早退路径（与 backing 一致时不进此门）天然安全：backing 字节来自
+    // reader，已受同一上限约束。
+    if (bytes.empty()) {
+        return Err(LowerError::BadInstructions);
+    }
+    if (bytes.size() > 0xFFFFu) {
+        return Err(LowerError::CodeTooLarge);
+    }
+
     // pcmap：旧 pc（import 时的 srcPc）→ 新 pc。
     std::unordered_map<ca::u32, ca::u32> pcmap;
     pcmap.reserve(cu.dom.size() * 2);
