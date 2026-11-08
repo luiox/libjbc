@@ -1,6 +1,6 @@
 """Sphinx 配置：libjbc 设计规格层（宏观）。
 
-规范见 CONTRIBUTING.md「文档规范」：本目录只收 RST 设计规格；markdown 属人读/
+规范见 README.md「文档规范」：本目录只收 RST 设计规格；markdown 属人读/
 AI 方向层，不进 doctree。CI 以 -W --keep-going 构建，警告即失败。
 """
 
@@ -9,7 +9,7 @@ author = "libjbc maintainers"
 copyright = "2026, libjbc maintainers"
 
 # 中文正文：docutils 会把全角字形算进表格边框宽度，因此本仓禁用 grid table，
-# 表格一律用 list-table（无对齐不变量）。见 CONTRIBUTING.md 写作约定。
+# 表格一律用 list-table（无对齐不变量）。见 README.md 写作约定。
 language = "zh-CN"
 
 root_doc = "index"

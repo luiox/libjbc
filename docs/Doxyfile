@@ -1,6 +1,6 @@
 # Doxygen 配置：微观契约层（头文件 /// 注释）
 #
-# 分层口径见 CONTRIBUTING.md「文档规范」：/// 注释是单个符号与单个模块的背景/
+# 分层口径见 README.md「文档规范」：/// 注释是单个符号与单个模块的背景/
 # 定位，docs/*.rst 是跨模块设计规格。两站各自构建，RST 站不归 Doxygen 管。
 #
 # 路径按「从仓根执行 doxygen docs/Doxyfile」写；Doxygen 的相对路径以当前

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""代码引用面门禁：规范见 CONTRIBUTING.md「文档规范」。
+"""代码引用面门禁：规范见 README.md「文档规范」。
 
 只认三类可校验事实，其余一律失败：
 
