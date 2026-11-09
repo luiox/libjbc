@@ -632,6 +632,47 @@ TEST(StrictFrameTest, FieldRetKindsFollowDescriptor)
     }
 }
 
+TEST(StrictFrameTest, LdcClassConstantLoadsClassObject)
+{
+    // ldc 类常量装载的是 Class 对象（java/lang/Class），不是常量命名的
+    // 类类型本身——否则该类型沿 astore 流进异常 handler 的合并帧后，
+    // 重算的 StackMapTable 会与 JVM 验证器实算帧冲突（ZKM 同步混淆形
+    // ldc class + monitorenter + 假 handler 释放锁实测踩中）。
+    ClassBuilder cb = baseClass();
+    const ca::u16 codeIdx = cb.utf8("Code");
+    const ca::u16 mIdx    = cb.utf8("m");
+    const ca::u16 voidIdx = cb.utf8("()V");
+    const ca::u16 strName = cb.utf8("java/lang/String");
+    const ca::u16 strCls  = cb.classRef(strName);
+
+    Bytes code;
+    code.push_back(0x13);              // 0 ldc_w #strCls（类常量）
+    put2(code, strCls);
+    code.push_back(0x57);              // 3 pop
+    code.push_back(0xb1);              // 4 return
+
+    std::vector<AttrSpec> ma;
+    ma.push_back(AttrSpec{codeIdx, jbc::test::codeContent(1, 1, code)});
+    cb.addMethod(0x0009, mIdx, voidIdx, std::move(ma));
+    auto s = sessionOf(cb.build());
+    ASSERT_NE(s, nullptr);
+    auto p = promoteMethod(*s, 0);
+    ASSERT_TRUE(p.is_ok());
+
+    StubResolver res;
+    FrameEngine fe(s->backing().cp, res, FramePolicy::Strict);
+    std::vector<FrameAt> frames;
+    const FrameSummary sum =
+        fe.compute(*p.unwrap(), MethodSig{false, "()V", "m", "p/T"}, frames);
+    ASSERT_TRUE(sum.ok) << jbc::analysis::to_string(sum.fail);
+
+    const ca::usize atPop = indexAtPc(*p.unwrap(), 3);
+    ASSERT_NE(atPop, static_cast<ca::usize>(-1));
+    ASSERT_EQ(frames[atPop].stack.size(), 1u);
+    EXPECT_EQ(frames[atPop].stack[0].k, VKind::Ref);
+    EXPECT_EQ(frames[atPop].stack[0].name, "java/lang/Class");
+}
+
 // ---------------------------------------------------------------------------
 // 跨类合并经 resolver（§10.1.1/§10.1.3）
 // ---------------------------------------------------------------------------

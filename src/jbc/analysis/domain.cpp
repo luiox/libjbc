@@ -91,7 +91,10 @@ VType StrictDomain::newValue(const ir::Insn& in, ir::InsnId, VKind shape)
         }
         switch (cp_.tagOf(in.cp)) {
         case core::CpTag::String: return nameRef("java/lang/String");
-        case core::CpTag::Class: return nameRef(detail::classNameOf(cp_, in.cp));
+        // ldc 类常量装载的是 Class 对象（验证器类型 java/lang/Class），
+        // 不是常量命名的类类型本身——后者沿 astore 流进异常 handler 的
+        // 合并帧会让产物 StackMapTable 与 JVM 验证器实算帧冲突。
+        case core::CpTag::Class: return nameRef("java/lang/Class");
         case core::CpTag::MethodType: return nameRef("java/lang/invoke/MethodType");
         case core::CpTag::MethodHandle: return nameRef("java/lang/invoke/MethodHandle");
         case core::CpTag::Dynamic: {
