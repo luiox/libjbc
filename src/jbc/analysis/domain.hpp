@@ -1457,19 +1457,23 @@ DomainResult<V> DomainEngine<V>::analyze(const ir::CodeUnit& u, const MethodSig*
             }
             return true;
         };
-        // 精确档异常出口边：try 范围内可达指令 → 每个覆盖它的
+        // 精确档异常出口边：try 范围内可达的**可抛指令** → 每个覆盖它的
         // handler（异常表序）。入口状态 = 抛出点 in-state locals（transfer
         // 前形态——&lt;init&gt; 翻转属正常后继效应，异常路径不携带）+
         // [catch_type 对应类型]；栈整体替换为异常值，与 JVM verifier 语义
         // 一致。多抛出点经同一合并协议收敛（异类引用走 resolver）。先于
         // 控制流后继发射，取的是未经自环合并污染的 in-state。
         //
-        // 发射域是「范围内全部可达指令」而非仅可抛指令——JVM 校验器对范围
-        // 内每条有帧指令都做 handler 可指派性检查（§4.10.1.4 保守口径），
-        // 只从可抛指令发边会让不可抛覆盖（if 前跳/纯局部段）的 handler 不
-        // 可达，SMT 缺 handler 帧而 JVM 加载期 VerifyError。可达指令缺席
-        // （死范围）时无边可发，handler 不可达——与 verifier 对死代码不出
-        // 约束的口径一致。
+        // 发射域 = try 范围内全部可达指令（不做可抛性过滤）。HotSpot
+        // split verifier 对 any handler 区间内的指令逐条合并（matrix 语料
+        // weirdSum 实锤：区间内 iinc 也产生合并边——VerifyError Current
+        // Frame bci 指向它）；ZKM 原罐能过是靠声明帧 chop 修剪（被覆盖
+        // 槽隐式 top 吸收）。本域对同形的承载 = StrictDomain::merge 把
+        // int×Ref 冲突吸成 Bottom（边×边 meet 的冲突标记）+ 序列化面把
+        // Bottom 落为 top_variable_info——引擎侧滤边反而让声明帧保持
+        // 具体类型，被异常边携带的覆盖帧打回。死范围（区间内无可抛指
+        // 令）的 handler 会有 Bottom 混合帧出 SMT，声明宽松不违反
+        // assignability（边→声明单方向检查），且不可达帧 verifier 跳过。
         if (preciseExc && !excEdges.empty()) {
             const ca::u32 pc = inp->srcPc;
             detail::DomState<V> exBase;

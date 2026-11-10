@@ -560,7 +560,7 @@ TEST(SmtBuildEntries, Cat2OnStackDeliveredValueFirst)
     EXPECT_TRUE(std::move(built).unwrap().needed);
 }
 
-TEST(SmtBuildEntries, RefInternsClassAndBottomRejected)
+TEST(SmtBuildEntries, RefInternsClassAndBottomToTop)
 {
     auto s = trivialClass();
     ASSERT_NE(s, nullptr);
@@ -576,13 +576,103 @@ TEST(SmtBuildEntries, RefInternsClassAndBottomRejected)
     // 名字 intern 走 session 语义面：utf8 + class 两条新增。
     EXPECT_EQ(s->backing().cp.size(), before + 2);
 
-    // Bottom / 无名引用：防御拒绝。
+    // Bottom：merge 冲突槽（Strict 域 int×Ref 边×边 meet 的冲突标记）→
+    // top_variable_info——HotSpot 声明帧的 top 槽吸收两路（ZKM 异常驱动
+    // 形实证）；冲突槽被 load 时引擎侧类型检查仍拒，序列化面只表达
+    // 「该槽状态不可用」。无名引用：防御拒绝不变。
     auto rb = smtEntriesOf(*s, {VType{VKind::Bottom, 0, {}}});
-    ASSERT_TRUE(rb.is_err());
-    EXPECT_EQ(rb.unwrap_err(), SmtBuildError::BottomInFrame);
+    ASSERT_TRUE(rb.is_ok());
+    EXPECT_EQ(rb.unwrap()[0].tag, Ent::kTop);
     auto rn = smtEntriesOf(*s, {VType::ref("")});
     ASSERT_TRUE(rn.is_err());
     EXPECT_EQ(rn.unwrap_err(), SmtBuildError::BottomInFrame);
+}
+
+// ---------------------------------------------------------------------------
+// 端到端：异常驱动形（any 区间覆盖 handler 体）→ 冲突槽 top 序列化
+// ---------------------------------------------------------------------------
+
+/// intonly/weirdSum 异常驱动形最小化：正常流抛点携带 Int 槽边 + handler
+/// 体覆盖槽后 any 区间内不抛指令（iinc）也发边携带 Ref 槽边——发射域
+/// 全发（HotSpot 对 any handler 区间逐指令合并，weirdSum 区间内 iinc 边
+/// 实证）→ StrictDomain::merge 冲突吸成 Bottom → 序列化面落
+/// top_variable_info（HotSpot 声明帧 top 槽吸收两路，ZKM 原罐 chop 同款）。
+/// 三环口径端到端闭环：滤边会让声明帧保持具体类型被覆盖边打回
+///（VerifyError），序列化拒绝会让改写前置失败。
+TEST(SmtBuildApi, HandlerBodyOverwriteMergesToTopSlot)
+{
+    ClassBuilder cb    = baseClass();
+    const ca::u16 tCls  = cb.classRef(cb.utf8("p/T"));
+    const ca::u16 gRef  = cb.fieldref(tCls, cb.nameAndType(cb.utf8("g"),
+                                                           cb.utf8("Ljava/lang/Object;")));
+    const ca::u16 excCls = cb.classRef(cb.utf8("java/lang/Exception"));
+
+    // 0 iconst_1 / 1 istore_0（local0=Int 设置段）/ 2 getstatic T.g（抛点，
+    // Int 边 → any 13）/ 5 pop / 6 goto 13 / 9 astore_0（Exception handler：
+    // local0=Ref 覆盖 int 槽）/ 10 iinc 0,1（不抛，any 区间 [9,12) 内 →
+    // Ref 边 → 13）/ 13 return
+    Bytes code;
+    code.push_back(0x04);                        // 0 iconst_1
+    code.push_back(0x3b);                        // 1 istore_0
+    code.push_back(0xb2);                        // 2 getstatic T.g
+    put2(code, gRef);
+    code.push_back(0x57);                        // 5 pop
+    code.push_back(0xa7); put2(code, 7);         // 6 goto 13
+    code.push_back(0x4b);                        // 9 astore_0
+    code.push_back(0x84);                        // 10 iinc 0, +1
+    code.push_back(0x00);
+    code.push_back(0x01);
+    code.push_back(0xb1);                        // 13 return
+
+    const ca::u16 codeIdx = cb.utf8("Code");
+    const ca::u16 mIdx    = cb.utf8("m");
+    std::vector<AttrSpec> ma;
+    ma.push_back(AttrSpec{codeIdx, jbc::test::codeContent(2, 1, code,
+                                                          {ExcSpec{2, 6, 9, excCls},
+                                                           ExcSpec{2, 6, 13, 0},
+                                                           ExcSpec{9, 13, 13, 0}})});
+    cb.addMethod(0x0009, mIdx, cb.utf8("()V"), std::move(ma));
+    auto s = sessionOf(cb.build());
+    ASSERT_NE(s, nullptr);
+    auto p = promoteMethod(*s, 0);
+    ASSERT_TRUE(p.is_ok());
+
+    StubResolver res;
+    FrameEngine fe(s->backing().cp, res, FramePolicy::Strict);
+    std::vector<FrameAt> frames;
+    const FrameSummary sum =
+        fe.compute(*p.unwrap(), MethodSig{true, "()V", "m", ""}, frames);
+    ASSERT_TRUE(sum.ok) << jbc::analysis::to_string(sum.fail);
+
+    // any handler 13 入口：Int 边 × Ref 边 meet → Bottom 冲突标记。
+    const ca::usize atAny = indexAtPc(*p.unwrap(), 13);
+    ASSERT_NE(atAny, static_cast<ca::usize>(-1));
+    ASSERT_TRUE(frames[atAny].reachable);
+    ASSERT_GE(frames[atAny].locals.size(), 1u);
+    EXPECT_EQ(frames[atAny].locals[0].k, VKind::Bottom);
+
+    // 序列化：声明帧该槽 top_variable_info（边→声明单方向可指派）。
+    // 紧凑帧的 offset 是链式 delta（首帧 delta 即绝对 pc，此后
+    // delta = pc - prev - 1），还原绝对 pc 再比。
+    auto builtR = buildStackMapTable(*s, *p.unwrap(), frames);
+    ASSERT_TRUE(builtR.is_ok());
+    const SmtBuildResult r = std::move(builtR).unwrap();
+    ASSERT_TRUE(r.needed);
+    bool    sawTop  = false;
+    ca::u32 prevAbs = 0;
+    bool    first   = true;
+    for (const auto& fr : r.attr->frames) {
+        const ca::u32 abs = first ? fr.offset : prevAbs + fr.offset + 1;
+        first   = false;
+        prevAbs = abs;
+        if (abs != 13) {
+            continue;
+        }
+        ASSERT_FALSE(fr.locals.empty());
+        EXPECT_EQ(fr.locals[0].tag, Ent::kTop);
+        sawTop = true;
+    }
+    EXPECT_TRUE(sawTop);
 }
 
 // ---------------------------------------------------------------------------

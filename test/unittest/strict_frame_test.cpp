@@ -1218,11 +1218,13 @@ TEST(StrictFrameExcTest, HandlerLocalsMergeViaResolver)
     EXPECT_EQ(frames[atHandler].stack[0].name, "java/lang/Exception");
 }
 
-/// 多覆盖点 locals 尺寸类冲突（Int × Ref）→ TypeConflict，failAt 定位到
-/// handler 入口指令。try 起点在设置 store 之后：加宽发射域后，若覆盖设置
-/// 段，其覆盖点的缺席槽（Top）会支配合并、吞掉真冲突；移出后覆盖点的
-/// local0 在 Int 与 Ref 之间真实相撞。BestEffort 冲突吸收继续（零漂移）。
-TEST(StrictFrameExcTest, HandlerLocalsConflictFailsAtHandler)
+/// 多覆盖点 locals 尺寸类冲突（Int × Ref）→ Bottom 吸收（merge 冲突标记），
+/// compute 成功且 handler 入口该槽为 Bottom。发射域是 try 范围内全部可达
+/// 指令（HotSpot 对 any handler 区间逐指令合并，matrix 语料 weirdSum 的
+/// 区间内 iinc 边实证）；HotSpot 声明帧吸收两路靠 top 槽（ZKM 原罐 chop
+/// 修剪口径），本域对应序列化面把 Bottom 落为 top_variable_info。
+/// BestEffort 冲突吸收同形继续（零漂移）。
+TEST(StrictFrameExcTest, HandlerLocalsConflictAbsorbedToBottom)
 {
     ClassBuilder cb = baseClass();
     const ExcClassCp cp = excCpOf(cb);
@@ -1251,12 +1253,14 @@ TEST(StrictFrameExcTest, HandlerLocalsConflictFailsAtHandler)
 
     StubResolver res;
     FrameEngine fe(s->backing().cp, res, FramePolicy::Strict);
-    const FrameSummary sum = fe.compute(*p.unwrap());
-    EXPECT_FALSE(sum.ok);
-    EXPECT_EQ(sum.fail, FrameSummary::Fail::TypeConflict);
+    std::vector<FrameAt> frames;
+    const FrameSummary sum = fe.compute(*p.unwrap(), MethodSig{true, "()V", "m", ""}, frames);
+    ASSERT_TRUE(sum.ok) << jbc::analysis::to_string(sum.fail);
     const ca::usize atHandler = indexAtPc(*p.unwrap(), 15);
     ASSERT_NE(atHandler, static_cast<ca::usize>(-1));
-    EXPECT_EQ(sum.failAt, p.unwrap()->dom.order()[atHandler]);   // 定位到 handler 入口
+    ASSERT_TRUE(frames[atHandler].reachable);
+    ASSERT_GE(frames[atHandler].locals.size(), 1u);
+    EXPECT_EQ(frames[atHandler].locals[0].k, VKind::Bottom);   // int×Ref 冲突标记
 
     // BestEffort 对照：冲突吸收为 Bottom 继续，不失败。
     FrameEngine fe2(s->backing().cp);

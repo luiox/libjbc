@@ -51,7 +51,14 @@ VType StrictDomain::merge(const VType& a, const VType& b)
         }
         return std::move(r).unwrap();
     }
-    reject();   // 尺寸类冲突 / Null × 原始类型
+    // 尺寸类冲突 / Null × 原始类型：Bottom 吸收（形状格同款语义——
+    // 不再 reject）。Strict 域的 meet 是边×边数据流合流，而 HotSpot
+    // split verifier 的合并对象是「到达边 × SMT 声明帧」——声明帧的
+    // top 槽吸收两路（intony c.a(I)I 实证：正常流 slot3=int 与异常
+    // handler 出口 slot3=Throwable 在 join 直接相遇，声明帧该槽 top，
+    // verifier 无冲突；边×边 meet 则必撞）。Bottom 槽后续若被 load，
+    // 消费点的类型检查仍会拒——fail-closed 不丢，只是把冲突标记留到
+    // 真消费点。
     return VType{VKind::Bottom, 0, {}};
 }
 

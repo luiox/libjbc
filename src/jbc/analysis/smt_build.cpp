@@ -44,8 +44,16 @@ ca::core::Result<SmtVType, SmtBuildError> toVerif(ir::ClassSession& s, const VTy
             return R(ca::core::Err(SmtBuildError::BottomInFrame));
         }
         return R(ca::core::Ok(SmtVType{SmtVType::kObject, s.internClass(v.name)}));
+    case VKind::Bottom:
+        // merge 冲突槽（Strict 域 int×Ref 等：边×边 meet 的冲突标记）→
+        // top_variable_info。HotSpot 的合并对象是「到达边 × SMT 声明帧」，
+        // 声明帧的 top 槽吸收任意两路（intonly c.a(I)I 实证：ZKM 原罐对
+        // 同形 join 槽就声明 top，verifier 无冲突）。冲突槽被后续指令
+        // load 时，引擎侧的类型检查仍会拒——序列化面只负责如实表达
+        // 「该槽状态不可用」。
+        return R(ca::core::Ok(SmtVType{SmtVType::kTop, 0}));
     default:
-        return R(ca::core::Err(SmtBuildError::BottomInFrame));   // Bottom 残留
+        return R(ca::core::Err(SmtBuildError::BottomInFrame));   // 枚举全覆盖后不可达兜底
     }
 }
 
