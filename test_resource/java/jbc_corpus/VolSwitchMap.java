@@ -1,4 +1,4 @@
-// VolSwitchMap.java — libjbc 语料：enum switch（$SwitchMap 合成类 + <clinit> 大形态）与枚举互操作。
+// VolSwitchMap.java: libjbc 语料：enum switch（$SwitchMap 合成类 + <clinit> 大形态）与枚举互操作。
 package jbcx.corpus;
 
 public final class VolSwitchMap {

@@ -1,4 +1,4 @@
-// VolPredicate.java — libjbc 语料：谓词/比较一出行（条件跳转全族 + 装箱比较 + 边界形状）。
+// VolPredicate.java: libjbc 语料：谓词/比较一出行（条件跳转全族 + 装箱比较 + 边界形状）。
 package jbcx.corpus;
 
 public final class VolPredicate {

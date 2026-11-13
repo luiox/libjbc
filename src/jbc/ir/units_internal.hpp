@@ -5,7 +5,7 @@
 /// @file        units_internal.hpp
 /// @brief       ir 内部共享面：promote/lower 的互助原语与重定位计划结构。
 ///
-/// 本头不出公开面——仅 ir 各 .cpp 经此互认（同 sem_index.hpp 的角色）；
+/// 本头不出公开面，仅 ir 各 .cpp 经此互认（同 sem_index.hpp 的角色）；
 /// 公开 API 一律以 units.hpp 为准。行为契约注释随实现（code_relocation.cpp /
 /// promote.cpp），此处只列签名。
 #pragma once
@@ -28,7 +28,7 @@ std::pair<bool, ca::usize> findCodeSlot(const core::ClassFile& cf, const core::M
 std::unordered_map<ca::u32, InsnId> buildPcIndex(const CodeDom& dom);
 
 /// 句柄 → 新 pc（导出后）。死句柄返回 Err：静默回落会把异常表边界写成
-/// pc 0（方法入口），产出坏 classfile——死句柄只能来自绕过 CodeEditor::erase
+/// pc 0（方法入口），产出坏 classfile，死句柄只能来自绕过 CodeEditor::erase
 /// 的越权改动，lower 在此显式失败（不猜、不静默）。
 Result<ca::u32, LowerError> pcOfId(const CodeDom& dom,
                                    const std::vector<core::RawInsn>& raw, InsnId id);
@@ -65,7 +65,7 @@ relocateSmt(const core::StackMapTableAttr& smt,
             const std::unordered_map<ca::u32, ca::u32>& pcmap);
 
 /// TypeAnnotations 重定位计划：Annotation 携带 unique_ptr 载荷不可拷贝，
-/// 因此拆成「纯计算 plan + 就地 apply」两步——plan 全量成功才允许 apply
+/// 因此拆成纯计算 plan + 就地 apply两步，plan 全量成功才允许 apply
 /// （all-or-nothing），apply 只写标量字段，不会再失败。
 struct TannAnnotationPlan
 {
@@ -95,7 +95,7 @@ planTann(const core::TypeAnnotationsAttr& ta,
 void applyTann(core::TypeAnnotationsAttr& ta, const TannRelocation& plan);
 
 /// CharacterRangeTable 重定向计划（start_pc/end_pc 双列，均须精确命中
-/// pcmap，miss 即 RelocationBadTarget——含末指令语义决定了它总是指令 pc）。
+/// pcmap，miss 即 RelocationBadTarget，含末指令语义决定了它总是指令 pc）。
 struct CrtRelocation
 {
     std::vector<ca::u32> starts;

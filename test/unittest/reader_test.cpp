@@ -89,7 +89,7 @@ TEST(ReaderTest, AttributeDirectoryIsEagerButContentIsNot)
 }
 
 /// 逐字节截断：任何前缀都不得崩溃，失败必须是 Truncated。
-/// 这是防御式读取的最低验收——畸形输入是预期输入。
+/// 这是防御式读取的最低验收，畸形输入是预期输入。
 TEST(ReaderTest, EveryTruncationFailsCleanly)
 {
     const Bytes full = makeRichClass();
@@ -97,7 +97,7 @@ TEST(ReaderTest, EveryTruncationFailsCleanly)
         const Bytes trunc(full.begin(), full.begin() + static_cast<std::ptrdiff_t>(n));
         const Result<ReadResult, ReadError> r = readClass(ByteView{trunc});
         if (r.is_err()) {
-            // 截断只可能产生「结构边界无法确定」这一类错误；具体是哪一处边界
+            // 截断只可能产生结构边界无法确定这一类错误；具体是哪一处边界
             // 取决于截断点落在 CP 上、属性长度上还是别处。出现其他错误码才是 bug。
             const ReadError e = r.unwrap_err();
             EXPECT_TRUE(e == ReadError::Truncated || e == ReadError::BadAttributeLength ||
@@ -119,7 +119,7 @@ TEST(ReaderTest, BadMagicIsRejected)
     EXPECT_EQ(r.unwrap_err(), ReadError::BadMagic);
 }
 
-/// 4 字节输入——只有 magic，什么都没有。
+/// 4 字节输入，只有 magic，什么都没有。
 ///
 /// 这不是臆造的用例：仓库里 `build/artifacts/.../class-data-output.class`
 /// 就是这样一个 4 字节文件，libjbytecode 在它上面直接栈缓冲区溢出崩溃
@@ -134,7 +134,7 @@ TEST(ReaderTest, FourByteInputFailsCleanly)
     EXPECT_EQ(r.unwrap_err(), ReadError::Truncated);
 }
 
-/// 属性长度声明越界：无法确定后续结构边界，必须失败而不是「尽量读」。
+/// 属性长度声明越界：无法确定后续结构边界，必须失败而不是尽量读。
 TEST(ReaderTest, OversizedAttributeLengthIsRejected)
 {
     ClassBuilder cb;
@@ -157,7 +157,7 @@ TEST(ReaderTest, OversizedAttributeLengthIsRejected)
     EXPECT_EQ(r.unwrap_err(), ReadError::BadAttributeLength);
 }
 
-/// 版本偏高只降级记录，不拒绝读取——多数结构照旧可读。
+/// 版本偏高只降级记录，不拒绝读取，多数结构照旧可读。
 TEST(ReaderTest, FutureVersionDegradesInsteadOfFailing)
 {
     ClassBuilder cb;

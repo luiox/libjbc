@@ -1,4 +1,4 @@
-// VolArith.java — libjbc 语料：int/long/float/double 全算术族 + 移位 + 位运算 + 数值转换 + 常量装载。
+// VolArith.java: libjbc 语料：int/long/float/double 全算术族 + 移位 + 位运算 + 数值转换 + 常量装载。
 // 形态语料（无行为基准要求）：每个方法一条表达式，覆盖一个 opcode 形态。
 package jbcx.corpus;
 

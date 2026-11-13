@@ -6,7 +6,7 @@
 /// @brief       可编辑的指令 DOM：InstructionStore + 有序序列 + owner/generation 句柄。
 ///
 /// 这是 v0.2 入口闸门冻结的形状：
-///   - 身份 = InsnId {owner, slot, generation}——owner 是每个 CodeDom
+///   - 身份 = InsnId {owner, slot, generation}，owner 是每个 CodeDom
 ///     构造时获得的进程级唯一代号；跨 CodeDom 的同号句柄被结构性拒绝。
 ///   - 存储 = slot 表（追加式，永不回收槽位）；删除只置死并递增 generation，
 ///     旧句柄立即失效，不存在 ABA。
@@ -40,10 +40,10 @@ using ca::core::Err;
 using ca::core::Ok;
 using ca::core::Result;
 
-/// @brief 「无来源 pc」哨兵：编辑新建的指令没有源字节位置。
+/// @brief 无来源 pc哨兵：编辑新建的指令没有源字节位置。
 ///
 /// append/insert 强制写入；pcmap（lower 的重定向索引）据此区分原指令与
-/// 合成指令——合成指令不进旧 pc 索引，也不参与属性重定向。
+/// 合成指令，合成指令不进旧 pc 索引，也不参与属性重定向。
 inline constexpr ca::u32 kNoPc = 0xFFFFFFFFu;
 
 /// @brief 指令身份句柄：三个字段全部参与相等性。
@@ -80,7 +80,7 @@ struct LabelId
     bool operator!=(const LabelId& o) const noexcept { return !(*this == o); }
 };
 
-/// @brief 空标签句柄，仅用于表示「没有标签」的查询结果。
+/// @brief 空标签句柄，仅用于表示没有标签的查询结果。
 inline constexpr LabelId kNoLabel{};
 
 /// @brief 标签解析后的边界种类。
@@ -171,10 +171,10 @@ public:
     /// @brief 区间顺序重排：把 `[first, last)` 的连续指令段整体搬到 at 之前。
     ///
     /// `moveBefore`/`moveAfter` 的区间推广，同样只重排 `order_`，单趟提出
-    /// 回插（O(n)），不触碰指令槽与标签锚定——锚在段内指令上的标签和指向
+    /// 回插（O(n)），不触碰指令槽与标签锚定，锚在段内指令上的标签和指向
     /// 段内标签的分支字段随句柄自然保持。`at == kNoInsn` 表示搬到方法末尾、
     /// `last == kNoInsn` 表示段延伸到方法末尾（与 createLabel/bindLabel 的
-    /// 末哨兵约定同源——half-open 端点语义下尾段只有经哨兵可命名）。
+    /// 末哨兵约定同源，half-open 端点语义下尾段只有经哨兵可命名）。
     /// first == last 是空段、last 位于 first 之前是倒置段、锚点落在段内
     /// （锚点自身会被搬移卷走，语义未定义）一律 Err(BadRange)；锚点即段首
     /// 或紧随段尾时段已在锚点位置，是合法的无操作。段策略（段首边界标签
@@ -188,7 +188,7 @@ public:
     /// 移动或销毁；字段改写后遗留的历史 ControlFlow 标签不再保护锚点
     /// （其句柄此后解析为 InvalidHandle，也不能被新指令引用）。
     ///
-    /// 成本模型：use 检查按需全序扫描（O(n)），erase 自身也走一遍——
+    /// 成本模型：use 检查按需全序扫描（O(n)），erase 自身也走一遍，
     /// 循环里做 N 次 erase 是 O(N×n)。批量场景用 @ref eraseBatch ；散点
     /// 删除先一次 usersOf 规划（无引用者成批删，有引用者先 replaceAllUses），
     /// 不要逐条盲删。
@@ -202,10 +202,10 @@ public:
     /// 返回 Err 且什么都不删。重复句柄按并集处理（同槽只删一次）。
     ///
     /// 批内互指不算引用：同批消亡的指令之间的引用随批一并消失，语义与
-    /// 成员消亡顺序无关——这是与逐条 erase 的唯一语义差（逐条版先删谁
+    /// 成员消亡顺序无关，这是与逐条 erase 的唯一语义差（逐条版先删谁
     /// 谁先挡路）。
     ///
-    /// retarget 是「删除前把存活指令的引用改锚」的安排：from 必须是批内
+    /// retarget 是删除前把存活指令的引用改锚的安排：from 必须是批内
     /// 成员，to 必须是批外存活指令。被安排覆盖的字段改锚语义与逐条
     /// @ref replaceAllUses 一致（每字段一枚锚定 to 的新 ControlFlow 标签，
     /// 被替换的旧 ControlFlow 标签随后销毁）；未覆盖的存活引用按
@@ -246,20 +246,20 @@ public:
     /// @brief 锚定到某条指令前置边界的全部存活标签（Boundary 与 ControlFlow
     ///        两角色都含，按槽序）。
     ///
-    /// 读侧查询：变换 pass 用它实现旧栈 LabelNode 语义——「两条相邻指令之间
-    /// 有没有标签」等价于「后一条指令的前置边界有没有锚定标签」；替换型变换
+    /// 读侧查询：变换 pass 用它实现旧栈 LabelNode 语义，两条相邻指令之间
+    /// 有没有标签等价于后一条指令的前置边界有没有锚定标签；替换型变换
     /// 借此把边界标签迁到新头指令（bindLabel）。不修改任何状态。
     std::vector<LabelId> labelsAt(InsnId anchor) const;
 
     // ---- 受控延后绑定（仅整体方法体重放路径） ----
 
-    /// @brief 进入「分支/switch 目标延后绑定」受控构建态；逐条追加期放开
+    /// @brief 进入分支/switch 目标延后绑定受控构建态；逐条追加期放开
     ///        控制目标须已锚定的校验，@ref endDeferredTargets 收尾全量补验。
     ///
     /// 整体重放（ClassSession::adoptMethod 的 replayMethodBody）按源顺序
-    /// 逐条搬运：前向分支的目标指令尚未重放，其占位标签必然未锚定——
+    /// 逐条搬运：前向分支的目标指令尚未重放，其占位标签必然未锚定，
     /// append 期的控制目标防呆在该路径上机制性不可满足。
-    /// 受控态只放开「分支/switch 目标须已锚定到本 DOM 存活指令」这一条
+    /// 受控态只放开分支/switch 目标须已锚定到本 DOM 存活指令这一条
     /// （switch 形状校验保留），退出时对全量存活指令补同一套校验，仍悬垂
     /// 的目标显式失败。正常编辑路径不进入此态，checkHandles 对外语义不变；
     /// 重复进入幂等。
@@ -268,7 +268,7 @@ public:
     /// @brief 退出受控延后绑定态：对全量存活指令补 checkHandles 校验
     ///        （含分支/switch 目标锚定），任何悬垂目标 Err(InvalidHandle)。
     ///
-    /// 无论校验成败受控态都退出——失败面不留松弛态，调用方（重放）按
+    /// 无论校验成败受控态都退出，失败面不留松弛态，调用方（重放）按
     /// 全有或全无放弃即可。未进入受控态时调用同样安全：全量校验照跑，
     /// 等于一次结构自检。
     Result<void, EditError> endDeferredTargets();
@@ -302,15 +302,15 @@ public:
 
     /// @brief 从 code 字节导入：解码并把字节偏移解析为句柄。
     ///
-    /// 分支偏移必须落在某条指令的起点，否则 Err(BadTarget)——这是把
-    /// 「跳进操作数中间」的畸形输入挡在 DOM 之外的唯一防线。
+    /// 分支偏移必须落在某条指令的起点，否则 Err(BadTarget)，这是把
+    /// 跳进操作数中间的畸形输入挡在 DOM 之外的唯一防线。
     static Result<CodeDom, EditError> importFrom(core::ByteView code);
 
     /// @brief 导出为 codec 层指令序列：顺序排布、重算 pc 与偏移。
     ///
     /// Branch2 的 goto/jsr 偏移放不下 i16 时**自动加宽**为 goto_w/jsr_w
     /// （导出期形状替换，模型不动；fixpoint 迭代到收敛，允许过量加宽）。
-    /// 其余放不下——条件分支超 i16，或任意分支/switch 超 i32——
+    /// 其余放不下，条件分支超 i16，或任意分支/switch 超 i32，
     /// Err(BranchOverflow)：条件分支的加宽需要反转条件 + goto_w 桥接
     /// （插入指令），无法在导出期保持 dom↔raw 一一对应，调用方自行改写
     /// 结构或放弃。
@@ -320,7 +320,7 @@ public:
     Result<std::vector<ca::u8>, EditError> encode() const;
 
     /// @brief 尺寸评估器：与 @ref encode 完全同源的导出管线字节数
-    ///        （含 goto/jsr 自动加宽），供落盘前的容量预检——JVMS 4.7.3
+    ///        （含 goto/jsr 自动加宽），供落盘前的容量预检，JVMS 4.7.3
     ///        的 code_length ≤ 65535。只报大小不做上限判断，闸门在
     ///        lowerMethod 与 writeClass 两端。
     Result<ca::u32, EditError> encodedSize() const;

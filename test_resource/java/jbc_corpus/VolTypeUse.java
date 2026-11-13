@@ -1,4 +1,4 @@
-// VolTypeUse.java — libjbc 语料：类型注解全场景（TYPE_USE 触点：字段/泛型实参/
+// VolTypeUse.java: libjbc 语料：类型注解全场景（TYPE_USE 触点：字段/泛型实参/
 // 继承/方法返回/throws/转型/instanceof/局部变量，RuntimeVisible+InvisibleType-
 // Annotations 双保留；'c' 元素值含类字面量与 void.class 基类型对照）。
 package jbcx.corpus;

@@ -1,5 +1,5 @@
 /// @file        corpus_compact_test.cpp
-/// @brief       CP 显式压缩的语料扫——封闭集诚实性与确定性的行为级门。
+/// @brief       CP 显式压缩的语料扫，封闭集诚实性与确定性的行为级门。
 ///
 /// 对语料逐类 compactConstantPool：
 /// 1. 拒绝诚实性：每个 AttrNotModeled 拒绝点名的属性在原类上 decodeAttr
@@ -216,7 +216,7 @@ TEST(CorpusCompact, CompactionScanHonestAndDeterministic)
     EXPECT_EQ(malformed, 0) << "javac 级语料出现 MalformedAttr：压缩侧格式知识有误";
     // 拒收面清零：注解族四件（ParameterAnnotations/AnnotationDefault/
     // MethodParameters/ConstantValue）收编进封闭集后，javac 级语料构造上
-    // 无名单外属性——批前自产 5（全是 AnnotationDefault）/env 注入 54（全是
+    // 无名单外属性，批前自产 5（全是 AnnotationDefault）/env 注入 54（全是
     // MethodParameters）的拒收归零，两种模式同门生效。
     EXPECT_EQ(rejected, 0) << "压缩拒收面未清零（见上方 reject 明细）";
 }

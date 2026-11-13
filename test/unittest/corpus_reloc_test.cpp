@@ -1,12 +1,12 @@
 /// @file        corpus_reloc_test.cpp
-/// @brief       布局改动路径的语料扫——relocation contract 的行为级门。
+/// @brief       布局改动路径的语料扫，relocation contract 的行为级门。
 ///
 /// 每个带码方法开头插 nop（强制 codeChanged），lower 断言：
-/// 1. 无 RelocationNotModeled——未建模嵌套属性墙已封（LNT/LVT/LVTT/SMT/
+/// 1. 无 RelocationNotModeled，未建模嵌套属性墙已封（LNT/LVT/LVTT/SMT/
 ///    TypeAnnotations 全建模，其余已知形态解码层就拒绝）；
-/// 2. 无 RelocationBadTarget——语料不含「解码合法但 pc 引用不落指令起点」
+/// 2. 无 RelocationBadTarget，语料不含解码合法但 pc 引用不落指令起点
 ///    的畸形属性；非零即语料或重定位实现出问题，须查明而不是放行；
-/// 3. 写回 → 重读 → 全解码 → 再写逐字节一致——重定位后的整体保真。
+/// 3. 写回 → 重读 → 全解码 → 再写逐字节一致，重定位后的整体保真。
 #include <gtest/gtest.h>
 
 #include <cstdio>

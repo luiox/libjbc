@@ -1,4 +1,4 @@
-// VolBranch.java — libjbc 语料：条件跳转全族 + 循环 + tableswitch/lookupswitch + break/continue/标号。
+// VolBranch.java: libjbc 语料：条件跳转全族 + 循环 + tableswitch/lookupswitch + break/continue/标号。
 package jbcx.corpus;
 
 public final class VolBranch {

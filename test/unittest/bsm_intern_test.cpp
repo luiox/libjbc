@@ -6,7 +6,7 @@
 ///      缺则建 / 同形条目命中复用 / 域宽与锚点错误族；CP 容量边界拒下不留
 ///      半截；ChangeSet 记账；压缩收编后 BSM 集群语义保持。
 ///   2. JVM 真跑门（JDK 在位执行，缺席 skip）：BSM + 句柄条目的类形态自
-///      JDK8 起即可承载（全版本）；条件常量类按 java.version 分判——JDK8
+///      JDK8 起即可承载（全版本）；条件常量类按 java.version 分判，JDK8
 ///      解析器不识 CONSTANT_Dynamic，拒收属环境事实而非缺陷（v55 的
 ///      UnsupportedClassVersionError 或 v55-以下形态都会发生，只断言非 ok）。
 #include <gtest/gtest.h>
@@ -134,7 +134,7 @@ BsmArg argDynamic(ca::u32 bsm, std::string_view name, std::string_view desc)
     return a;
 }
 
-// ---- 池形态走查（链路逐跳；索引无关——压缩后原样复用） ----
+// ---- 池形态走查（链路逐跳；索引无关，压缩后原样复用） ----
 
 bool utf8Is(const ClassFile& cf, ca::u32 idx, std::string_view expect)
 {
@@ -465,7 +465,7 @@ TEST(BsmIntern, DynamicInternAnchoring)
     EXPECT_EQ(s->backing().cp.size(), cpKeep);
 
     // 条件常量作 BSM 静态参数（绑定既有条目下标；(bsm, 名, 型) 元组不同即
-    // 不同常量——"inner"/"I" 与 c1 的 "mk"/"Ljava/lang/String;" 恒异条目）。
+    // 不同常量，"inner"/"I" 与 c1 的 "mk"/"Ljava/lang/String;" 恒异条目）。
     const auto r6 = s->appendBootstrapMethod(mhSpec(6, kConcatOwner, kConcatName, kConcatDesc),
                                              {argDynamic(0, "inner", "I")});
     ASSERT_TRUE(expectOk(r6, "append(condy-arg)"));
@@ -516,7 +516,7 @@ TEST(BsmIntern, CompactKeepsBsmClusterSemantics)
     ASSERT_NE(s, nullptr);
 
     // 参与压缩的长驻集群全部挂在 BSM 条目上（方法形句柄 + 多形参数含
-    // MethodType/句柄参数/Class/条件常量）——BSM 引用是压缩标活的真实可达
+    // MethodType/句柄参数/Class/条件常量），BSM 引用是压缩标活的真实可达
     // 源（预指令面下唯一）；孤件常量会被死常量消除收掉，属压缩语义。
     const ca::u32 mtPre = s->internMethodType("(J)Ljava/lang/String;");
     const auto b0 = s->appendBootstrapMethod(
@@ -625,7 +625,7 @@ TEST(BsmIntern, CompactDropsOrphanConstants)
 
 TEST(BsmIntern, JvmLoadGate)
 {
-    // S1：v52 + BSM 属性两条（句柄参数与多形参数）——句柄/MethodType/BSM 家族
+    // S1：v52 + BSM 属性两条（句柄参数与多形参数），句柄/MethodType/BSM 家族
     //     自 JDK7+ 即为合法类形态，全域断言可装载。
     SessionPtr s1 = seedSession(kVersion8, "bu/S1");
     ASSERT_NE(s1, nullptr);
@@ -638,7 +638,7 @@ TEST(BsmIntern, JvmLoadGate)
     const Bytes s1Bytes = writeOk(s1->backing());
     ASSERT_FALSE(s1Bytes.empty());
 
-    // S2：v55 + 同构条目集 + 条件常量——CONSTANT_Dynamic 需 JDK11+ 解析；
+    // S2：v55 + 同构条目集 + 条件常量，CONSTANT_Dynamic 需 JDK11+ 解析；
     //     JDK8 在 UnsupportedClassVersionError（v55）先行拒绝，两条路径都记
     //     非 ok，实现按 java.version 分判，不硬编异常名。
     SessionPtr s2 = seedSession(kVersion11, "bu/S2");

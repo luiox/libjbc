@@ -2,7 +2,7 @@
 /// @brief       NestHost（JVMS 4.7.29）/ NestMembers（4.7.28）/
 ///              PermittedSubclasses（4.7.31）typed 建模单测：分派接线钉门、
 ///              typed 解码/编码、半截体显式失败、trailing 保持、u16 域宽闸门，
-///              以及「typed 读写与既有 Raw 手术口径一致」的对拍。
+///              以及typed 读写与既有 Raw 手术口径一致的对拍。
 ///
 /// 三件均为类级挂载、载荷全为 CP Class 索引；
 /// Raw 手术 oracle 从槽源 span 直接取体字节，与 typed 路径

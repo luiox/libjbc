@@ -2,7 +2,7 @@ package demo;
 
 /**
  * SMT 探针驱动器：每行输出固定，重生成 StackMapTable 后由 libjbc 测试
- * 断言整段输出。全部自然 javac 形态——main 末尾的反射 try/catch 覆盖
+ * 断言整段输出。全部自然 javac 形态，main 末尾的反射 try/catch 覆盖
  * 两个裁决暴露形态（handler 入口单边赋值槽：ldc/forName 抛点先于 r 的
  * 首次赋值；try/catch 后 join 帧：catch 变量槽只在 handler 路径赋值）。
  * demo.UninitProbe 由测试用 libjbc 手工拼字节生成，运行期反射加载。

@@ -59,7 +59,7 @@ Result<ReadResult, ReadError> readClass(ByteView bytes, const ReadOptions& opt)
 {
     // 先复制源字节（若要求保留），再基于副本解析。
     //
-    // 顺序很关键：解析产出的每一个字节视图——Utf8 条目、属性 span——都指向
+    // 顺序很关键：解析产出的每一个字节视图，Utf8 条目、属性 span，都指向
     // 游标底下的 buffer。若游标基于调用方的入参，模型的视图就会借用一个自己
     // 管不着的 buffer，调用方一释放即悬垂。基于副本解析，则所有视图都落在
     // 模型内部，模型析构前一律有效。
@@ -154,10 +154,10 @@ Result<ReadResult, ReadError> readClass(ByteView bytes, const ReadOptions& opt)
     }
 
     // 类级属性表之后应正好结束。多余字节照 Code 体 trailing 同族处理
-    // ：保留为副本，写回原样附回——而不是 Err 或静默丢弃，
-    // 否则 writeClass 输出缺尾，「未修改字节级往返」对这类输入不成立。
-    // trailing 是「结构可确定、语义不合规」的降级形态，读取产物标记
-    // Recovered（+warning）——降级必须可查询，不能只留在诊断流里。
+    // ：保留为副本，写回原样附回，而不是 Err 或静默丢弃，
+    // 否则 writeClass 输出缺尾，未修改字节级往返对这类输入不成立。
+    // trailing 是结构可确定、语义不合规的降级形态，读取产物标记
+    // Recovered（+warning），降级必须可查询，不能只留在诊断流里。
     bool hasTrailing = false;
     if (cur.remaining() != 0) {
         const ca::u32 tailOffset = static_cast<ca::u32>(cur.pos());

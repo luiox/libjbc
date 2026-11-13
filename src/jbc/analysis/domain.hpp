@@ -6,13 +6,13 @@
 /// @brief       值域搭车引擎：DomainEngine<V> + IValueDomain<V>。
 ///
 /// 架构：引擎持有全部形状迁移知识（控制流 worklist、cat2 槽布局、dup 槽位
-/// 置换、get/put/invoke 描述符效应——frame.cpp 时代修出的那一整链），值域 V
+/// 置换、get/put/invoke 描述符效应，frame.cpp 时代修出的那一整链），值域 V
 /// 作为载荷随槽移动；消费者只实现域钩子（必选五个，可选细分全部有默认）。
 /// 旧栈 Interpreter<V> 换个值域要重写整张 per-opcode transfer 表（612 行/
 /// 域起跳，三个 interpreter 各自如此）；本层把 transfer 留在引擎。
 ///
 /// FrameEngine（frame.hpp）是本模板的内置实例化：ShapeDomain 产出 VType，
-/// 单一起原则不破——实现只有这一份。
+/// 单一起原则不破，实现只有这一份。
 #pragma once
 
 #include <cstddef>
@@ -48,14 +48,14 @@ public:
     virtual V merge(const V& a, const V& b) = 0;
     /// 一切产值点：常量、ldc、运算结果（未被 binary/unary 接管时）、
     /// new/checkcast、字段/调用返回值、无局部来源的 load。at 即产生该
-    /// 指令的句柄（来源追踪的语义就是它——Insn 本体不带身份，故显式传）。
+    /// 指令的句柄（来源追踪的语义就是它，Insn 本体不带身份，故显式传）。
     virtual V newValue(const ir::Insn& producer, ir::InsnId at, VKind shape) = 0;
     /// 方法入参（按描述符播种 local 槽）。
     virtual V newParameter(ca::u32 localIdx, VKind shape) = 0;
     /// 异常处理器入口的 throwable。
     virtual V newException(const ir::CodeUnit::Exc& entry) = 0;
 
-    // ---- 可选细分（默认退回 newValue / 恒等——不写就是纯搭车）----
+    // ---- 可选细分（默认退回 newValue / 恒等，不写就是纯搭车）----
 
     /// 实例方法 this 槽的播种形态。默认退回 newParameter(0, Ref)；
     /// Strict 域覆写：构造器播 UninitThis，其余播精确类名。
@@ -76,7 +76,7 @@ public:
 
     /// invokespecial &lt;init&gt; 完成：receiver 的已初始化形态（§10.1 翻转）。
     /// 引擎把该值替换进状态里全部与 receiver 相等的行；默认恒等
-    /// （形状域无 Uninitialized 语义，翻转即无操作——best-effort 零漂移）。
+    /// （形状域无 Uninitialized 语义，翻转即无操作，best-effort 零漂移）。
     virtual V initializedForm(const V& receiver, const ir::Insn& call, ir::InsnId id)
     {
         (void)call;
@@ -84,7 +84,7 @@ public:
         return receiver;
     }
 
-    /// jsr/jsr_w 压入的返回地址形态。默认退回 newValue(Int)——形状域
+    /// jsr/jsr_w 压入的返回地址形态。默认退回 newValue(Int)，形状域
     /// 不建模返回地址（legacy 行为逐位不变）；Strict 域覆写为携带调用方
     /// jsr pc 的 ReturnAddress。
     virtual V newReturnAddress(const ir::Insn& producer, ir::InsnId at)
@@ -108,7 +108,7 @@ public:
 
     /// ret 返回地址求解（引擎只对 modelsSubroutines()=true 的域调用）。
     /// 槽值可解析为返回地址（携带调用方 jsr pc）时返回 true；否则 false
-    /// （ret 读非返回地址槽——畸形，引擎显式拒绝并定位到 ret）。
+    /// （ret 读非返回地址槽，畸形，引擎显式拒绝并定位到 ret）。
     virtual bool retSiteOf(const V& slotValue, ca::u32& jsrPc) const
     {
         (void)slotValue;
@@ -117,26 +117,26 @@ public:
     }
 
     /// 异常边精确传播开关。关闭（默认）：handler 入口由异常表
-    /// 播种（空 locals + [newException]），种子以「待并参与者」形态持有，
-    /// 与真实入边同权汇合（verifier 口径：入口帧 = 全部入边 join）——不再
+    /// 播种（空 locals + [newException]），种子以待并参与者形态持有，
+    /// 与真实入边同权汇合（verifier 口径：入口帧 = 全部入边 join），不再
     /// 抢先单跑，真实边缺席时由 worklist 排空后的种子倾泻兜底（异常-only
     /// 处理器语义不变）。开启（Strict 域）：引擎不播种，改为对 try 范围内
     /// 每条可达指令逐覆盖 handler 发异常出口边（§4.10.1.4 保守口径，与
-    /// verifier 对有帧覆盖指令的 handler 检查同域）——入口状态 = 指令点
+    /// verifier 对有帧覆盖指令的 handler 检查同域），入口状态 = 指令点
     /// in-state locals + [catch_type 对应类型]，handler 可达 ⟺ 范围内至
     /// 少一条可达指令（死范围的 handler 不可达，verifier 对死代码同样不
     /// 出约束）。
     virtual bool preciseExceptionEdges() const { return false; }
 
-    /// Strict 类域的显式失败通道：域钩子内部遇到「不可算」时置位，引擎
-    /// 在每次 transfer / 状态合并后查询——非 None 立即终止并把 failAt
+    /// Strict 类域的显式失败通道：域钩子内部遇到不可算时置位，引擎
+    /// 在每次 transfer / 状态合并后查询，非 None 立即终止并把 failAt
     /// 定位到当前指令（transfer）/ 合并点指令（merge）。默认恒 None。
     virtual FrameSummary::Fail failCode() const { return FrameSummary::Fail::None; }
 
     /// 清除失败通道（引擎每轮 analyze 入口调用；无失败语义的域为无操作）。
     virtual void clearFail() {}
 
-    /// 二元运算（算术/位/移位/比较）。默认「结果来源 = 本指令」。
+    /// 二元运算（算术/位/移位/比较）。默认结果来源 = 本指令。
     virtual V binary(core::Op op, const V& a, const V& b, VKind shape,
                      const ir::Insn& at, ir::InsnId id)
     {
@@ -154,7 +154,7 @@ public:
     }
     /// 局部变量读：local 槽里有已存值时走这里（常量传播靠它穿透
     /// store→load）；空槽由引擎 fallback 到 newValue(load, shape)。
-    /// 默认恒等（形状域不关心存过什么——形状来自 opcode）。
+    /// 默认恒等（形状域不关心存过什么，形状来自 opcode）。
     virtual V loadLocal(const ir::Insn& load, ir::InsnId id, const V& stored, ca::u32 idx)
     {
         (void)load;
@@ -162,7 +162,7 @@ public:
         (void)idx;
         return stored;
     }
-    /// 局部变量写前变换（默认恒等；形状域按 storeKind 归一——栈上形状与
+    /// 局部变量写前变换（默认恒等；形状域按 storeKind 归一，栈上形状与
     /// store 形状不一致时以 opcode 为准，如 aconst_null; astore 的 Null→Ref）。
     virtual V storeLocal(const ir::Insn& store, ir::InsnId id, const V& v, ca::u32 idx)
     {
@@ -350,7 +350,7 @@ inline VKind storeKind(core::Op op) noexcept
 }
 
 /// 单类型描述符 → 尺寸类（J→Long、D→Double、F→Float、L/[→Ref、其余
-/// cat1 原始类（I/Z/B/C/S）→ Int）。空串只在描述符整体病态时出现——
+/// cat1 原始类（I/Z/B/C/S）→ Int）。空串只在描述符整体病态时出现，
 /// 那类形态由槽计数侧先行 BadCpRef 拒绝，这里按 cat1 兜底。
 inline VKind typeKind(std::string_view t) noexcept
 {
@@ -624,7 +624,7 @@ void Machine<V>::apply(const ir::Insn& in, ir::InsnId id, FrameSummary::Fail& fa
     };
 
     // 紧凑 load/store 族：操作数布局是 None（单字节无操作数），但语义是
-    // Local1——shape 分派前拦截。
+    // Local1，shape 分派前拦截。
     if ((op >= Op::ILOAD_0 && op <= Op::ALOAD_3) ||
         (op >= Op::ISTORE_0 && op <= Op::ASTORE_3)) {
         applyLocal(in, id, fail);
@@ -770,7 +770,7 @@ void Machine<V>::apply(const ir::Insn& in, ir::InsnId id, FrameSummary::Fail& fa
             popSlots(1, fail);
         } else if (op == Op::GOTO || op == Op::GOTO_W || op == Op::JSR || op == Op::JSR_W) {
             if (op == Op::JSR || op == Op::JSR_W) {
-                // jsr 压返回地址（JVMS §4.10.2.5/§6.5 jsr——地址 = jsr 的
+                // jsr 压返回地址（JVMS §4.10.2.5/§6.5 jsr，地址 = jsr 的
                 // 顺序后继）。Strict 域携带调用方 jsr pc；形状域退 Int（legacy）。
                 pushVal(dom.newReturnAddress(in, id), fail);
             }
@@ -885,7 +885,7 @@ void Machine<V>::apply(const ir::Insn& in, ir::InsnId id, FrameSummary::Fail& fa
                 ++pops;   // 接收者
             }
             // 接收者值先行捕获：invokespecial &lt;init&gt; 的 Uninitialized 翻转
-            // 以它为判定载荷（§10.1——同值出现点全部翻转为已初始化形态）。
+            // 以它为判定载荷（§10.1，同值出现点全部翻转为已初始化形态）。
             V receiver{};
             const bool initCall = op == Op::INVOKESPECIAL && pops >= 1 &&
                                   st.stack.size() >= pops;
@@ -913,7 +913,7 @@ void Machine<V>::apply(const ir::Insn& in, ir::InsnId id, FrameSummary::Fail& fa
             }
             // 返回类型按描述符精确到尺寸类（I/Z/B/C/S→Int、F→Float、
             // J→Long、D→Double、L/[→Ref）；槽数只定推入宽度。此前按
-            // 「1 槽→Ref、2 槽→Long」的粗化让 ()I 结果以 Ref 入帧——
+            // 1 槽→Ref、2 槽→Long的粗化让 ()I 结果以 Ref 入帧，
             // 与 LDC 位的 CP tag 精确映射不一致，读↔算对拍系统性误报。
             if (ret == 2 || ret == 1) {
                 const ca::usize close = d.find(')');
@@ -957,7 +957,7 @@ void Machine<V>::apply(const ir::Insn& in, ir::InsnId id, FrameSummary::Fail& fa
 /// 覆盖：CP 装载与类操作（ldc 族/new 家族/checkcast/instanceof）、字段与
 /// 调用、数组载荷/存储/长度、除法余（ArithmeticException）、监视器、
 /// athrow。纯局部算术/栈操作/load/store/分支/返回等不可能抛异常的指令
-/// 不在内——异常边发射域以 javac oracle 校准。
+/// 不在内，异常边发射域以 javac oracle 校准。
 inline bool canThrow(core::Op op) noexcept
 {
     using core::Op;
@@ -994,7 +994,7 @@ public:
         , dom_(dom)
     {}
 
-    /// @brief 域分析（入参不播种——与 FrameEngine 等价形态，自预言用）。
+    /// @brief 域分析（入参不播种，与 FrameEngine 等价形态，自预言用）。
     DomainResult<V> analyze(const ir::CodeUnit& u)
     {
         return analyze(u, nullptr);
@@ -1064,7 +1064,7 @@ DomainResult<V> DomainEngine<V>::analyze(const ir::CodeUnit& u, const MethodSig*
 
     // 异常处理器两档。精确档：handler 由 try 范围内可抛指令的出
     // 口边惰性并入，入口顺序伪边照旧截断（handler 可达 ⟺ 至少一条异常边
-    // 实际并入）。基础档：不发异常边，入口种子以「待并参与者」形态持有——
+    // 实际并入）。基础档：不发异常边，入口种子以待并参与者形态持有，
     // 真实边到达时种子与边同权并入，真实边缺席的处理器由排空后种子倾泻兜
     // 底；顺序伪边不再截断，否则 fake-try（handler 即 try 之后的自然续体）
     // 的唯一真实入边被丢弃，种子单跑必然残帧下溢。
@@ -1075,7 +1075,7 @@ DomainResult<V> DomainEngine<V>::analyze(const ir::CodeUnit& u, const MethodSig*
     // 精确档异常边表（异常表序即并入序）：[startPc, endPc) 覆盖范围 +
     // handler 入口 + catch_type 对应的栈值（catch_type 0 = any 播
     // Throwable）。路径过滤不引入第二个 resolver 面：类型匹配判定按
-    // 「未注入层级即保守放行」单向规则，本层不可判定 → 一律并入。
+    // 未注入层级即保守放行单向规则，本层不可判定 → 一律并入。
     struct ExcEdge
     {
         ca::u32 startPc = 0;
@@ -1117,7 +1117,7 @@ DomainResult<V> DomainEngine<V>::analyze(const ir::CodeUnit& u, const MethodSig*
     }
 
     // 基础档入口种子表（slot 有序 → 倾泻次序确定）：同一 handler 的多个
-    // catch 项种子先并。不入队、不占 inState——等真实边并入，或排空后倾
+    // catch 项种子先并。不入队、不占 inState，等真实边并入，或排空后倾
     // 泻。精确档无种子：handler 可达性由异常边实际并入决定。
     std::map<ca::u32, detail::DomState<V>> handlerSeed;
     if (!preciseExc) {
@@ -1179,7 +1179,7 @@ DomainResult<V> DomainEngine<V>::analyze(const ir::CodeUnit& u, const MethodSig*
     };
 
     // 异常 handler 入口槽集（两档通用）：这些位置的汇合沿用既有宽容口径
-    // ——异常边入口栈被重置为 [throwable]，fake-try 连续体的顺序边深侧
+    // ，异常边入口栈被重置为 [throwable]，fake-try 连续体的顺序边深侧
     // 合并是既有契约（HandlerSeedKeepsFallthroughEdge 一族测试钉死），
     // 栈深守卫对其豁免。
     std::unordered_set<ca::u32> excEntrySlots;
@@ -1193,8 +1193,8 @@ DomainResult<V> DomainEngine<V>::analyze(const ir::CodeUnit& u, const MethodSig*
 
     // 不建模子程序的域（BestEffort）遇 jsr/ret 方法整体退回 legacy 口径：
     // 传统双后继传播使落空边多携带一个返回地址（形态域里退化为 Int，
-    // 与普通 int 不可区分），栈深守卫无法逐点判定，整个方法豁免——
-    // 「BestEffort 现状行为逐位不变」契约优先。建模子程序的域（Strict）
+    // 与普通 int 不可区分），栈深守卫无法逐点判定，整个方法豁免，
+    // BestEffort 现状行为逐位不变契约优先。建模子程序的域（Strict）
     // 的 jsr 联跳栈深恒等，真正畸形的子程序形态由 Subroutine 拒绝面兜住。
     bool hasLegacySubInsn = false;
     if (!dom_.modelsSubroutines()) {
@@ -1283,7 +1283,7 @@ DomainResult<V> DomainEngine<V>::analyze(const ir::CodeUnit& u, const MethodSig*
         }
         if (work.empty()) {
             // 种子倾泻：无真实边到达的处理器（异常-only），入口 = 种子本体
-            // ——与「种子即唯一入边」等值，只是时机移到正常流收敛之后，种
+            // ，与种子即唯一入边等值，只是时机移到正常流收敛之后，种
             // 子不再抢先单跑。inState 已有状态（处理器即方法入口等罕见形
             // 态）则种子并入既有帧后重跑。
             const auto seedIt = handlerSeed.begin();
@@ -1358,9 +1358,9 @@ DomainResult<V> DomainEngine<V>::analyze(const ir::CodeUnit& u, const MethodSig*
             if ((inp->op == core::Op::JSR || inp->op == core::Op::JSR_W) &&
                 dom_.modelsSubroutines()) {
                 // C2（仅建模子程序的域）：jsr 的顺序后继是返回点，只能经 ret
-                // 到达——不发顺序边（JVMS §4.10.2.5：jsr 只把控制流交给子
+                // 到达，不发顺序边（JVMS §4.10.2.5：jsr 只把控制流交给子
                 // 程序入口）。BestEffort 不建模 ret，保留 legacy 双后继传播
-                //（返回点经 fallthrough 保持可达——bit-identical 契约）。
+                //（返回点经 fallthrough 保持可达，bit-identical 契约）。
                 fallthrough = false;
             }
         } else if (sh == core::Shape::TableSwitch || sh == core::Shape::LookupSwitch) {
@@ -1374,7 +1374,7 @@ DomainResult<V> DomainEngine<V>::analyze(const ir::CodeUnit& u, const MethodSig*
             if (op == core::Op::RET && dom_.modelsSubroutines()) {
                 // 子程序返回（JVMS §6.5 ret/§4.10.2.5）：后继 = 返回地址槽
                 // 指向的调用方 jsr 的顺序后继。RET 自身无 transfer 效应，后
-                // 状态即子程序出口态——子程序未改写的局部槽保留调用方值
+                // 状态即子程序出口态，子程序未改写的局部槽保留调用方值
                 //（单调用点时精确；JVMS §4.10.2.5 合并规则的单调用点退化形态）。
                 // 槽空/cat2 垫底/非返回地址（含 Top）= 畸形；返回点越界
                 //（jsr 是方法末条指令，返回地址无落点）= 结构畸形：两者显式
@@ -1459,18 +1459,18 @@ DomainResult<V> DomainEngine<V>::analyze(const ir::CodeUnit& u, const MethodSig*
         };
         // 精确档异常出口边：try 范围内可达的**可抛指令** → 每个覆盖它的
         // handler（异常表序）。入口状态 = 抛出点 in-state locals（transfer
-        // 前形态——&lt;init&gt; 翻转属正常后继效应，异常路径不携带）+
+        // 前形态，&lt;init&gt; 翻转属正常后继效应，异常路径不携带）+
         // [catch_type 对应类型]；栈整体替换为异常值，与 JVM verifier 语义
         // 一致。多抛出点经同一合并协议收敛（异类引用走 resolver）。先于
         // 控制流后继发射，取的是未经自环合并污染的 in-state。
         //
         // 发射域 = try 范围内全部可达指令（不做可抛性过滤）。HotSpot
         // split verifier 对 any handler 区间内的指令逐条合并（matrix 语料
-        // weirdSum 实锤：区间内 iinc 也产生合并边——VerifyError Current
+        // weirdSum 实锤：区间内 iinc 也产生合并边，VerifyError Current
         // Frame bci 指向它）；ZKM 原罐能过是靠声明帧 chop 修剪（被覆盖
         // 槽隐式 top 吸收）。本域对同形的承载 = StrictDomain::merge 把
         // int×Ref 冲突吸成 Bottom（边×边 meet 的冲突标记）+ 序列化面把
-        // Bottom 落为 top_variable_info——引擎侧滤边反而让声明帧保持
+        // Bottom 落为 top_variable_info，引擎侧滤边反而让声明帧保持
         // 具体类型，被异常边携带的覆盖帧打回。死范围（区间内无可抛指
         // 令）的 handler 会有 Bottom 混合帧出 SMT，声明宽松不违反
         // assignability（边→声明单方向检查），且不可达帧 verifier 跳过。
@@ -1542,7 +1542,7 @@ public:
         return VType{VKind::Ref, e.catchCp};
     }
 
-    /// 形状来自 opcode（与 store 过什么无关——形状域的语义本就如此）。
+    /// 形状来自 opcode（与 store 过什么无关，形状域的语义本就如此）。
     VType loadLocal(const ir::Insn& load, ir::InsnId, const VType&, ca::u32) override
     {
         return VType{detail::loadKind(load.op), 0};
@@ -1610,7 +1610,7 @@ private:
 /// @brief Strict 域：类型精确 + 显式拒绝。
 ///
 /// 与形状域的分工：transfer 的类型全部由 opcode 与描述符字面注入（单类内
-/// 自足）——new 压 Uninitialized{该 new 的 pc}、invokespecial \<init\> 翻转、
+/// 自足），new 压 Uninitialized{该 new 的 pc}、invokespecial \<init\> 翻转、
 /// get/put/invoke/checkcast/ldc/aaload 携带精确内部名、aload/store 靠默认
 /// 恒等穿透已存值；merge 的结构性规则（Top 吸收、Null 引用底、Uninitialized
 /// 按 offset 判等）内置，跨类引用合并交注入 resolver，不可解置 TypeConflict

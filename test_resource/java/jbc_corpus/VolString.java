@@ -1,4 +1,4 @@
-// VolString.java — libjbc 语料：字符串 switch/比较/装箱字符串/char 运算/UTF-8 常量。
+// VolString.java: libjbc 语料：字符串 switch/比较/装箱字符串/char 运算/UTF-8 常量。
 package jbcx.corpus;
 
 public final class VolString {

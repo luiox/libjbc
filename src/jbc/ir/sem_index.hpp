@@ -6,7 +6,7 @@
 /// @brief       语义 intern 的去重索引（ClassSession 内部实现细节）。
 ///
 /// 独立成内部头只有一个原因：ClassSession 的构造/析构在 session_lifecycle.cpp，而
-/// SemIndex 定义在 operand.cpp——unique_ptr 成员的异常清理路径需要完整
+/// SemIndex 定义在 operand.cpp，unique_ptr 成员的异常清理路径需要完整
 /// 类型，两个编译单元都得看到同一个定义。
 #pragma once
 

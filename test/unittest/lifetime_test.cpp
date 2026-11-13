@@ -1,6 +1,6 @@
 /// @file        lifetime_test.cpp
 /// @brief       寿命接管测试：保活句柄（CodeUnitRef / *SemRef）把会话寿命
-///        带在身上——会话变量销毁后视图仍安全；句柄全部销毁后会话真的
+///        带在身上，会话变量销毁后视图仍安全；句柄全部销毁后会话真的
 ///        归零（weak_ptr 两侧验证：不欠也不漏）。
 #include <gtest/gtest.h>
 
@@ -101,7 +101,7 @@ TEST(LifetimeTest, KeepaliveHandlesOutliveSessionVariable)
         constant = s->constSemRef(*ldc);
         cls      = s->classSemRef(*call);   // 无类操作数：name 为空，但保活成立
 
-        // 会话变量在这里销毁——句柄必须独立保活。
+        // 会话变量在这里销毁，句柄必须独立保活。
         ASSERT_FALSE(watch.expired());
     }
 
@@ -124,7 +124,7 @@ TEST(LifetimeTest, KeepaliveHandlesOutliveSessionVariable)
 
 TEST(LifetimeTest, KeepaliveSupportsCrossScopeEditing)
 {
-    // 消费者把 promote 句柄存出作用域、之后继续编辑——寿命接管下不需要
+    // 消费者把 promote 句柄存出作用域、之后继续编辑，寿命接管下不需要
     // 手动保活会话（旧式裸指针此时已悬垂）。
     jbc::ir::CodeUnitRef unit;
     {

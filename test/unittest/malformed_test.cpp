@@ -1,7 +1,7 @@
 /// @file        malformed_test.cpp
 /// @brief       降级读路径：畸形输入样本族的契约断言。
 ///
-/// 契约：每个畸形样本的产物必须显式——
+/// 契约：每个畸形样本的产物必须显式，
 /// 1. 结构损坏（边界无法确定）→ reader 阶段 Err，错误码逐族钉死，不产出模型；
 /// 2. 结构可确定、语义不合规 → 读出模型标记 Recovered（或 decode 阶段
 ///    显式 Err），降级事实必须可查询（ParseState/诊断），绝不允许静默成功；
@@ -86,8 +86,8 @@ TEST(MalformedTest, CpSelfReferenceIsRejected)
 
 TEST(MalformedTest, CpTwoNodeCycleIsRejected)
 {
-    // 双节点环：Class#6.name = Utf8#7？不构成环——真正的环要 Utf8 参与，
-    // 而 Utf8 无引用域。JVMS 的 CP 引用图是无环的（DAG），任何「环」都表现为
+    // 双节点环：Class#6.name = Utf8#7？不构成环，真正的环要 Utf8 参与，
+    // 而 Utf8 无引用域。JVMS 的 CP 引用图是无环的（DAG），任何环都表现为
     // tag 不符或越界。这里钉一个 tag 不符环：Methodref.class_index 指向另一个
     // Methodref（不是 Class）。
     ClassBuilder cb;
@@ -196,13 +196,13 @@ TEST(MalformedTest, TruncatedCodeBodyFailsDecodeButWritesByteExact)
     ASSERT_TRUE(d.is_err());
     EXPECT_EQ(d.unwrap_err(), ReadError::Truncated);
 
-    // 写回侧：copy-through 与解码成败无关——未触碰写回仍字节一致。
+    // 写回侧：copy-through 与解码成败无关，未触碰写回仍字节一致。
     EXPECT_EQ(jbc::test::writeOk(*cf), bytes);
 }
 
 TEST(MalformedTest, TruncatedKnownAttrBodiesFailDecode)
 {
-    // 各已知属性各自的「半截体」：声明计数读完、载荷不足。
+    // 各已知属性各自的半截体：声明计数读完、载荷不足。
     // （Signature 已建模（u2 体）：半截体同样 decode Err；未触碰写回逐字节
     //   copy，手术拒绝面在 sig_attr_test。）
     struct Case
@@ -322,7 +322,7 @@ TEST(MalformedTest, ExceptionEndMidInstructionRejectedAtPromote)
 
 TEST(MalformedTest, ExceptionEndAtCodeLengthIsLegal)
 {
-    // 对照组：end == code_length 是「方法末尾」合法形态，promote 必须成功。
+    // 对照组：end == code_length 是方法末尾合法形态，promote 必须成功。
     const Bytes code = {0x11, 0x00, 0x01, 0x57, 0xb1};
     const Bytes bytes = classWithCode(code, {ExcSpec{0, 5, 3, 0}});
     auto s = jbc::ir::makeSessionFromBytes(ByteView{bytes});

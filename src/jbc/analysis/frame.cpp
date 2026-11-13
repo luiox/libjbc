@@ -3,7 +3,7 @@
 ///
 /// v0.3.8 起 worklist/指令效应/合并/异常播种全部在 domain.hpp 的模板引擎；
 /// 本文件只留：公开描述符工具（包装 detail 扫描）、ShapeResolver::merge
-/// （公共 API，ShapeDomain 转发到此——单一实现）、FrameEngine 构造与
+/// （公共 API，ShapeDomain 转发到此，单一实现）、FrameEngine 构造与
 /// DomainResult → FrameAt 转换。
 #include "jbc/analysis/frame.hpp"
 

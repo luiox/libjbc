@@ -3,7 +3,7 @@
 ///
 /// 两条构造路径各司其职：正例走 ClassBuilder 字节（readClass 内含
 /// validateReferences，证明与真实解析产物兼容）；坏链走 ConstantPool 直构
-/// （addXxx 家族不校验，恰好提供构造悬垂/坏 Utf8 链的自由度——这类输入
+/// （addXxx 家族不校验，恰好提供构造悬垂/坏 Utf8 链的自由度，这类输入
 /// 根本过不了 readClass，却是池级原语必须安全表达失败的对象）。
 #include <gtest/gtest.h>
 
@@ -181,7 +181,7 @@ TEST(CpResolveTest, HandleRejectsInvalidShape)
 
     HandleSem sem;
 
-    // kind 域外：0 与 10（严格口径，不做「非字段一律按方法」兜底）。
+    // kind 域外：0 与 10（严格口径，不做非字段一律按方法兜底）。
     EXPECT_FALSE(resolveHandleCp(cp, cp.addMethodHandle(0, mref), sem));
     EXPECT_FALSE(resolveHandleCp(cp, cp.addMethodHandle(10, mref), sem));
 
@@ -211,7 +211,7 @@ TEST(CpResolveTest, HandleRejectsInvalidShape)
     EXPECT_EQ(sem.kind, 42u);
     EXPECT_TRUE(sem.isInterface);
 
-    // 链上坏 Utf8：Class.a 指向 Integer——handle 与成员引用一跳同拒。
+    // 链上坏 Utf8：Class.a 指向 Integer，handle 与成员引用一跳同拒。
     ConstantPool cp2;
     const ca::u32 intIdx  = cp2.addInteger(7);
     const ca::u32 badCls  = cp2.addClass(intIdx);

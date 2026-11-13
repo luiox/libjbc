@@ -35,7 +35,7 @@ public final class Main {
         return sum;
     }
 
-    /** 反射读 CACHED 字段类型注解的 cls 值——TA 手术正确性的真跑断言。 */
+    /** 反射读 CACHED 字段类型注解的 cls 值，TA 手术正确性的真跑断言。 */
     public static String taName() {
         try {
             return Main.class.getField("CACHED").getAnnotatedType()

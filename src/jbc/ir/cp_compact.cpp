@@ -1,9 +1,9 @@
 /// @file        cp_compact.cpp
-/// @brief       CP 显式压缩——计划/应用两相的全量重索引。
+/// @brief       CP 显式压缩，计划/应用两相的全量重索引。
 ///
 /// 计划相只读：解码全部属性面 → 按封闭集分派 → 以规范根序遍历引用面 intern
 /// 出新池与旧→新映射（任何 Err 不留半截模型）。应用相按映射一次性换池并重写
-/// 全部引用面——每个写入值都在计划相定形，构造上不可失败。
+/// 全部引用面，每个写入值都在计划相定形，构造上不可失败。
 #include "jbc/ir/cp_compact.hpp"
 
 #include <map>
@@ -30,7 +30,7 @@ using core::ConstantPool;
 // ---- 压缩侧结构化属性（第 2 层）--------------------------------
 // 封闭集属性已全部立 typed 模型并收编进两相 switch 的 typed 分支（四件结构元数据
 // → Nest 族/Record/Module 族 → 注解族四件 + ConstantValue）；Raw 名字分派
-// 的本地解析随 ConstantValue 接线整体退役——Raw 体只剩零
+// 的本地解析随 ConstantValue 机制整体退役，Raw 体只剩零
 // 长透传，非零长一律显式拒绝（属性名定位）。
 
 /// @brief 指令是否携带 CP 操作数（CP1/CP2/CP2Count/CP2Zero2/CP2Dims 五形）。
@@ -62,11 +62,11 @@ public:
 
     // ---- 计划相 · 第一步：闭包标记（只读模型；解码置 Decoded 不改字节）----
     //
-    // 映射核心采用「子序 + 代表去重」方案：新池 = 活条目按老索引
+    // 映射核心采用子序 + 代表去重方案：新池 = 活条目按老索引
     // 升序的子序列，等价类只保留最小老索引作代表。由此 map_[k] ≤ k 对一切
     // 活条目恒成立（代表：升序秩不超自身老下标；重复：并入更小老下标的代表
-    // 槽），CP1（ldc）操作数域宽因此从不变宽——这是宽形态不收缩裁决的安全
-    // 前提。规范根序只决定「哪些条目活」，不影响新索引。
+    // 槽），CP1（ldc）操作数域宽因此从不变宽，这是宽形态不收缩裁决的安全
+    // 前提。规范根序只决定哪些条目活，不影响新索引。
 
     Result<void, CompactFailure> plan()
     {
@@ -202,7 +202,7 @@ public:
             case core::CpTag::MethodHandle:
             case core::CpTag::Dynamic:
             case core::CpTag::InvokeDynamic: {
-                // a 列分别是 reference_kind / bootstrap 下标——非 CP 索引。
+                // a 列分别是 reference_kind / bootstrap 下标，非 CP 索引。
                 const Result<void, CompactFailure> rb = markCp(e.b);
                 if (rb.is_err()) {
                     return Err(rb.unwrap_err());
@@ -258,7 +258,7 @@ public:
             cid = classByKey_(std::make_tuple(tag, lo, hi));
         } else {
             // MethodHandle 的 a 是 reference_kind、Dynamic/InvokeDynamic 的 a
-            // 是 bootstrap 下标——非 CP 索引，原样参与键，递归只进真正的
+            // 是 bootstrap 下标，非 CP 索引，原样参与键，递归只进真正的
             // 引用列（MH/Dyn/Indy 是 b 列；其余 a（必要时 b）列）。
             if (e.tag == core::CpTag::MethodHandle || e.tag == core::CpTag::Dynamic
                 || e.tag == core::CpTag::InvokeDynamic) {
@@ -494,7 +494,7 @@ private:
         return f;
     }
 
-    /// @brief 应用相的索引换算；0 是「无条目」哨兵，原样穿透。越界按 0
+    /// @brief 应用相的索引换算；0 是无条目哨兵，原样穿透。越界按 0
     ///        落到一致性网（计划/应用分派不一致的实现缺陷显式爆掉，不 UB）。
     ca::u32 remap(ca::u32 oldIdx) const noexcept
     {
@@ -727,7 +727,7 @@ private:
             }
             case AttrKind::Record: {
                 // 组件 name/descriptor 两槽是 CP Utf8；组件嵌套属性表走
-                // planAttr 递归（与 Code 嵌套同一通道——解码、闭包标记、
+                // planAttr 递归（与 Code 嵌套同一通道，解码、闭包标记、
                 // 重映射计划在嵌套槽上原样生效）。
                 auto& b = static_cast<core::RecordAttr&>(body);
                 for (core::RecordAttr::Component& c : b.components) {
@@ -859,7 +859,7 @@ private:
             }
             case AttrKind::ParameterAnnotations: {
                 // 逐参数逐注解全槽闭包（type/元素名/'e' 双槽/'@' 嵌套/'['
-                // 递归/常量与类字面量）——与 Annotations 分支同一注解体遍历，
+                // 递归/常量与类字面量），与 Annotations 分支同一注解体遍历，
                 // 参数下标维不携带 CP 引用。
                 auto& b = static_cast<core::ParameterAnnotationsAttr&>(body);
                 for (auto& group : b.parameters) {
@@ -968,7 +968,7 @@ private:
 
     Result<void, CompactFailure> planCode(const AttrSlot& slot, CodeAttr& code, const bool staleCode)
     {
-        // 升格方法：backing 指令流与异常表是陈旧面，不进引用闭包——其中的
+        // 升格方法：backing 指令流与异常表是陈旧面，不进引用闭包，其中的
         // 条目（如已被 DOM 编辑替换的旧常量）应当死在压缩里；嵌套属性面
         // （LNT/LVT 等）在 lower 中按 pc 重定向保留，引用仍是活的，照常遍历。
         if (!staleCode) {
@@ -1519,7 +1519,7 @@ Result<void, CompactFailure> compactConstantPool(ClassSession& s)
         f.code = CompactError::Internal;
         return Err(f);
     }
-    // 记账：类级实改 → 消费者按「重扫整类」失效。
+    // 记账：类级实改 → 消费者按重扫整类失效。
     ChangeRecord r;
     r.kind = ChangeKind::ClassMetadata;
     s.noteChange(r);

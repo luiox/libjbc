@@ -1,4 +1,4 @@
-// VolLambda.java — libjbc 语料：lambda 全形态（捕获/非捕获/方法引用/构造器引用/this 捕获/循环内捕获）。
+// VolLambda.java: libjbc 语料：lambda 全形态（捕获/非捕获/方法引用/构造器引用/this 捕获/循环内捕获）。
 // release 8 → invokedynamic + LambdaMetafactory BSM + lambda$ 合成方法。
 package jbcx.corpus;
 

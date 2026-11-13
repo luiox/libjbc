@@ -9,7 +9,7 @@
 ///
 /// ```text
 /// 解析期：读到 {name_index, length} 就记录 span 并 skip(length)
-///         —— 内容一个字节都不看，也不为它分配任何节点
+///        : 内容一个字节都不看，也不为它分配任何节点
 /// 使用期：首次访问才解码，结果挂在 body 上，状态 Untouched → Decoded
 /// 写回期：state ∈ {Untouched, Decoded} → 原样 copy 源 span
 ///         state ∈ {Modified, New}      → 重编码 body
@@ -18,7 +18,7 @@
 /// 由此得到两条旧库没有的性质：
 ///   - **保真不依赖重编码正确**：没碰过的东西根本不经过编码器；
 ///   - **改动不可能被忘记记录**：可变访问只有 AttrSlot::mutate 一个入口，
-///     它顺手置脏，不存在「改了但状态还是 Decoded」的悬空状态。
+///     它顺手置脏，不存在改了但状态还是 Decoded的悬空状态。
 #pragma once
 
 #include <memory>
@@ -85,7 +85,7 @@ private:
 /// @brief 属性槽：一个属性的全部信息，无论它是否已被解码。
 ///
 /// 定义上刻意先于各 AttrBody 派生类：CodeAttr 的嵌套属性也是 AttrSlot，
-/// 二者互相需要，槽作为「容器侧」先落地。
+/// 二者互相需要，槽作为容器侧先落地。
 struct AttrSlot
 {
     /// @brief 槽的状态，决定写回走 copy 还是重编码。
@@ -97,11 +97,11 @@ struct AttrSlot
     };
 
     ca::u32 nameCp = 0;  ///< Utf8 CP 索引（属性名）
-    ByteSpan data;       ///< 内容在源字节流中的范围（eager 已知——lazy 的索引）
+    ByteSpan data;       ///< 内容在源字节流中的范围（eager 已知，lazy 的索引）
     State state = State::Untouched;
     std::unique_ptr<AttrBody> body;
 
-    /// @brief 内容是否已被解码（lazy 的观察点：测试据此断言「没碰就没解」）。
+    /// @brief 内容是否已被解码（lazy 的观察点：测试据此断言没碰就没解）。
     bool decoded() const noexcept { return body != nullptr; }
 
     /// @brief 写回是否必须走重编码。
@@ -113,7 +113,7 @@ struct AttrSlot
     /// @brief 只读查看已解码内容；未解码返回 nullptr（不触发解码、不置脏）。
     const AttrBody* peek() const noexcept { return body.get(); }
 
-    /// @brief 取可变指针并置脏——修改的唯一入口，改动因此不可能被忘记记录。
+    /// @brief 取可变指针并置脏，修改的唯一入口，改动因此不可能被忘记记录。
     ///
     /// @warning 未解码时返回 nullptr：调用方必须先 decode。
     AttrBody* mutate() noexcept
@@ -148,7 +148,7 @@ struct AttrSlot
 
 /// @brief 未建模属性：持有内容字节的副本。
 ///
-/// 这是保真的兜底形态——libjbc 不认识的属性不会丢，也不会被猜错语义，
+/// 这是保真的兜底形态，libjbc 不认识的属性不会丢，也不会被猜错语义，
 /// 未修改时它们甚至不必存在（写回走 span copy），解码后才是这个对象。
 class RawAttr : public AttrBody
 {
@@ -168,8 +168,8 @@ private:
 
 /// @brief Code 属性（v0.1：解到 code 字节，不解码指令）。
 ///
-/// 指令解码属于 v0.2——code 数组内部没有索引结构，要定位第 n 条指令只能线性
-/// 扫过前面所有指令，因此「只解一半方法体」不成立；Code 属性是 L2 lazy 的
+/// 指令解码属于 v0.2，code 数组内部没有索引结构，要定位第 n 条指令只能线性
+/// 扫过前面所有指令，因此只解一半方法体不成立；Code 属性是 L2 lazy 的
 /// 最小完整单位。异常表与 Code 内属性在此一并解析（它们都在 Code 的定长头里
 /// 有 count，代价极低）。
 class CodeAttr : public AttrBody
@@ -229,7 +229,7 @@ public:
 
 /// @brief LineNumberTable 属性（JVMS 4.7.12）：pc → 源码行。
 ///
-/// startPc 是「pc 受 Code 编辑影响」的典型字段——relocation 由持有 pcmap
+/// startPc 是pc 受 Code 编辑影响的典型字段，relocation 由持有 pcmap
 /// 的 lower 路径处理，模型本身只存值不存策略。
 class LineNumberTableAttr : public AttrBody
 {
@@ -283,7 +283,7 @@ public:
 /// v0.2 的建模边界是**结构性**：保留每个 frame 的原始 type 标签与按类型
 /// 分派的载荷（offset/delta、locals/stack 的 verification_type 序列），保证
 /// 解码→编码字节一致。语义视图（跨 frame 链式推导出的完整 locals）是
-/// 后续帧引擎的 accessor，不进本模型——否则 chop/append 的推导状态机会把
+/// 后续帧引擎的 accessor，不进本模型，否则 chop/append 的推导状态机会把
 /// 保真层和语义层搅在一起。
 ///
 /// 编码知识单源：verification_type_info 的 tag 常量、帧形态标签边界与
@@ -315,7 +315,7 @@ public:
         ca::u32 cp = 0;      ///< 仅 Object(7)=CPClass / Uninit(8)=offset 两用
 
         /// @brief 条目相等（tag + 载荷；Object 的载荷经 intern 后同索引即
-        ///        同名，Uninitialized 的载荷同 pc 即同 new）——生成器选形
+        ///        同名，Uninitialized 的载荷同 pc 即同 new），生成器选形
         ///        与测试共用。
         friend bool operator==(const VType& a, const VType& b) noexcept
         {
@@ -470,7 +470,7 @@ public:
     };
 
     /// @brief localvar_target 一行（start_pc/length/index 三 u2，布局同 LVT 行
-    ///        的 pc 段 + slot，但无 name/descriptor——引用的是槽位不是名字）。
+    ///        的 pc 段 + slot，但无 name/descriptor，引用的是槽位不是名字）。
     struct LocalVarEntry
     {
         ca::u32 startPc = 0;
@@ -513,7 +513,7 @@ public:
 /// start_pc 是范围首指令 pc；end_pc 是**含末指令**的 pc（javac 写
 /// entry.endPc-1），二者都是指令起始 pc，重定位各自精确命中 pcmap。
 /// char_start/char_end 是源文件位置的 (line << 10) | column 编码（0 起），
-/// flags 是 CRT_* 位集——两者与字节码无关，按不透明整数保真。JDK 11+ 的
+/// flags 是 CRT_* 位集，两者与字节码无关，按不透明整数保真。JDK 11+ 的
 /// javac 已停发本属性（-Xjcov 被忽略），仅旧编译器产物携带；Code 嵌套挂载。
 class CharacterRangeTableAttr : public AttrBody
 {
@@ -541,7 +541,7 @@ public:
 ///        Exceptions）的共同边界，成文于此避免四处重复：
 ///
 ///  1. **只挂类级/成员级属性表，不 Code 嵌套，载荷全是 CP 索引与访问位，
-///     无任何 pc 偏移**——relocation 契约（封闭集）不涉及它们，布局
+///     无任何 pc 偏移**，relocation 契约（封闭集）不涉及它们，布局
 ///     改动不需要、也不得对这四件做任何重定位。
 ///  2. **codec 形状与既有 typed 属性同铁律**：半截体 decode 显式 Err、
 ///     声明结构后的多余字节奏 trailing、编码逐字段过 u16 域宽
@@ -569,9 +569,9 @@ public:
 ///
 /// 行三 CP 槽即类名手术面：inner_class_info/outer_class_info 指向 CP
 /// Class 条目（inner_name 语义随 outer 存在性约束），inner_name 是简单名
-/// Utf8。既有 Raw 手术路径（上层消费方 remapper）对三槽的改写语义——类名映射
+/// Utf8。既有 Raw 手术路径（上层消费方 remapper）对三槽的改写语义，类名映射
 /// 命中才动、outer==0 保 0、简单名随内部类二进制名映射同步且仅在全名命中
-/// 旧简单名时改写——与 @ref Row 三槽一一对应，typed 读写可完整表达
+/// 旧简单名时改写，与 @ref Row 三槽一一对应，typed 读写可完整表达
 /// 。
 class InnerClassesAttr : public AttrBody
 {
@@ -598,7 +598,7 @@ public:
 ///        直接包围方法（类级挂载）。
 ///
 /// classCp 指向 CP Class（直接外围类，恒非 0）；methodNatCp 指向 CP
-/// NameAndType，**0 合法**——外围类是实例初始化器或静态初始化器时不指名
+/// NameAndType，**0 合法**，外围类是实例初始化器或静态初始化器时不指名
 /// 方法。两槽即类名手术面：类名重映射动 classCp；方法重映射动 methodNatCp
 /// （解析 NAT 后换新条目，NestHost/NestMembers 不在本属性）。与
 /// @ref InnerClassesAttr 同批接 typed 分派（见上）。
@@ -639,7 +639,7 @@ public:
 ///
 /// 体是单 `u2 host_class_index`（CP Class）。与 NestMembers/PermittedSubclasses
 /// 三件同边界：只挂类级属性表、不 Code 嵌套、载荷全为 CP 索引、无 pc 偏移
-/// —— relocation 封闭集不涉及；codec 同铁律（半截体 Err、trailing 同族、
+///: relocation 封闭集不涉及；codec 同铁律（半截体 Err、trailing 同族、
 /// u16 域宽闸门）。hostClassCp 即类名手术面（nest 宿主重映射 = 单 CP Class
 /// 重指向，与既有 Raw 手术路径语义一一对应）。
 class NestHostAttr : public AttrBody
@@ -662,7 +662,7 @@ public:
 ///
 /// 体是 `u2 number_of_classes + u2 classes[]`，条目全为 CP Class。成员类名
 /// 即手术面（nest 成员重映射 = 逐条目 CP Class 重指向）。宿主自身不出现在
-/// 表中（JVMS 4.7.28），0 不是合法条目值但解码不做语义校验——结构保真层
+/// 表中（JVMS 4.7.28），0 不是合法条目值但解码不做语义校验，结构保真层
 /// 原样承载。
 class NestMembersAttr : public AttrBody
 {
@@ -700,7 +700,7 @@ public:
 ///
 /// 体是 `u2 record_component_count + components[]`；每个 component 是
 /// `u2 name_index（Utf8）+ u2 descriptor_index（Utf8 字段描述符）+
-/// u2 attributes_count + attributes[]`——组件上是**嵌套属性表**，javac 会
+/// u2 attributes_count + attributes[]`，组件上是**嵌套属性表**，javac 会
 /// 在泛型组件上挂 Signature、在带注解组件上挂 Runtime{Visible,Invisible}-
 /// Annotations 等嵌套属性。
 ///
@@ -721,7 +721,7 @@ public:
         ca::u32 descriptorCp = 0;  ///< CP Utf8（字段描述符）
 
         /// @brief 组件上的嵌套属性（Signature / Runtime{Visible,Invisible}-
-        ///        Annotations 等），同样 lazy——只读目录不解内容。
+        ///        Annotations 等），同样 lazy，只读目录不解内容。
         std::vector<AttrSlot> attrs;
     };
 
@@ -740,12 +740,12 @@ public:
 /// exports/opens 行是 `{包索引（CP Package）, flags, to[]（CP Module）}`（to
 /// 空 = 未限定导出/开放），uses 全为 CP Class，provides 行是
 /// `{服务索引（CP Class）, with[]（CP Class）}`。与 @ref ModuleMainClassAttr
-/// 的边界：JVMS 4.7.25 的体**不含**主类索引段——主类由独立的
+/// 的边界：JVMS 4.7.25 的体**不含**主类索引段，主类由独立的
 /// ModuleMainClass（4.7.27）承载，javac 17.0.8 实测产物体恰在 provides 后
 /// 结束（体尾多出的 2 字节属 trailing，同族保留）。
 ///
 /// 与 Nest 族/Record 同边界：只挂类级属性表、不 Code 嵌套、载荷全为 CP
-/// 索引与访问位、无 pc 偏移—— relocation 封闭集不涉及。段旗语
+/// 索引与访问位、无 pc 偏移， relocation 封闭集不涉及。段旗语
 /// （ACC_TRANSITIVE=0x0020 / ACC_STATIC_PHASE=0x0040 / ACC_OPEN=0x0020 /
 /// ACC_SYNTHETIC=0x1000 / ACC_MANDATED=0x8000）按不透明 u16 保真，与
 /// InnerClasses 的 access_flags 同款处理。
@@ -775,7 +775,7 @@ public:
         std::vector<ca::u32> toCps;   ///< CP Module（限定目标）
     };
 
-    /// @brief opens 指令行（与 exports 布局同构，typed 面各归各——开放与
+    /// @brief opens 指令行（与 exports 布局同构，typed 面各归各，开放与
     ///        导出语义不同，消费方按各自类型分派）。
     struct Open
     {
@@ -831,7 +831,7 @@ public:
 /// @brief ModuleMainClass 属性（JVMS 4.7.27）：模块主类（类级挂载）。
 ///
 /// 体是单 `u2 main_class_index`（CP Class），与 NestHost 同形状。写入方是
-/// jlink/jar 工具链（javac 不产——module-info 源语言无主类指令）；主类名
+/// jlink/jar 工具链（javac 不产，module-info 源语言无主类指令）；主类名
 /// 即手术面（重映射 = 单 CP Class 重指向）。
 class ModuleMainClassAttr : public AttrBody
 {
@@ -852,7 +852,7 @@ public:
 /// @brief Runtime{Visible,Invisible}ParameterAnnotations 属性（JVMS
 ///        4.7.18/4.7.19）：方法参数维的注解表（方法级挂载）。
 ///
-/// 体是 `u1 num_parameters + { u2 num_annotations + annotation[] }*`——与
+/// 体是 `u1 num_parameters + { u2 num_annotations + annotation[] }*`，与
 /// @ref AnnotationsAttr 的差异只在多了一层参数下标维（第 i 个内层表对应方法
 /// 第 i 个参数槽，含无注解参数的空表）；注解体（type_index + element_value
 /// 表）与 @ref AnnotationsAttr::Annotation 完全同构，直接复用同一模型，不造
@@ -898,7 +898,7 @@ public:
 /// 体是 `u1 parameters_count + { u2 name_index, u2 access_flags }*`，行序与
 /// 参数槽位一致（含 synthetic/mandated 参数行，与
 /// @ref ParameterAnnotationsAttr 的外层下标同坐标系）。name_index 指向 CP
-/// Utf8，**0 合法**——无源码名可用的参数（编译器合成等）不指名；access_flags
+/// Utf8，**0 合法**，无源码名可用的参数（编译器合成等）不指名；access_flags
 /// 是 ACC_FINAL(0x0010)/ACC_SYNTHETIC(0x1000)/ACC_MANDATED(0x8000) 位集，
 /// 按不透明 u16 保真（与 InnerClasses 的 access_flags 同款）。参数名即手术
 /// 面（改名 = 单 u2 Utf8 重指向）。

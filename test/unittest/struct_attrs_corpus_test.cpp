@@ -8,7 +8,7 @@
 /// 分布断言只在自产语料模式硬性生效（javac 产物保证四件齐备，含局部类/
 /// 匿名类的 EnclosingMethod；Nest 族三件由独立 --release 17 小语料保证、
 /// Record 由独立 --release 16 小语料保证、Module 由独立 --release 17 小语
-/// 料保证——主语料 --release 8 产物是 v52，构造上不带这些面）；env 注入
+/// 料保证，主语料 --release 8 产物是 v52，构造上不带这些面）；env 注入
 /// （混淆产物）可能剥属性，分布是显式事实而非覆盖缺口（同款
 /// 处理），恒等门两种模式一律生效。
 #include <gtest/gtest.h>
@@ -167,7 +167,7 @@ TEST(StructAttrsCorpusGate, AllStructAttrsTypedRoundtripByteIdentity)
             else if (slotNamed(*cf, slot, "Record")) {
                 // 门二之 Record：typed 直读（组件表 + 嵌套属性槽分布统计）→
                 // makeNew 强制重编码。嵌套槽未触碰走 copy-through，字节恒等
-                // 同时钉住「组件表重编码不动嵌套面」。
+                // 同时钉住组件表重编码不动嵌套面。
                 auto d = decodeRecordBody(*cf, slot);
                 ASSERT_TRUE(d.is_ok()) << path;
                 {
@@ -266,7 +266,7 @@ TEST(StructAttrsCorpusGate, AllStructAttrsTypedRoundtripByteIdentity)
         EXPECT_GT(counts.enclosingMethod, 0u) << "corpus lost local/anonymous samples?";
         EXPECT_GT(counts.exceptions, 0u);
     }
-    // Nest 族分布断言：自产 nest 语料（--release 17）保证三件齐备——
+    // Nest 族分布断言：自产 nest 语料（--release 17）保证三件齐备，
     // nestmate 对产出 NestHost+NestMembers，sealed 层级产出 PermittedSubclasses。
     // 主语料（--release 8）构造上不带这三件，硬断言只钉 nest 语料可用时。
     if (nest.stage == jbc::test::corpus::Stage::SelfProduced) {
@@ -275,7 +275,7 @@ TEST(StructAttrsCorpusGate, AllStructAttrsTypedRoundtripByteIdentity)
         EXPECT_GT(counts.permittedSubclasses, 0u) << "nest corpus lost sealed samples?";
     }
     // Record 分布断言：自产 record 语料（--release 16）保证属性与两个组件
-    // 嵌套面（Signature/注解）齐备——泛型组件产出组件 Signature、RECORD_
+    // 嵌套面（Signature/注解）齐备，泛型组件产出组件 Signature、RECORD_
     // COMPONENT 目标注解产出组件 RuntimeVisibleAnnotations。主语料（--release 8）
     // 构造上不带 Record，硬断言只钉 record 语料可用时；env
     // 注入模式分布只记录（实测注入语料 54 类携带）。
@@ -288,7 +288,7 @@ TEST(StructAttrsCorpusGate, AllStructAttrsTypedRoundtripByteIdentity)
             << "record corpus lost annotated component samples?";
     }
     // Module 分布断言：自产 module 语料（--release 17）保证 Module 属性与
-    // 五段全形态齐备——transitive/static 旗语、to 限定导出、opens、uses、
+    // 五段全形态齐备，transitive/static 旗语、to 限定导出、opens、uses、
     // provides 由样本指令面保证。ModulePackages/ModuleMainClass javac 直译
     // 模式实测不产（typed 面由 crafted 用例钉住），不设分布硬断言。
     if (module.stage == jbc::test::corpus::Stage::SelfProduced) {

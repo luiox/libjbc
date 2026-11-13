@@ -73,7 +73,7 @@ Bytes makeOperandClass()
     cb.setVersion(52);
 
     // ldc str; getstatic out; swap; pop; pop; invokevirtual println;
-    // new SB; pop; return   —— 栈每步平衡。
+    // new SB; pop; return  : 栈每步平衡。
     Bytes code;
     code.push_back(0x12);
     code.push_back(static_cast<ca::u8>(strIdx & 0xFF));
@@ -183,7 +183,7 @@ TEST(OperandTest, EndToEndInstrumentWithCpOperands)
     jbc::ir::CodeUnit& cu = *p.unwrap();
     CodeEditor ed(cu);
 
-    // 入口插「ldc "marked"; pop」——需要语义层 intern 出 String 常量，
+    // 入口插ldc "marked"; pop，需要语义层 intern 出 String 常量，
     // 消费者不接触任何 CP 布局细节。
     const ca::u32 marked = s->internString("marked");
     ASSERT_TRUE(
@@ -397,7 +397,7 @@ TEST(OperandTest, SetMemberRecomputesInvokeinterfaceCount)
     EXPECT_EQ(m.desc, "(I)V");
     ASSERT_EQ(in->a, 2);   // 1 参数槽 + this
 
-    // 改指 (IJ)V：参数槽 1+2=3，count 必须重算为 4——只改 cp 不改 count 会
+    // 改指 (IJ)V：参数槽 1+2=3，count 必须重算为 4，只改 cp 不改 count 会
     // 产出 JVM 可拒绝的 class。
     ASSERT_TRUE(s->setMember(*in, jbc::ir::ClassSession::MemberSem::Kind::InterfaceMethod,
                              "p/I", "run", "(IJ)V"));
@@ -434,9 +434,9 @@ TEST(OperandTest, SetMemberRecomputesInvokeinterfaceCount)
 
 TEST(OperandTest, ForwardJumpPatternWithSetTarget)
 {
-    // 句柄式设计没有「先建标签再前向跳」；前向跳的标准模式是：
+    // 句柄式设计没有先建标签再前向跳；前向跳的标准模式是：
     // 分支先指向插入锚点，目标代码插完后 setTarget 精确改写。
-    // 构造 if (v==0) goto T; iconst_1; pop; T: return —— T 原指向锚点 return。
+    // 构造 if (v==0) goto T; iconst_1; pop; T: return: T 原指向锚点 return。
     ClassBuilder cb;
     const ca::u16 thisIdx = cb.utf8("p/T");
     const ca::u16 superIdx = cb.utf8("java/lang/Object");
@@ -464,7 +464,7 @@ TEST(OperandTest, ForwardJumpPatternWithSetTarget)
     const auto gotoId = cu.dom.order()[1];     // 原 goto：本测试把它改成条件跳
     const auto retLabel = cu.dom.createLabel(retId);
     ASSERT_TRUE(retLabel.is_ok());
-    // 目标代码已在（return 是既有指令）——直接改写分支：
+    // 目标代码已在（return 是既有指令），直接改写分支：
     // goto → ifne（弹 1），分支与直落都到 return，语义仍可 lower。
     ASSERT_TRUE(ed.setTarget(gotoId, retLabel.unwrap()).is_ok());
     {

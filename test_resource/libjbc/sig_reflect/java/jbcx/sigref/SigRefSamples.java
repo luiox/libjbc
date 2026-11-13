@@ -1,4 +1,4 @@
-// SigRefSamples.java — B1 反射对照样本：泛型声明全形态，Signature 属性与
+// SigRefSamples.java: B1 反射对照样本：泛型声明全形态，Signature 属性与
 // 反射 Type 树一一对照（jbc::type 签名树的验收 oracle）。
 // 覆盖：嵌套泛型 / 递归类型边界 / 通配符三态与捕获形态 / 递归实参 /
 // 泛型父类 / throws 类型变量 / 数组×泛型交叠。

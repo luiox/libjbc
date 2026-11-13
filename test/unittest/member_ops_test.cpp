@@ -138,7 +138,7 @@ TEST(MemberOpsA3Test, AddMethodProvisionsMetadataAndEmptyCode)
         ASSERT_TRUE(ed.append(jbc::ir::CodeEditor::simple(Op::ICONST_1)).is_ok());
         ASSERT_TRUE(ed.append(jbc::ir::CodeEditor::simple(Op::IRETURN)).is_ok());
     }
-    // desc 仍是 ()V 而体是 ireturn——测试只关心管线，JVM 门在 move 测试里
+    // desc 仍是 ()V 而体是 ireturn，测试只关心管线，JVM 门在 move 测试里
     // 用自洽样本；这里重读验证 lower 落盘即可。
     ASSERT_TRUE(jbc::ir::lowerMethod(*s, id).is_ok());
     auto bytes = jbc::test::writeOk(s->backing());
@@ -261,7 +261,7 @@ TEST(MemberOpsA3Test, RemovedHandleInvalidationAndSlotReuseGeneration)
     ASSERT_TRUE(r.is_err());
     EXPECT_EQ(r.unwrap_err(), LowerError::InvalidHandle);
 
-    // 重建：新成员复用同槽，generation 自增——旧句柄不会复活。
+    // 重建：新成员复用同槽，generation 自增，旧句柄不会复活。
     jbc::ir::MethodSeed seed;
     seed.name   = "n2";
     seed.desc   = "()I";
@@ -300,7 +300,7 @@ TEST(MemberOpsA3Test, AdoptMethodReplaysBodyAndInternsCp)
     // 挂载点常量 intern 进宿主池（宿主池增长）。
     EXPECT_GT(host->backing().cp.size(), hostCpBefore);
 
-    // 体随迁：指令形状与语义引用逐条可辨；owner 仍是供体名——重映射是
+    // 体随迁：指令形状与语义引用逐条可辨；owner 仍是供体名，重映射是
     // 消费者侧职责（ToolClassCombiner 场景），搬移本身逐字保真。
     auto p = jbc::ir::promoteMethod(*host, hostGrab);
     ASSERT_TRUE(p.is_ok());
@@ -355,9 +355,9 @@ TEST(MemberOpsA3Test, AdoptMethodRejectsSelfSourceAndDeadHandle)
 /// 分支体供体类 d/B（回归钉死  分支体重放双缺陷，M 线 member_move
 /// 夹具零分支缺口的无 JDK 单测面）：
 ///   - biz(I)I：for 循环后向 goto + 前向 if_icmpge + tableswitch + ldc +
-///     异常表（catch-all）——三读门误伤分支族与占位标签被 append 拒收
+///     异常表（catch-all），三读门误伤分支族与占位标签被 append 拒收
 ///     两缺陷任一在场都必败；
-///   - pick(I)I：lookupswitch——钉 key 表随迁（丢 keys 则 switch 形状
+///   - pick(I)I：lookupswitch，钉 key 表随迁（丢 keys 则 switch 形状
 ///     校验 BadOperand）。
 Bytes makeBranchyDonorClass()
 {
@@ -383,7 +383,7 @@ Bytes makeBranchyDonorClass()
     //   22 tableswitch{default→56, 0→44, 1→50}（24 起对齐）
     //   44 ldc 100; 46 istore_1; 47 goto +9(→56);
     //   50 iinc 1,10; 53 goto +3(→56); 56 iload_1 (Ltail); 57 ireturn;
-    //   58 pop (Lh); 59 iload_1; 60 ireturn —— 异常表 [19,44)→58 catch-all
+    //   58 pop (Lh); 59 iload_1; 60 ireturn: 异常表 [19,44)→58 catch-all
     const Bytes biz = {
         0x03, 0x3c, 0x03, 0x3d,             // 0-3
         0x1c, 0x1a, 0xa2, 0x00, 0x0d,       // 4-8  Lloop; if_icmpge → 19

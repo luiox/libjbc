@@ -1,4 +1,4 @@
-// VolArray.java — libjbc 语料：数组全族（newarray 全 atype / anewarray / multianewarray / 载荷存储 / arraylength）。
+// VolArray.java: libjbc 语料：数组全族（newarray 全 atype / anewarray / multianewarray / 载荷存储 / arraylength）。
 package jbcx.corpus;
 
 public final class VolArray {

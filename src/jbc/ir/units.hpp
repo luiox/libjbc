@@ -42,8 +42,8 @@ Result<void, CompactFailure> compactConstantPool(ClassSession&);
 ///
 /// slot 是身份槽：会话构造期为初始成员按序分配 0..n-1；成员级增删后新成员
 /// 优先复用已删槽位。generation 为删除/复用预留的 ABA 防线：删除成员时该槽
-/// 的 generation 自增，此后旧句柄（携带旧代）结构性失配——查询面返回空/
-/// 命名哨兵，变更面返回显式 Err，不存在「删后又活」的复活形态。调用方不应
+/// 的 generation 自增，此后旧句柄（携带旧代）结构性失配，查询面返回空/
+/// 命名哨兵，变更面返回显式 Err，不存在删后又活的复活形态。调用方不应
 /// 把 slot 当作 backing ClassFile 的物理位置。
 struct MethodId
 {
@@ -124,13 +124,13 @@ struct FieldUnit
     ca::usize backingIndex = 0;
 };
 
-/// @brief 「无此方法」哨兵：ClassUnit::findMethod 的未命中返回值。
+/// @brief 无此方法哨兵：ClassUnit::findMethod 的未命中返回值。
 ///
-/// 命名常量替代裸下标魔法值，与 kNoInsn同一惯例——指针查询
+/// 命名常量替代裸下标魔法值，与 kNoInsn同一惯例，指针查询
 /// 用 nullptr 表达未命中，下标查询用本哨兵。
 inline constexpr ca::usize kNoMethod = static_cast<ca::usize>(-1);
 
-/// @brief 「无此字段」哨兵：语义与 @ref kNoMethod 同构。
+/// @brief 无此字段哨兵：语义与 @ref kNoMethod 同构。
 inline constexpr ca::usize kNoField = static_cast<ca::usize>(-1);
 
 /// @brief 类骨架：this/super/接口/成员元数据，符号自持。
@@ -138,7 +138,7 @@ inline constexpr ca::usize kNoField = static_cast<ca::usize>(-1);
 /// 两族成员（方法/字段）各自持有一套身份簿记：slot 发号（建骨架期按序、
 /// 增删后优先复用已删槽位）与 generation 台账（删除自增，旧句柄结构性
 /// 失配）。身份操作只动簿记；成员的挂入/摘除与 backing 同步由 ClassSession
-/// 的 add/remove 入口负责——单元自己不碰低层模型。
+/// 的 add/remove 入口负责，单元自己不碰低层模型。
 class ClassUnit
 {
 public:
@@ -166,7 +166,7 @@ public:
         return MethodId{owner_, slot, methodGen_[slot]};
     }
 
-    /// @brief 方法删除侧：回收身份槽并自增 generation——携带旧代的句柄自此
+    /// @brief 方法删除侧：回收身份槽并自增 generation，携带旧代的句柄自此
     ///        全部失配。仅由 ClassSession 的 remove 入口调用。
     void retireMethodId(MethodId id) noexcept
     {
@@ -293,7 +293,7 @@ public:
 
     /// @brief 按名字 + 描述符定位第一个方法（重载分辨形态）。
     ///
-    /// 错误语义同单参版；desc 不匹配时即使名字命中也继续扫——未命中
+    /// 错误语义同单参版；desc 不匹配时即使名字命中也继续扫，未命中
     /// 返回 kNoMethod。
     ca::usize findMethod(std::string_view name, std::string_view desc) const noexcept
     {
@@ -422,7 +422,7 @@ struct FieldSeed
 //
 // 与 MethodSeed/FieldSeed 同一输入形态：全部 string_view + 值语义，CP 落位由
 // 会话语义 intern 完成（命中既有池不膨胀）。规格树由调用方构造，合成期被完整
-// 消化进 typed 属性体——接口不返回 CP 索引视图，规格本身不需要跨调用存活。
+// 消化进 typed 属性体，接口不返回 CP 索引视图，规格本身不需要跨调用存活。
 // ---------------------------------------------------------------------------
 
 /// @brief ConstantValue 的值规格：常态十族经 classfile 常量池同化后 map 到
@@ -457,7 +457,7 @@ struct SemAnnotation;   // 前置声明：ElemValue 的 '@' 槽引用（定义�
 /// @brief 注解元素值的合成规格：JVMS 4.7.16.1 全 forms（const 十态 + 枚举 +
 ///        类字面量 + 嵌套注解 + 数组）。数值族按 JVM 语义窄化为 32/16/8 位
 ///        后落 CP Integer（与 @ref ConstValueSpec 同化口径），double 位模式
-///        原样承接（JVMS 注解无 64 位整型截断问题——'J'/'D' 各走 Long/Double）。
+///        原样承接（JVMS 注解无 64 位整型截断问题，'J'/'D' 各走 Long/Double）。
 struct SemElemValue
 {
     enum class Form : ca::u8 {
@@ -466,7 +466,7 @@ struct SemElemValue
         String,                         // 's'
         Class,                          // 'c'（str = 类型描述符形态：基本类型/void
                                         //      用 "I"/"V"，类类型用 "Ljava/lang/String;"；
-                                        //      落位是 Utf8 直索引，javac 同形——
+                                        //      落位是 Utf8 直索引，javac 同形，
                                         //      非 CONSTANT_Class 条目）
         Enum,                           // 'e'（enumType = 字段描述符形态 "Lx/Y;"
                                         //      str = 枚举常量名）
@@ -507,7 +507,7 @@ struct MethodHandleSpec
 /// @brief BSM 静态参数合成规格（JVMS 4.7.23 bootstrap_arguments，loadable
 ///        十族）。整型一律 CP Integer（bootstrap 参数无窄化语义，与注解
 ///        元素族的窄化不同账）；Dynamic 形态绑定既有 BSM 条目 + 名/型
-///        （叶子平挂，无嵌套规格树——嵌套条件常量在池层经同形重用互达），
+///        （叶子平挂，无嵌套规格树，嵌套条件常量在池层经同形重用互达），
 ///        下标锚点校验与显式 internDynamic 同规则。
 struct BsmArg
 {
@@ -552,11 +552,11 @@ struct NewClassSeed
 /// 除 promote/lower 外，会话还是指令 CP 操作数的**语义层**：读路径把裸
 /// CP 索引解析成成员/类/常量的语义视图（`memberOf`/`classOf`/`constOf`），
 /// 写路径把语义描述去重 intern 成 CP 索引（`internClass`/`internMethodRef`
-/// 等，先查既有池、miss 才追加——遵循 CP 只追加契约）。消费者因此不需要
+/// 等，先查既有池、miss 才追加，遵循 CP 只追加契约）。消费者因此不需要
 /// 理解 Methodref→NameAndType→Utf8 的两跳布局，也不需要手工拼条目。
 ///
 /// 构造收口：保活句柄（promoteMethod / collectCodeUnits 的返回值）内部
-/// 依赖 shared_from_this，会话必须以 shared_ptr 持有——构造函数私有，
+/// 依赖 shared_from_this，会话必须以 shared_ptr 持有，构造函数私有，
 /// 唯一入口是 @ref makeSession / @ref makeSessionFromBytes
 /// （寿命接管）。
 class ClassSession : public std::enable_shared_from_this<ClassSession>
@@ -618,8 +618,8 @@ public:
     bool constOf(const Insn& in, ConstSem& out) const noexcept;
 
     // ---- 语义改写（读写合一：改一条指令引用的成员/类/常量）----
-    // 对齐 ASM 的 `insn.owner = "..."; insn.name = "...";`——一步改写，
-    // 不再「memberOf 读出来 → intern 新的 → 手动赋 cp」三连。
+    // 对齐 ASM 的 `insn.owner = "..."; insn.name = "...";`，一步改写，
+    // 不再memberOf 读出来 → intern 新的 → 手动赋 cp三连。
     // op 族与 kind 不符（如对 getfield 调 setMember(Method)）返回 false，
     // 指令保持原样。
 
@@ -668,9 +668,9 @@ public:
     /// @brief 全池 Class 常量重指向（E-track 消费面：坐标级改名核心）。
     ///
     /// 把池内所有 «Utf8 内容 == oldInternal» 的 Class 条目的名字槽改指向
-    /// newInternal 的 Utf8（findUtf8 查重，miss 才追加）。语义靠「改条目
-    /// 内容而非改引用」：指令操作数、Exceptions/StackMapTable/结构元数据
-    /// 等全以索引引用 Class 条目，条目名一换全部自动跟随——免逐面走
+    /// newInternal 的 Utf8（findUtf8 查重，miss 才追加）。语义靠改条目
+    /// 内容而非改引用：指令操作数、Exceptions/StackMapTable/结构元数据
+    /// 等全以索引引用 Class 条目，条目名一换全部自动跟随，免逐面走
     /// 多处重写。String 条目按角色纪律不碰（字符串常量里的 «L名;» 文本
     /// 是字面量事实，不是类引用）。
     ///
@@ -679,7 +679,7 @@ public:
     /// 缓存的键值对应随之失效，下次查询惰性重建）。
     ///
     /// 边界纪律：只动 Class 条目的 `a` 槽（名字索引），不改 tag/不删条目；
-    /// 数组形态（"[" 前缀）不在本入口语义里——调用方经描述符/签名族手
+    /// 数组形态（"[" 前缀）不在本入口语义里，调用方经描述符/签名族手
     /// 术处理（描述符/签名族的分族手术归调用方）。
     ca::u32 renameClassConstant(std::string_view oldInternal, std::string_view newInternal);
 
@@ -692,7 +692,7 @@ public:
     /// @brief MethodType intern：方法描述符 → CONSTANT_MethodType 条目。
     ca::u32 internMethodType(std::string_view desc);
     /// @brief Module/Package intern（JVMS 4.4.12/4.4.11）。两者只在
-    ///        module-info 类面合法——成员性约束归上层，本面只承载。
+    ///        module-info 类面合法，成员性约束归上层，本面只承载。
     ca::u32 internModule(std::string_view name);
     ca::u32 internPackage(std::string_view name);
     /// @brief 条件常量 intern（JVMS 4.4.10 CONSTANT_Dynamic）：绑定既有
@@ -731,10 +731,10 @@ public:
     ///
     /// 失效语义：被删方法的 MethodId 立即失配（查询面 nullptr/kNoMethod，
     /// 变更面 Err(InvalidHandle)）；该槽 generation 自增，此后 addMethod
-    /// 复用此槽时新身份携带新代——旧句柄不会复活。其余方法身份不变，
+    /// 复用此槽时新身份携带新代，旧句柄不会复活。其余方法身份不变，
     /// backingIndex（物理位置）由本入口统一平移维护；逻辑下标视图
     /// （promoteMethod(s, idx) 等）此后指向新顺序。若该方法已 promote，
-    /// 其 CodeUnit 随之销毁——消费者手里指向它的 CodeUnitRef 同步作废
+    /// 其 CodeUnit 随之销毁，消费者手里指向它的 CodeUnitRef 同步作废
     /// （与 CodeDom::erase 后旧 Insn* 作废同一纪律）。
     Result<void, LowerError> removeMethod(MethodId method);
 
@@ -744,15 +744,15 @@ public:
     /// @brief 跨类搬移：把另一会话的方法挂入本会话。
     ///
     /// 名字/描述符/方法体随迁，迁移语义见 ：
-    /// - 挂载点常量 intern 进本会话 CP；方法体经 IR 重放随迁——指令的 CP
+    /// - 挂载点常量 intern 进本会话 CP；方法体经 IR 重放随迁，指令的 CP
     ///   操作数按源会话语义视图读出、按本会话语义 intern 写入（引用结构
     ///   Methodref/NameAndType/Utf8 三跳在本会话池内重建）；分支/switch/异常
     ///   表经标签映射重建；maxes 随体拷贝。
-    /// - 本会话新建的成员是「元数据 + 重放体」：源成员的非 Code 属性
+    /// - 本会话新建的成员是元数据 + 重放体：源成员的非 Code 属性
     ///   （LNT/LVT/SMT/注解/Exceptions 等）不随迁；分支体在 v51+ 目标上
     ///   需调用方随后用 buildStackMapTable 再生帧（契约见本节）。
     /// - ldc 的 MethodHandle/MethodType/Dynamic/Long/Float/Double 与
-    ///   invokedynamic 调用点显式 Err(NotModeled)——不猜、不静默降级。
+    ///   invokedynamic 调用点显式 Err(NotModeled)，不猜、不静默降级。
     /// - 源方法身份无效返回 Err(InvalidHandle)；源方法无体（abstract/
     ///   native）合法，产物同为无体成员。
     Result<MethodId, LowerError> adoptMethod(ClassSession& src, MethodId method);
@@ -766,7 +766,7 @@ public:
     /// @brief 将类级元数据提交到 backing（与 commitMethodMetadata 对称的类级面）。
     ///
     /// ClassUnit 的 version/access/thisClass/superClass/interfaces 在建会话时
-    /// 从 backing 复制，直接改写这些字段不会自动落到 backing——本入口是唯一
+    /// 从 backing 复制，直接改写这些字段不会自动落到 backing，本入口是唯一
     /// 提交通道（显式调用出活，无 lower 时机的类级自动点）。类名经 internClass
     /// 去重落位（CP 只追加），version 按 (major<<16|minor) 拆回头两个字段；
     /// superClass 空名提交为 0（= java/lang/Object）。
@@ -780,14 +780,14 @@ public:
     /// 规范写路径（intern 家族 / commit / setMember / renameClassConstant）
     /// 自己维护缓存一致性；**绕开这些入口改池条目内容的手术**（消费方
     /// 按 rename_probe 的分族策略改 NAT/MethodType 列等）必须在改完后
-    /// 调一次本口——条目 payload 变了，缓存的键值对应随之失效，下次
+    /// 调一次本口，条目 payload 变了，缓存的键值对应随之失效，下次
     /// intern/membership 查询惰性重建。定义在 operand.cpp（SemIndex 完整处）。
     void invalidateSemantics() noexcept;
 
     // ---- 类构建挂载面（注解族合成 + 通用挂载）----
     //
     // 挂载语义（全 API 一致）：
-    // - **只挂不改**：槽上已有同名属性时 Err(AlreadyMounted)——替换语义走
+    // - **只挂不改**：槽上已有同名属性时 Err(AlreadyMounted)，替换语义走
     //   既有 decodeAttr + mutate() 通路，本家族不造第二条修改通道。
     // - **单例规则**：LNT/LVT/LVTT 允许多条；其余（含未知名）至多一条。
     // - **域宽/容量先算后写**：u1 行数域、CP 追加数在触碰模型前预检，失败
@@ -824,7 +824,7 @@ public:
     /// @brief 通用挂载：给成员挂一个**调用方已构造**的 typed 体。
     ///
     /// 体上的 CP 槽由调用方先经语义 intern 家族落位；本面负责挂载点校验
-    /// （Code 一律拒绝——方法体归 promote/lower 管径）、单例规则、属性名
+    /// （Code 一律拒绝，方法体归 promote/lower 管径）、单例规则、属性名
     /// intern 与容量预检。带手写体的下面三条是注解族合成 API 的展开形态。
     Result<void, LowerError> attachAttr(MethodId method, std::string_view attrName,
                                         std::unique_ptr<core::AttrBody> body);
@@ -913,7 +913,7 @@ const char* to_string(LowerError e) noexcept;
 ///
 /// 返回 shared_ptr 是**寿命接管**的根：保活句柄
 /// （CodeUnitRef / *SemRef）内部各持一份，会话活到最后一个引用归零。
-/// 共享的只是寿命，不是可变性——并发编辑依旧不被允许（单线程顺序模型）。
+/// 共享的只是寿命，不是可变性，并发编辑依旧不被允许（单线程顺序模型）。
 Result<std::shared_ptr<ClassSession>, PromoteError>
 makeSession(std::unique_ptr<core::ClassFile> backing);
 
@@ -921,9 +921,9 @@ makeSession(std::unique_ptr<core::ClassFile> backing);
 ///
 /// 与 take-ownership 版同参返回形态：会话以 shared_ptr 接管寿命。种子的
 /// this/super/接口在构造期引导进 backing CP（Utf8 + Class 即时落位），成员
-/// 面从零开始——后续成员用 addMethod/addField 挂入，类级元数据改动经
+/// 面从零开始，后续成员用 addMethod/addField 挂入，类级元数据改动经
 /// commitClassMetadata 提交。写回走既有 writeClass：全合成模型的每个条目
-/// 都在「新编码」态，无源字节也可写出（writer 契约的从零分支）。
+/// 都在新编码态，无源字节也可写出（writer 契约的从零分支）。
 ///
 /// - 错误语义：this 名为空、名字超 u16、access 超 u16、接口数超 u16 一律
 ///   Err(InvalidSeed)，不产出半截会话。
@@ -934,7 +934,7 @@ Result<std::shared_ptr<ClassSession>, PromoteError> makeSession(const NewClassSe
 /// @brief makeSessionFromBytes 的失败记录：哪一段失败 + 该段的错误码。
 ///
 /// 一步入口横跨 core（readClass:ReadError）与 ir（makeSession:PromoteError）
-/// 两个错误族；本结构如实保留「段 + 码」，不做跨族的有损映射，也不新增
+/// 两个错误族；本结构如实保留段 + 码，不做跨族的有损映射，也不新增
 /// 第六套错误枚举（收敛裁决照旧）。
 struct SessionError
 {
@@ -958,7 +958,7 @@ struct SessionError
 ///   时字节被复制进模型，返回后即可释放）。
 /// - 所有权：成功时会话拥有独立模型；入参 buffer 不被持有。
 /// - 错误语义：失败经 @ref SessionError 区分段与码；读段成功但解析降级
-///   （ParseState::Recovered）不算失败，照常建会话——需要检查 ParseState
+///   （ParseState::Recovered）不算失败，照常建会话，需要检查 ParseState
 ///   / diagnostics 的场合仍走三步版（本入口不透出诊断面）。
 Result<std::shared_ptr<ClassSession>, SessionError>
 makeSessionFromBytes(core::ByteView bytes,
@@ -966,7 +966,7 @@ makeSessionFromBytes(core::ByteView bytes,
 
 /// @brief 保活视图：语义查询快照 + 会话保活副本。
 ///
-/// 视图版（memberOf 等）借用会话寿命；本类型把寿命带在身上——消费者
+/// 视图版（memberOf 等）借用会话寿命；本类型把寿命带在身上，消费者
 /// 把查询结果存进容器、日志、跨线程队列都安全，会话活到最后一个引用
 /// 归零（寿命接管）。字符串字节本身（CP 源副本/arena）
 /// 在会话存活期内地址稳定，追加不失效。
@@ -1019,7 +1019,7 @@ private:
 
 /// @brief 保活句柄：CodeUnit 指针 + 会话 shared_ptr。
 ///
-/// 拷到哪都安全——只要本对象存活，整个会话（backing + IR + 符号池）就
+/// 拷到哪都安全，只要本对象存活，整个会话（backing + IR + 符号池）就
 /// 存活。operator->/operator* 与裸指针同形，promoteMethod 的返回值从
 /// CodeUnit* 换成本类型对调用方几乎透明。
 class CodeUnitRef
@@ -1047,9 +1047,9 @@ private:
 ///        指令级 IR（解码、导入、异常表句柄化）。
 ///
 /// 无 Code 属性（abstract/native）返回 Err(NoCode)；重复 promote 幂等
-/// （重建 CodeUnit）。指令 CP 操作数保持 backing 索引——session 存活期间有效。
-/// 扫描场景请先用 @ref hasCode 把「无代码」分流掉，让本函数的 Err 只剩
-/// 真失败（AttrNotDecoded / BadInstructions）——两者混在一个 `continue`
+/// （重建 CodeUnit）。指令 CP 操作数保持 backing 索引，session 存活期间有效。
+/// 扫描场景请先用 @ref hasCode 把无代码分流掉，让本函数的 Err 只剩
+/// 真失败（AttrNotDecoded / BadInstructions），两者混在一个 `continue`
 /// 里会把解码坏了的方法静默吞掉）。
 Result<CodeUnitRef, PromoteError> promoteMethod(ClassSession& s, ca::usize methodIdx);
 
@@ -1066,7 +1066,7 @@ Result<CodeUnitRef, PromoteError> promoteMethod(ClassSession& s, MethodId method
 ///   终点规则重算；TypeAnnotations 携带偏移的目标（localvar 行与 offset/
 ///   cast/type-arg 族）按 pcmap 重定向、无 pc 目标原样保留；
 ///   CharacterRangeTable 行 start_pc/end_pc 精确重定向；其余未建模
-///   嵌套属性一律 Err(RelocationNotModeled)——不静默丢、不猜。
+///   嵌套属性一律 Err(RelocationNotModeled)，不静默丢、不猜。
 Result<void, LowerError> lowerMethod(ClassSession& s, ca::usize methodIdx);
 
 /// @brief 按稳定方法身份写回方法体。
@@ -1074,24 +1074,24 @@ Result<void, LowerError> lowerMethod(ClassSession& s, MethodId method);
 
 /// @brief 查询第 methodIdx 个方法是否带 Code 属性）。
 ///
-/// 把「方法没有代码」（abstract/native，预期形态）从 promote 的错误路径
+/// 把方法没有代码（abstract/native，预期形态）从 promote 的错误路径
 /// 里拿出来：先用本查询分流，promoteMethod 的 Err 就只剩真失败。
 ///
 /// - 前置条件：methodIdx < unit().methods.size()；越界返回 false（探测式，
 ///   与 CodeDom::peek 返回 nullptr 同款纪律，不抛错）。
 /// - 所有权：只读查询，不改会话、不置脏、不解码属性内容。
-/// - 错误语义：false 仅表示「此下标没有可升格的 Code 属性」；解码失败等
+/// - 错误语义：false 仅表示此下标没有可升格的 Code 属性；解码失败等
 ///   真失败不在此通道，留给 promoteMethod 的 Err。
 bool hasCode(const ClassSession& s, ca::usize methodIdx) noexcept;
 
 /// @brief collectCodeUnits 的单方法记录：三种互斥状态。
 ///
-/// 设计目的是让「无 Code」与「真失败」不可混淆）：消费者
+/// 设计目的是让无 Code与真失败不可混淆）：消费者
 /// 想把 Failed 静默 continue，必须显式写下 Failed 分支才做得到。
 struct CodeVisit
 {
     enum class Kind : ca::u8 {
-        NoCode,  ///< 方法没有 Code 属性（abstract/native）——预期形态
+        NoCode,  ///< 方法没有 Code 属性（abstract/native），预期形态
         Failed,  ///< promote 真失败（AttrNotDecoded / BadInstructions 等）
         Ok,      ///< 已升格，unit 有效
     };
@@ -1103,7 +1103,7 @@ struct CodeVisit
 };
 
 /// @brief collectCodeUnits 的指令族（memberOf 一个入口返回
-/// 五族，统计「调用」时字段访问会混入——查询侧按族过滤的便捷形态）。
+/// 五族，统计调用时字段访问会混入，查询侧按族过滤的便捷形态）。
 enum class InsnFamily : ca::u8 {
     Invoke = 0,        ///< invoke 全家族（virtual/special/static/interface/indy）
     FieldAccess = 1,   ///< getstatic/putstatic/getfield/putfield
@@ -1119,10 +1119,10 @@ ca::u32 insnFamilyBit(core::Op op) noexcept;
 /// 两个维度独立生效（交集语义，维度掩码为 0 = 该维度不过滤）：
 /// - @ref insnFamilies ：方法体内至少含一条命中族的指令；
 /// - @ref attrKinds ：Code 属性嵌套属性中至少一个命中 core::AttrKind
-///   （嵌套属性解码失败按未命中处理——解码失败的显式暴露在 promote 的
+///   （嵌套属性解码失败按未命中处理，解码失败的显式暴露在 promote 的
 ///   Failed 通道，本维度不做第二失败面）。
 /// 全缺省（两掩码为 0 且 includeNoCode）= 不过滤，与无参版全量语义逐位
-/// 一致。Failed 记录恒保留——F1 纪律：真失败不提供静默吞掉的通道。
+/// 一致。Failed 记录恒保留，F1 纪律：真失败不提供静默吞掉的通道。
 struct CodeCollectFilter
 {
     ca::u32 insnFamilies = 0;  ///< InsnFamily 位掩码（1u << int(family)）
@@ -1133,14 +1133,14 @@ struct CodeCollectFilter
 /// @brief 按方法下标升序收集会话内全部方法的 Code 升格结果（
 ///        全量形态；按族过滤见带过滤器重载）。
 ///
-/// - 形态：值返回（拉），不是回调推送——visitor 清零的机械判据是数据形态
+/// - 形态：值返回（拉），不是回调推送，visitor 清零的机械判据是数据形态
 ///   （事件推给消费者即换皮）。每方法恰一条记录；提前退出
 ///   由调用方自己 break。
-/// - 已 promote 的方法**直接复用**现有 CodeUnit，不重建——重建会使消费
-///   者手里既有的 CodeUnitRef 失效（promoteMethod 的「幂等 = 重建」语义
+/// - 已 promote 的方法**直接复用**现有 CodeUnit，不重建，重建会使消费
+///   者手里既有的 CodeUnitRef 失效（promoteMethod 的幂等 = 重建语义
 ///   在遍历场景是陷阱，这里刻意避开）；未 promote 的方法就地升格一次。
 /// - 错误语义：三种 Kind 互斥；本函数自身不失败，升格失败落在
-///   CodeVisit::Failed 里交由消费者处置——调用方仍须显式分支才能静默
+///   CodeVisit::Failed 里交由消费者处置，调用方仍须显式分支才能静默
 ///   跳过（防静默吞错不回退）。
 std::vector<CodeVisit> collectCodeUnits(ClassSession& s);
 

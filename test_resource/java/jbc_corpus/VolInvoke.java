@@ -1,4 +1,4 @@
-// VolInvoke.java — libjbc 语料：调用全族（invokevirtual/special/static/interface + 构造链 + varargs + 递归）。
+// VolInvoke.java: libjbc 语料：调用全族（invokevirtual/special/static/interface + 构造链 + varargs + 递归）。
 package jbcx.corpus;
 
 public final class VolInvoke {

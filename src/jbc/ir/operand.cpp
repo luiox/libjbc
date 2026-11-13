@@ -2,7 +2,7 @@
 /// @brief       指令 CP 操作数的语义层：读解析 + 去重 intern。
 ///
 /// 没有这一层，消费者必须理解 Methodref→NameAndType→Utf8 的两跳布局才能
-/// 读一条 getfield，必须手工拼四个 addXxx 才能插一条 invokestatic——
+/// 读一条 getfield，必须手工拼四个 addXxx 才能插一条 invokestatic，
 /// CP 知识泄漏到每个消费者（。
 #include <cstdint>
 #include <unordered_map>
@@ -106,7 +106,7 @@ std::string_view ClassSession::classOf(const Insn& in) const noexcept
 {
     using core::Op;
     // multianewarray 与 setClass 同族：写侧把它当类操作改写，读侧类名解析
-    // 必须对称收口，否则 CP 语义面上留下「指令形态可枚举、语义不可查」的洞。
+    // 必须对称收口，否则 CP 语义面上留下指令形态可枚举、语义不可查的洞。
     const bool isClassOp = in.op == Op::NEW || in.op == Op::ANEWARRAY ||
                            in.op == Op::CHECKCAST || in.op == Op::INSTANCEOF ||
                            in.op == Op::MULTIANEWARRAY;
@@ -274,7 +274,7 @@ SemIndex& ClassSession::sem()
 
 void ClassSession::invalidateSemantics() noexcept
 {
-    // 手工手术后的语义缓存复位口（units.hpp 声明；定义在此——SemIndex
+    // 手工手术后的语义缓存复位口（units.hpp 声明；定义在此，SemIndex
     // 在本文件才完整，reset 的删除面依赖完整类型）。
     sem_.reset();
 }

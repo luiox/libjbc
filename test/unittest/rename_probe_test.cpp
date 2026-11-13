@@ -1,12 +1,12 @@
 /// @file        rename_probe_test.cpp
-/// @brief       rename 探针：在 libjbc 上跑一个真实跨类改名 pass——javac 编译
-///        多类样本 → 改名 → 写回 → JVM 真跑验收。这是「libjbc 能不能担
-///        pass」的第一手证据，同时消费 jbc::type 的描述符手术原语。
+/// @brief       rename 探针：在 libjbc 上跑一个真实跨类改名 pass，javac 编译
+///        多类样本 → 改名 → 写回 → JVM 真跑验收。这是libjbc 能不能担
+///        pass的第一手证据，同时消费 jbc::type 的描述符手术原语。
 ///
 /// 样本故意埋满 rename 触点：instanceof/checkcast/anewarray、throws
 /// （Exceptions 属性）、泛型（Signature 属性）、lambda（indy +
 /// BootstrapMethods + 合成方法描述符）、局部变量表（-g）、类字面量（ldc
-/// Class 常量），以及一个**角色陷阱**：字符串常量 "Ldemo/Expr;"——
+/// Class 常量），以及一个**角色陷阱**：字符串常量 "Ldemo/Expr;"，
 /// 天真扫全池的 rename 会把它改坏，pass 必须分角色处理。
 #include <gtest/gtest.h>
 
@@ -143,7 +143,7 @@ struct RenameStats
 
 /// @brief 描述符语境的类名替换：type 层解析验证 + span 全名命中才动。
 ///
-/// 解析失败（不是描述符形态）或没提到目标类，一律不动——这是分角色
+/// 解析失败（不是描述符形态）或没提到目标类，一律不动，这是分角色
 /// 的第一道闸；命中 span 按倒序逐个走 jbc::type::replaceClassName 结构化
 /// 替换（只动 span 覆盖字节，倒序保持未替换 span 的偏移有效），落位经
 /// findUtf8 查重（命中复用不膨胀，逆向 rename 复用回原条目）。
@@ -271,7 +271,7 @@ renameClassInPlace(ClassFile& cf, std::string_view oldName, std::string_view new
         }
     }
 
-    // 泛型签名：属性层结构化手术（sig_attr——签名树全名匹配，替代早期
+    // 泛型签名：属性层结构化手术（sig_attr，签名树全名匹配，替代早期
     // 的 "L<name>;" 文本 token 替换与 RawAttr 字节捅）。
     auto sigR = jbc::ir::renameClassInSignatureAttrs(cf, oldName, newName);
     if (sigR.is_err()) {
@@ -280,7 +280,7 @@ renameClassInPlace(ClassFile& cf, std::string_view oldName, std::string_view new
     st.signatures += std::move(sigR).unwrap().attrsChanged;
 
     // LVTT descriptor 列：签名宿主第二处，同走 sig_attr 结构化手术
-    // （替代更早期的 "L<name>;" 文本 token 替换——已删除）。
+    // （替代更早期的 "L<name>;" 文本 token 替换，已删除）。
     auto lvttR = jbc::ir::renameClassInLocalVariableTypeTables(cf, oldName, newName);
     if (lvttR.is_err()) {
         return Err(std::string("lvtt surgery failed"));
@@ -487,16 +487,16 @@ struct StructAttrStats
 
 /// @brief Nest 族结构元数据的分派面验证 + 强制重编码。
 ///
-/// 逐槽走 decodeAttr 分派（接线后必须给出 typed 体——Raw 形即接线失效），
+/// 逐槽走 decodeAttr 分派（接线后必须给出 typed 体，Raw 形即接线失效），
 /// 槽语义对改名断言：InnerClasses 行 outer 槽与 EnclosingMethod class 槽、
-/// NestHost 宿主槽**不得残留旧外围名**（demo/Nest、demo/Expr——残留即改名
+/// NestHost 宿主槽**不得残留旧外围名**（demo/Nest、demo/Expr，残留即改名
 /// 没有触达槽面，是本断言钉死的失效形态；lambda 合成面如
 /// MethodHandles$Lookup 等未改名外围照常放行），命中新外围名 NestR 的行
 /// 计数进 nestOuterRows；匿名行 outer==0 原样保 0。NestMembers/
 /// PermittedSubclasses 条目不得精确命中改名掉的旧名（成员表/允许表条目
 /// 指向内部类二进制名，前缀命中不算残留）。再 makeNew 置 New 强制走 typed
-/// 编码器重编码——JVM 反射面消费的即 typed 编码产物。Exceptions 条目不得
-/// 残留改名掉的旧名（demo/Nest、demo/Expr——残留即异常表没有跟随改名），
+/// 编码器重编码，JVM 反射面消费的即 typed 编码产物。Exceptions 条目不得
+/// 残留改名掉的旧名（demo/Nest、demo/Expr，残留即异常表没有跟随改名），
 /// 其余条目（Fail / 嵌套 Bad / JDK 异常）放行。
 Result<StructAttrStats, std::string>
 verifyStructAttrsTyped(ClassFile& cf)
@@ -789,7 +789,7 @@ TEST(RealClassRenameProbe, DebugStripAfterRenameStillRuns)
 //
 // 改名 pass 重写 InnerClasses 行 outer 槽与 EnclosingMethod class 槽指向的
 // 外围类名（CP Class 条目改名自动跟随），三件随后经分派 typed 面验证 +
-// 强制重编码——JVM 反射读到的必须是 typed 编码产物。匿名/局部判定与包围
+// 强制重编码，JVM 反射读到的必须是 typed 编码产物。匿名/局部判定与包围
 // 方法名在改名前后必须原样存活；外围类名必须读到新名（旧行为=槽没被改写
 // 或 typed 编码 scrambled，都立刻翻红）。
 
@@ -835,11 +835,11 @@ TEST(RealClassRenameProbe, NestedReflectionAfterRename)
     EXPECT_GT(total.enclosingMethod, 0u);
     EXPECT_GT(total.exceptions, 0u);
     EXPECT_GT(total.nestHost, 0u)
-        << "sample must carry NestHost (javac 11+ nestmate) — got zero";
+        << "sample must carry NestHost (javac 11+ nestmate): got zero";
     EXPECT_GT(total.nestMembers, 0u)
-        << "sample must carry NestMembers (javac 11+ nestmate) — got zero";
+        << "sample must carry NestMembers (javac 11+ nestmate): got zero";
     EXPECT_GT(total.permittedSubclasses, 0u)
-        << "sample must carry PermittedSubclasses (demo.Seal) — got zero";
+        << "sample must carry PermittedSubclasses (demo.Seal): got zero";
     EXPECT_GT(total.nestOuterRows, 0u)
         << "rename never reached an InnerClasses outer slot";
 
@@ -935,11 +935,11 @@ TEST(RealClassRelocProbe, LayoutChangeJvmRealRunAndDebugAttrsSurvive)
     }
     EXPECT_GT(movedTotal, 0);
 
-    // 1) JVM 真跑：改布局后的全类组行为不变——栈帧（SMT 重算）、分支、
+    // 1) JVM 真跑：改布局后的全类组行为不变，栈帧（SMT 重算）、分支、
     //    TA 反射（ta=，Field::getAnnotatedType 路径）全过验证器。
     EXPECT_EQ(runMain(relocDir), origOut);
 
-    // 2) LVTT/LVT 存活：javap 读回改布局后的 demo/Main——泛型局部变量表
+    // 2) LVTT/LVT 存活：javap 读回改布局后的 demo/Main，泛型局部变量表
     //    （Signature 列）在布局改动后仍在（core 反射读不到调试属性，
     //    classfile 层读回工具即 javap）。javap 不在 PATH 时跳过本读回
     //    （行级结构已有 crafted 测试与语料门兜底），不视为失败。
@@ -956,8 +956,8 @@ TEST(RealClassRelocProbe, LayoutChangeJvmRealRunAndDebugAttrsSurvive)
     }
 
     // 3) CRT 携带类 JVM 照单全收：给 demo/Add 的 Code 注入一条合成
-    //    CharacterRangeTable（New 槽，1 行）——现代 javac 不产出 CRT，
-    //    「JVM 忽略但接受携带 CRT 的类」由此补位。
+    //    CharacterRangeTable（New 槽，1 行），现代 javac 不产出 CRT，
+    //    JVM 忽略但接受携带 CRT 的类由此补位。
     const fs::path crtDir = fs::path("test") / "libjbc_reloc_probe" / "crt";
     fs::remove_all(crtDir, ec);
     fs::copy(relocDir, crtDir, fs::copy_options::recursive, ec);

@@ -17,7 +17,7 @@ namespace {
 std::atomic<ca::u32> g_ownerCounter{1};
 
 /// @brief goto/jsr 的宽形式（Branch2 → Branch4）。仅这两个 opcode 存在
-///        同语义宽形式；条件分支没有——加宽须反转条件 + goto_w 桥接
+///        同语义宽形式；条件分支没有，加宽须反转条件 + goto_w 桥接
 ///        （插入指令），无法在保持 dom↔raw 一一对应的前提下于导出期完成。
 core::Op wideFormOf(core::Op op) noexcept
 {
@@ -227,7 +227,7 @@ Result<InsnId, EditError> CodeDom::insertAt(InsnId at, Insn in, bool before)
             return Ok(id);
         }
     }
-    // slotOf 已校验 at 存活，order 里必然找得到——防御性兜底。
+    // slotOf 已校验 at 存活，order 里必然找得到，防御性兜底。
     slots_.pop_back();
     return Err(EditError::InvalidHandle);
 }
@@ -422,7 +422,7 @@ Result<void, EditError> CodeDom::erase(InsnId id)
         return Err(EditError::StillUsed);
     }
     // 元数据边界标签（Boundary 角色）保护其锚点：异常表、调试范围等引用
-    // 必须显式移动或销毁后才能删除锚点指令。历史控制流标签不保护锚点——
+    // 必须显式移动或销毁后才能删除锚点指令。历史控制流标签不保护锚点，
     // 字段改写后遗留的 ControlFlow 标签已经没有字段引用，不应阻止删除；
     // 其句柄此后解析为 InvalidHandle，新指令也无法引用它。
     for (const LabelSlot& label : labels_) {
@@ -464,7 +464,7 @@ Result<void, EditError> CodeDom::eraseBatch(
         reroute[move.first.slot] = move.second;
     }
 
-    // 一趟扫序：存活指令面向批内目标的字段。与 usersOf 同规——字段锚定
+    // 一趟扫序：存活指令面向批内目标的字段。与 usersOf 同规，字段锚定
     // 目标已死（gen 漂移后 slotOf 为 nullptr）不算引用；批内成员自己的
     // 字段不参与（同批消亡，引用随批消失）。
     struct PendingRewrite
@@ -818,7 +818,7 @@ Result<std::vector<core::RawInsn>, EditError> CodeDom::exportRaw() const
     // 的分支变溢出，故迭代到无新增加宽为止。每轮 widenWanted 只收集尚为
     // 窄形式的槽位（已宽形式走 i32 域，不会进集合），集合严格单调增大且
     // 有上界（每条指令至多加宽一次），必然终止。
-    // 允许过量加宽（被前面加宽挤溢出的分支本可保持窄形式）——正确性不受
+    // 允许过量加宽（被前面加宽挤溢出的分支本可保持窄形式），正确性不受
     // 影响，最小加宽集需要约束求解，不做。
     std::unordered_set<ca::u32> widened;
     for (;;) {
@@ -836,7 +836,7 @@ Result<std::vector<core::RawInsn>, EditError> CodeDom::exportRaw() const
 
 /// @brief 单轮布局导出：pc 推进 + 偏移换算。goto/jsr 的 Branch2 溢出记入
 ///        *widenWanted（下轮按 _W 宽形式重排）而不报错；widened 集合内的
-///        goto/jsr 按 _W 形式计尺寸与域宽。模型不改——加宽是导出期变换。
+///        goto/jsr 按 _W 形式计尺寸与域宽。模型不改，加宽是导出期变换。
 Result<std::vector<core::RawInsn>, EditError>
 CodeDom::exportLayout(const std::unordered_set<ca::u32>& widened,
                       std::vector<ca::u32>* widenWanted) const

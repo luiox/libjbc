@@ -47,7 +47,7 @@ enum class ClassChange : ca::u8 {
 /// @brief 一条变更记录。
 ///
 /// 身份视图指向会话驻留存储（SymbolPool arena / backing CP arena，只增不移），
-/// 存活期 = 会话——消费者必须在会话存活期内完成折叠与 intern。
+/// 存活期 = 会话，消费者必须在会话存活期内完成折叠与 intern。
 struct ChangeRecord
 {
     ChangeKind kind = ChangeKind::MemberAdded;
@@ -82,9 +82,9 @@ struct RemovedMember
 /// @brief 单会话变更台账：追加序原始记录 + 按身份键折叠的查询视图。
 ///
 /// 累积与折叠语义：键 = (member, name, desc)，会话内成员唯一性预检
-/// 保证任一时刻每键至多一个存活成员，事件序按终态折叠——add 后 remove 再 add
-/// 终态存活（created 置位，中间代历史不外泄）；改名折作「旧身份消失事件 +
-/// 新身份元数据事件」，改名目标继承原代的 created 旗标。同一键按终态只落
+/// 保证任一时刻每键至多一个存活成员，事件序按终态折叠，add 后 remove 再 add
+/// 终态存活（created 置位，中间代历史不外泄）；改名折作旧身份消失事件 +
+/// 新身份元数据事件，改名目标继承原代的 created 旗标。同一键按终态只落
 /// memberChanges/removedMembers 一个桶。
 class ChangeSet
 {

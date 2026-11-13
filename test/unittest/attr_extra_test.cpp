@@ -204,7 +204,7 @@ TEST(AttrExtraTest, BootstrapMethodsArgRewriteRoundTrips)
     EXPECT_EQ(bs2->entries[0].methodRef, mh);
     ASSERT_EQ(bs2->entries[0].args.size(), 1u);
     EXPECT_EQ(bs2->entries[0].args[0], newConst);
-    // 新参数确为新 String 常量（内容校验，防「索引对但指错条目」）。
+    // 新参数确为新 String 常量（内容校验，防索引对但指错条目）。
     EXPECT_EQ(s2->backing().cp.tagOf(newConst), CpTag::String);
     const ca::u16 utf8OfNew = static_cast<ca::u16>(s2->backing().cp.at(newConst).a);
     EXPECT_EQ(s2->backing().cp.utf8Of(utf8OfNew), "newTarget");
@@ -347,8 +347,8 @@ std::unique_ptr<ClassFile> classWithDecodedAttr(const std::string& name, const B
 
 }   // namespace
 
-/// 属性体 trailing：声明结构读完后的多余字节在「未改
-/// 往返」与「置脏重编码」两条路径下都必须原样保留——声明 length 比结构
+/// 属性体 trailing：声明结构读完后的多余字节在未改
+/// 往返与置脏重编码两条路径下都必须原样保留，声明 length 比结构
 /// 多 4 字节，静默丢尾即保真违约。五个已知属性 decoder 同治。
 TEST(AttrExtraTest, AttrBodyTrailingSurvivesReencode)
 {
@@ -386,7 +386,7 @@ TEST(AttrExtraTest, AttrBodyTrailingSurvivesReencode)
 }
 
 /// 编码闸门：计数/索引超 u16 必须 Err(Unencodable)，
-/// 不得 static_cast 静默截断——截断产出计数错位 / 引用错条目的 class。
+/// 不得 static_cast 静默截断，截断产出计数错位 / 引用错条目的 class。
 TEST(AttrExtraTest, EncodersRejectOutOfRangeFields)
 {
     auto expectUnencodable = [](std::unique_ptr<ClassFile> cf) {
@@ -437,7 +437,7 @@ TEST(AttrExtraTest, EncodersRejectOutOfRangeFields)
 }
 
 /// 真实类：全量解码（含新属性）→ 逐槽置脏 → 写回与源字节一致。
-/// 「编码器是解码的精确逆」的全语料验收。
+/// 编码器是解码的精确逆的全语料验收。
 TEST(AttrExtraRealClassTest, DecodeAllMutateAllRewriteIdentical)
 {
     const jbc::test::corpus::CorpusSource src = jbc::test::corpus::resolveCorpus();

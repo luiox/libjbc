@@ -3,7 +3,7 @@
 ///
 /// 写回顺序照 JVMS 4.1，与 reader 完全对称。保真由两处 copy-through 保证：
 /// 常量池未脏条目 copy @ref ConstantPool::Entry::raw，未修改属性 copy
-/// @ref AttrSlot::data——两者都不经过任何编码器。
+/// @ref AttrSlot::data，两者都不经过任何编码器。
 #include "jbc/core/writer.hpp"
 
 #include "jbc/core/attr_codec.hpp"
@@ -39,8 +39,8 @@ bool slotNeedsSource(const AttrSlot& s) noexcept
 /// 写出是否需要源字节：任一走 copy-through 路径的 CP 条目/属性槽都需要。
 ///
 /// 全合成模型（从零建类：CP 条目全部经 add* 追加即脏、属性槽全部 New）
-/// 不含任何 copy 路径，无源字节也可写出——MissingSource 只挡「需要
-/// copy-through 而源缺席」的真违约，不再挡从零构建的合法形态。
+/// 不含任何 copy 路径，无源字节也可写出，MissingSource 只挡需要
+/// copy-through 而源缺席的真违约，不再挡从零构建的合法形态。
 bool writeNeedsSource(const ClassFile& cf) noexcept
 {
     for (ca::u32 i = 1; i < cf.cp.size(); ++i) {
@@ -145,7 +145,7 @@ Result<void, WriteError> writeMember(const ClassFile& cf,
 Result<std::vector<ca::u8>, WriteError> writeClass(const ClassFile& cf)
 {
     const ByteView source = cf.source();
-    // 源字节缺席只在「确实要走 copy-through」时才是错误：全合成模型每个
+    // 源字节缺席只在确实要走 copy-through时才是错误：全合成模型每个
     // 条目都在重编码态，照常写出（从零建类的写出路径）。
     if (!cf.hasSource() && writeNeedsSource(cf)) {
         return Err(WriteError::MissingSource);
@@ -204,7 +204,7 @@ Result<std::vector<ca::u8>, WriteError> writeClass(const ClassFile& cf)
     }
 
     // 类级 trailing：畸形输入的尾部字节原样写回，
-    // 与属性体 trailing 同族——copy-through 保真，不丢尾。
+    // 与属性体 trailing 同族，copy-through 保真，不丢尾。
     if (!cf.trailing.empty()) {
         out.raw(ByteView{cf.trailing});
     }

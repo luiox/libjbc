@@ -1,4 +1,4 @@
-// VolEnumShape.java — libjbc 语料：枚举全形态（常量体/抽象方法/字段/静态块/values/valuesOf）。
+// VolEnumShape.java: libjbc 语料：枚举全形态（常量体/抽象方法/字段/静态块/values/valuesOf）。
 package jbcx.corpus;
 
 public enum VolEnumShape {

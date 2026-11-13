@@ -1,4 +1,4 @@
-// VolGeneric.java — libjbc 语料：泛型全形态（有界类型参数/通配符/泛型方法/桥方法/Signature 属性）。
+// VolGeneric.java: libjbc 语料：泛型全形态（有界类型参数/通配符/泛型方法/桥方法/Signature 属性）。
 package jbcx.corpus;
 
 import java.util.ArrayList;

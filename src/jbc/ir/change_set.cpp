@@ -61,9 +61,9 @@ FoldState& stateFor(FoldMap& fold, std::vector<FoldKey>& touchOrder, const FoldK
 
 /// 成员级记录的事件折叠：类级记录忽略（classChange 单独出口）。
 ///
-/// MemberMetadata 携带改写前身份：prior 与新身份不同时折作两个原子事件——
+/// MemberMetadata 携带改写前身份：prior 与新身份不同时折作两个原子事件，
 /// 先对 prior 发消失事件（旧身份的事实必须失效），再对新身份发元数据事件，
-/// created 旗标随「代」迁移（改名不改变这一代是否窗口内挂入）。
+/// created 旗标随代迁移（改名不改变这一代是否窗口内挂入）。
 void foldRecord(FoldMap& fold, std::vector<FoldKey>& touchOrder, const ChangeRecord& r)
 {
     switch (r.kind) {

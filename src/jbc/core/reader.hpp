@@ -5,11 +5,11 @@
 /// @file        reader.hpp
 /// @brief       classfile 骨架解析入口（L0/L1 eager，L2 lazy）。
 ///
-/// readClass 只解析「必须解析才能定位结构」的部分：头、常量池、成员的
+/// readClass 只解析必须解析才能定位结构的部分：头、常量池、成员的
 /// access/name/descriptor，以及属性**目录**。属性内容一律只记 span 并跳过，
-/// 因此解析一个类的代价与它有多少方法体无关——这是全量扫描场景的全部收益来源。
+/// 因此解析一个类的代价与它有多少方法体无关，这是全量扫描场景的全部收益来源。
 ///
-/// 失败的语义是「无法确定后续结构边界」，不是「输入不合法」：畸形输入的降级
+/// 失败的语义是无法确定后续结构边界，不是输入不合法：畸形输入的降级
 /// 结果落在 ParseState::Recovered 与 Diagnostics 里，而不是异常。
 #pragma once
 
@@ -27,7 +27,7 @@ namespace jbc::core {
 /// @brief 读取选项。
 struct ReadOptions
 {
-    /// @brief 保留源字节副本——lazy 解码与 copy-through 保真的共同前提。
+    /// @brief 保留源字节副本，lazy 解码与 copy-through 保真的共同前提。
     ///
     /// 开启（默认）时字节被复制进模型，解析产出的一切字节视图（Utf8 条目、属性
     /// span）都指向模型内部，与调用方的 buffer 生命周期解耦；调用方可以在
@@ -35,7 +35,7 @@ struct ReadOptions
     ///
     /// 关掉它可省一份与输入等大的内存，代价有三：属性无法按需解码、写回被
     /// 拒绝（@ref WriteError::MissingSource ）、且所有字节视图改为借用入参
-    /// buffer——调用方必须保证它在模型存活期内有效。扫描场景若只看 summary
+    /// buffer，调用方必须保证它在模型存活期内有效。扫描场景若只看 summary
     /// 且能管住 buffer 生命周期，关掉是合理选择。
     bool preserveSourceBytes = true;
 
@@ -45,7 +45,7 @@ struct ReadOptions
 
 /// @brief 读取产物：模型 + 状态 + 诊断。
 ///
-/// 诊断非空不代表失败——Recovered 模型照样可用、照样能原样写回。
+/// 诊断非空不代表失败，Recovered 模型照样可用、照样能原样写回。
 struct ReadResult
 {
     std::unique_ptr<ClassFile> file;

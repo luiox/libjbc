@@ -198,7 +198,7 @@ TEST(FrameEngineRealClassTest, ComputedMaxesNeverExceedDeclared)
 namespace {
 
 /// iconst_1; ifeq L2; aconst_null; goto L3; L2: new X; L3: pop; return
-/// —— 汇合点 L3 两条路径分别是 Null 与 Ref(new)，合并应为 Ref。
+///: 汇合点 L3 两条路径分别是 Null 与 Ref(new)，合并应为 Ref。
 Bytes makeMergeClass()
 {
     ClassBuilder cb;
@@ -214,7 +214,7 @@ Bytes makeMergeClass()
     cb.setVersion(52);
     // pc: 0 iconst_1, 1 ifeq +6(→pc9), 4 aconst_null, 5 goto +5(→pc13? 用重算)
     // 精确布局: 0:iconst_1(1) 1:ifeq(3,→10) 4:aconst_null(1) 5:goto(3,→13)
-    // 8:(填跳目标2) 需要两路等长——用 nop 对齐: 8: nop; 9: nop;
+    // 8:(填跳目标2) 需要两路等长，用 nop 对齐: 8: nop; 9: nop;
     // 10: new(3) 13: pop 14: return
     // ifeq at1 target 10: off=10-1=9; goto at5 target 13: off=13-5=8
     const Bytes code = {
@@ -224,7 +224,7 @@ Bytes makeMergeClass()
         0xa7, 0x00, 0x08,       // 5 goto -> 13
         0x00,                   // 8 nop (死代码)
         0x00,                   // 9 nop (死代码)
-        0xbb, 0x00, 0x00,       // 10 new (cp 占位——用 objIdx 重写)
+        0xbb, 0x00, 0x00,       // 10 new (cp 占位，用 objIdx 重写)
         0x57,                   // 13 pop
         0xb1,                   // 14 return
     };
@@ -270,7 +270,7 @@ TEST(FrameEngineTest, PerInsnFramesMergeAndDeadCode)
 
 TEST(FrameEngineTest, PerInsnFramesOwnedAfterSessionDeath)
 {
-    // 结果自持有（旧栈 Analyzer 结果借用 Analyzer 寿命——六制之⑥）：
+    // 结果自持有（旧栈 Analyzer 结果借用 Analyzer 寿命，六制之⑥）：
     // 会话销毁后帧数据仍可读。
     std::vector<jbc::analysis::FrameAt> frames;
     {

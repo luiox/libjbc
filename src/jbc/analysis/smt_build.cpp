@@ -19,7 +19,7 @@ using SmtFrame  = StackMapTableAttr::Frame;
 
 /// @brief 单槽 → verification_type 条目。Ref 的精确类名经 session 的
 ///        internClass 落位（既有同类条目复用，miss 才追加）；无精确名的
-///        引用说明输入帧不是播种完整的 Strict 结果——防御拒绝，不编造
+///        引用说明输入帧不是播种完整的 Strict 结果，防御拒绝，不编造
 ///        Object(0) 之类的坏条目。
 ca::core::Result<SmtVType, SmtBuildError> toVerif(ir::ClassSession& s, const VType& v)
 {
@@ -36,7 +36,7 @@ ca::core::Result<SmtVType, SmtBuildError> toVerif(ir::ClassSession& s, const VTy
         return R(ca::core::Ok(SmtVType{SmtVType::kUninitialized, v.uninitOffset()}));
     case VKind::ReturnAddress:
         // full_frame 的 verification_type_info 无 returnAddress 形态
-        //（JVMS §4.7.4 封闭 tag 集）——SMT 生成对子程序方法显式拒绝，不静默
+        //（JVMS §4.7.4 封闭 tag 集），SMT 生成对子程序方法显式拒绝，不静默
         // 改码为 Top/Int 伪造帧（v≤49 无 SMT 走旧校验是规范许可行为）。
         return R(ca::core::Err(SmtBuildError::Subroutine));
     case VKind::Ref:
@@ -46,11 +46,11 @@ ca::core::Result<SmtVType, SmtBuildError> toVerif(ir::ClassSession& s, const VTy
         return R(ca::core::Ok(SmtVType{SmtVType::kObject, s.internClass(v.name)}));
     case VKind::Bottom:
         // merge 冲突槽（Strict 域 int×Ref 等：边×边 meet 的冲突标记）→
-        // top_variable_info。HotSpot 的合并对象是「到达边 × SMT 声明帧」，
+        // top_variable_info。HotSpot 的合并对象是到达边 × SMT 声明帧，
         // 声明帧的 top 槽吸收任意两路（intonly c.a(I)I 实证：ZKM 原罐对
         // 同形 join 槽就声明 top，verifier 无冲突）。冲突槽被后续指令
-        // load 时，引擎侧的类型检查仍会拒——序列化面只负责如实表达
-        // 「该槽状态不可用」。
+        // load 时，引擎侧的类型检查仍会拒，序列化面只负责如实表达
+        // 该槽状态不可用。
         return R(ca::core::Ok(SmtVType{SmtVType::kTop, 0}));
     default:
         return R(ca::core::Err(SmtBuildError::BottomInFrame));   // 枚举全覆盖后不可达兜底
@@ -58,7 +58,7 @@ ca::core::Result<SmtVType, SmtBuildError> toVerif(ir::ClassSession& s, const VTy
 }
 
 /// @brief Uninitialized 载荷必须落在方法内某个 new 指令 pc 上（
-///        帧域携带的是 srcPc 口径，这里守住「指向 new」这一条不变量）。
+///        帧域携带的是 srcPc 口径，这里守住指向 new这一条不变量）。
 ca::core::Result<void, SmtBuildError>
 checkUninitPayloads(const Entries& es, const std::set<ca::u32>& newPcs)
 {
@@ -199,7 +199,7 @@ buildStackMapTable(ir::ClassSession& s, const ir::CodeUnit& u,
     }
 
     // 目标集合：分支/switch 全部目标 + 异常 handler 入口。不可达
-    // 目标随后按帧的 reachable 过滤——verifier 跳过不可达代码，不要求帧。
+    // 目标随后按帧的 reachable 过滤，verifier 跳过不可达代码，不要求帧。
     std::set<ca::u32> targetPcs;
     const auto addTarget = [&](ir::LabelId label) {
         const auto t = u.dom.resolveLabel(label);
@@ -242,7 +242,7 @@ buildStackMapTable(ir::ClassSession& s, const ir::CodeUnit& u,
     }
 
     // 链的起点 = 隐式初始帧：首指令到达帧的 locals（与引擎 MethodSig 播种
-    // 同源——构造器 this 槽是 UninitThis，参数携带描述符精确类名）。
+    // 同源，构造器 this 槽是 UninitThis，参数携带描述符精确类名）。
     const std::unordered_map<ca::u32, ca::usize> idxOf = pcIndex(u);
     auto initR = smt_detail::smtEntriesOf(s, frames[0].locals);
     if (initR.is_err()) {

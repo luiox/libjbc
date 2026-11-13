@@ -1,7 +1,7 @@
 -- libjbc：node-first JVM 字节码统一建模库（架构设计见 docs/design.rst）。
 -- 本文件是独立仓工程根：包仓接线（libca 经 luiox-repo git 直连）、构建
 -- 开关、全局编译纪律（no-RTTI）与链接闭包助手，随后定义全部 target。
--- core 层：单类 lazy classfile DOM——骨架 eager（头 / CP / 成员元数据 /
+-- core 层：单类 lazy classfile DOM，骨架 eager（头 / CP / 成员元数据 /
 -- 属性目录），属性内容 lazy（span + skip），保真写回：未触碰 copy 源
 -- span，触碰才重编码；之上 ir（CodeDom + ClassSession）、analysis
 -- （FrameAt / DomainEngine）、type（描述符/签名树）按层叠加。
@@ -96,7 +96,7 @@ target("libjbc_unittest")
     add_deps("libjbc", "test_helper")
     -- 显式列出完整闭包（xmake 3.x 不会自动链静态依赖的二级传递闭包）。经
     -- binary_link_closure：windows 裸 add_links 行为不变，linux 进
-    -- linkgroups 免序——test_helper 的二级依赖 libca_test/libjdk_finder 在
+    -- linkgroups 免序，test_helper 的二级依赖 libca_test/libjdk_finder 在
     -- GNU ld 单遍扫描下必须同组才能解析（linux 链接期 undefined ca::test::*）。
     binary_link_closure("libjbc", "test_helper", "libca_test", "libjdk_finder")
     add_packages("gtest")

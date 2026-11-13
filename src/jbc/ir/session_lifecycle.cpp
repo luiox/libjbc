@@ -16,7 +16,7 @@ ClassSession::ClassSession(std::unique_ptr<core::ClassFile> backing)
 
     u.version = (static_cast<ca::u32>(cf.major) << 16) | cf.minor;
     u.access  = cf.access;
-    // this/super/接口表是 Class 索引，成员名是 Utf8 索引——两种坐标系分开解析。
+    // this/super/接口表是 Class 索引，成员名是 Utf8 索引，两种坐标系分开解析。
     auto internResolved = [&](std::string_view v) { return u.symbols().intern(v); };
     u.thisClass  = internResolved(cf.thisName());
     u.superClass = internResolved(cf.superName());
@@ -55,13 +55,13 @@ makeSession(std::unique_ptr<core::ClassFile> backing)
         return Err(PromoteError::NotModeled);
     }
     // 构造函数私有（仅本函数是友元）：shared_ptr 接管寿命，同时使能
-    // shared_from_this——保活句柄（CodeUnitRef / *SemRef）依赖它。
+    // shared_from_this，保活句柄（CodeUnitRef / *SemRef）依赖它。
     return Ok(std::shared_ptr<ClassSession>(new ClassSession(std::move(backing))));
 }
 
 Result<std::shared_ptr<ClassSession>, PromoteError> makeSession(const NewClassSeed& seed)
 {
-    // 种子预检：任何越界/缺名都在建模型之前拒绝——不产出半截会话。
+    // 种子预检：任何越界/缺名都在建模型之前拒绝，不产出半截会话。
     if (seed.thisName.empty() || seed.thisName.size() > 0xFFFFu
         || seed.superName.size() > 0xFFFFu || seed.access > 0xFFFFu
         || seed.interfaces.size() > 0xFFFFu) {

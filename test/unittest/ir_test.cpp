@@ -251,7 +251,7 @@ TEST(IrSessionTest, RepeatedLowerUsesLatestBackingLayoutForRelocation)
 
 TEST(IrSessionTest, EditorEraseRetargetsUses)
 {
-    // goto L; nop; L: return —— 删 nop（retarget 策略）：goto 改指 return。
+    // goto L; nop; L: return: 删 nop（retarget 策略）：goto 改指 return。
     ClassBuilder cb;
     const ca::u16 thisIdx = cb.utf8("p/T");
     const ca::u16 superIdx = cb.utf8("java/lang/Object");
@@ -400,7 +400,7 @@ TEST(IrSessionTest, EditorEraseRejectsExceptionBoundary)
 
 namespace {
 
-/// goto B; nop(B); nop; goto H; nop×3; H: return —— 批删 {B,E,F} 时
+/// goto B; nop(B); nop; goto H; nop×3; H: return: 批删 {B,E,F} 时
 /// A→B 是唯一跨批引用（retarget 后 A→C），D→H 全程批外。
 Bytes makeChainClass()
 {
@@ -724,7 +724,7 @@ TEST(IrSessionTest, MoveRangeMovesSegmentAndKeepsReferences)
 
 TEST(IrSessionTest, MoveRangeHeadStaysRebindsHeadLabels)
 {
-    // 段首边界标签的「留原地」策略：锚点重定向到原段位后继，标签句柄
+    // 段首边界标签的留原地策略：锚点重定向到原段位后继，标签句柄
     // 身份不变，段外引用跟着指到承接者；尾段（last 用尾哨兵）的承接者
     // 是方法末边界，此时仍被控制字段引用的段首标签显式拒绝。
     auto s = sessionOf(makeEditableClass(false));
@@ -1080,7 +1080,7 @@ TEST(IrSessionTest, PromoteRejectsExceptionEndInsideInstruction)
 
 TEST(IrSessionTest, InsertAtEndLabelAppendsWithEndBoundaryPreserved)
 {
-    // End 是开区间末端而非「当前末条指令」：insertAtLabel 只追加指令，
+    // End 是开区间末端而非当前末条指令：insertAtLabel 只追加指令，
     // 标签继续解析为方法末尾；lower 后异常表 end_pc 跟随新 code 长度。
     const Bytes cls = makeExcClass(0, 3, 1);   // end_pc=3 == code 长度 → End 标签
     auto s = sessionOf(cls);
@@ -1718,7 +1718,7 @@ TEST(IrSessionTest, EditRelocatesCharacterRangeTable)
 TEST(IrSessionTest, CharacterRangeTableBadPcFailsClosed)
 {
     // CRT 行 end_pc=9 不在任何指令起点：CRT 已建模，因此是 RelocationBadTarget
-    // （而不是未建模墙的 NotModeled）；全有或全无——code 与同表 LNT 原样。
+    // （而不是未建模墙的 NotModeled）；全有或全无，code 与同表 LNT 原样。
     ClassBuilder cb;
     const ca::u16 thisIdx = cb.utf8("p/T");
     const ca::u16 superIdx = cb.utf8("java/lang/Object");
@@ -1929,7 +1929,7 @@ TEST(IrSessionTest, CommitClassMetadataEmptySuperWritesZero)
     ASSERT_NE(s, nullptr);
     ClassUnit& u = s->unit();
     EXPECT_NE(s->backing().superClass, 0u);   // 前置：makeEditableClass 有真父类
-    u.superClass = u.symbols().intern("");    // 高层把「无父类」表为空名
+    u.superClass = u.symbols().intern("");    // 高层把无父类表为空名
     ASSERT_TRUE(s->commitClassMetadata().is_ok());
     EXPECT_EQ(s->backing().superClass, 0u);
 }
@@ -2013,7 +2013,7 @@ TEST(IrSessionTest, LabelsAtListsAnchoredLabelsBothRoles)
 
 TEST(IrSessionTest, MethodParametersAcceptsReceiverArity)
 {
-    // JVMS 4.7.24：MethodParameters 行数可为「描述符 arity」或「arity + 1」
+    // JVMS 4.7.24：MethodParameters 行数可为描述符 arity或arity + 1
     // （实例方法的接收者行，javac 对非静态方法恒带 this 行）。
     auto make = [](ca::u16 methodAccess) {
         ClassBuilder cb;

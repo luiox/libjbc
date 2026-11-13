@@ -152,7 +152,7 @@ TEST(AnnotationCorpusGate, AllAnnotAttrsTypedRoundtripByteIdentity)
 
     EXPECT_GT(filesChecked, 0u);
 
-    // 分布断言：annot 小语料为自产模式（javac 产物保证四件齐备）——参数注解
+    // 分布断言：annot 小语料为自产模式（javac 产物保证四件齐备），参数注解
     // 双保留由带注解参数样本保证、AnnotationDefault 由注解类型默认值方法保
     // 证、MethodParameters 由 -parameters 旗语保证。
     EXPECT_GT(counts.paramAnnosVisible, 0u)

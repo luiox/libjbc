@@ -6,7 +6,7 @@
 /// @brief       单类 DOM：libjbc core 的模型本体。
 ///
 /// 一个 ClassFile 就是一个 class 的完整、可独立析构的所有者。它不持有
-/// Jar、不持有 JDK、不持有全局索引——那些是上层消费方的事。
+/// Jar、不持有 JDK、不持有全局索引，那些是上层消费方的事。
 ///
 /// 模型关系是一条单纯的拥有链，没有 visitor，也不把控制流标签作为低层
 /// classfile 对象图的一部分：
@@ -74,17 +74,17 @@ public:
     /// @brief 类级属性表之后的非标准尾部字节（畸形输入的保真形态）。
     ///
     /// 与 @ref CodeAttr::trailing 同族：合法 classfile 在
-    /// 类属性表后应当结束，多余字节属于畸形输入，但结构与边界都可确定——
+    /// 类属性表后应当结束，多余字节属于畸形输入，但结构与边界都可确定，
     /// 因此保留为副本而不是 Err 或静默丢弃。未修改时写回走 copy 路径天然
     /// 无损；任何属性被修改触发重编码后，writer 仍把这段字节原样附在末尾，
-    /// 「未修改字节级往返」因此覆盖带尾部垃圾的输入。
+    /// 未修改字节级往返因此覆盖带尾部垃圾的输入。
     std::vector<ca::u8> trailing;
 
     // ---- 源字节：lazy 与 copy-through 保真的共同前提 ----
 
     /// @brief 是否保留源字节（由 ReadOptions 决定）。
     ///
-    /// 没有源字节就无法 copy-through，只能整体重编码——这是明确的内存/保真权衡，
+    /// 没有源字节就无法 copy-through，只能整体重编码，这是明确的内存/保真权衡，
     /// 不是隐藏的降级；写回时若要求 Preserve 而源缺失，返回 Err 而非静默重编码。
     bool hasSource() const noexcept { return !source_.empty(); }
 
@@ -97,7 +97,7 @@ public:
 
     /// @brief CP Class 条目的内部名（Class→Utf8 一跳解析）；非 Class 索引返回空。
     ///
-    /// this/super/接口表存的都是 Class 索引——与 @ref utf8 期望的 Utf8 索引
+    /// this/super/接口表存的都是 Class 索引，与 @ref utf8 期望的 Utf8 索引
     /// 是两种坐标系，混用只会得到空串。
     std::string_view className(ca::u32 classCp) const noexcept;
 
@@ -137,7 +137,7 @@ public:
     /// @brief 按属性名查找类级属性（O(n) 逐条 memcmp，不分配）。
     AttrSlot* findClassAttr(std::string_view name) noexcept;
 
-    // ---- lazy 解码入口（唯一的「从 span 变成对象」通道）----
+    // ---- lazy 解码入口（唯一的从 span 变成对象通道）----
 
     /// @brief 按需解码一个属性槽：未解码则解码，已解码直接返回。
     ///

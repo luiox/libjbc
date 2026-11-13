@@ -134,7 +134,7 @@ TEST(InsnCodecTest, WideFormsRoundtrip)
 {
     // wide iload 300：0xc4 0x15 0x012c
     expectRoundtrip(mk({0xc4, 0x15, 0x01, 0x2c, 0xb1}));
-    // wide iload 5（小索引也必须保留 wide 前缀——混淆器的真实形态）
+    // wide iload 5（小索引也必须保留 wide 前缀，混淆器的真实形态）
     expectRoundtrip(mk({0xc4, 0x15, 0x00, 0x05, 0xb1}));
     // wide iinc 700, -2
     expectRoundtrip(mk({0xc4, 0x84, 0x02, 0xbc, 0xff, 0xfe, 0xb1}));
@@ -198,7 +198,7 @@ TEST(InsnCodecTest, EmptyCodeIsValid)
 }
 
 /// 编码闸门：操作数落不进目标域宽必须 Err(Unencodable)，
-/// 不得静默截断——截断产出引用错条目 / 立即数错值的 class。u1 域放不下的
+/// 不得静默截断，截断产出引用错条目 / 立即数错值的 class。u1 域放不下的
 /// 唯一合法出路是显式拓宽（wide 前缀 / LDC_W / goto_w）。
 TEST(InsnCodecTest, EncodeRejectsOutOfRangeOperands)
 {
@@ -260,7 +260,7 @@ TEST(InsnCodecTest, EncodeRejectsOutOfRangeOperands)
 TEST(CodeDomTest, ImportRoundtripEquals)
 {
     const Bytes code = mk({0x1a, 0x1b, 0x60, 0xa7, 0x00, 0x03, 0xac});
-    // iload_0 iload_1 iadd goto +3 ireturn —— goto(pc=3) 跳到 pc=6 的 ireturn。
+    // iload_0 iload_1 iadd goto +3 ireturn: goto(pc=3) 跳到 pc=6 的 ireturn。
     auto d = CodeDom::importFrom(ByteView{code});
     ASSERT_TRUE(d.is_ok()) << jbc::ir::to_string(d.unwrap_err());
     CodeDom dom = std::move(d).unwrap();
@@ -288,7 +288,7 @@ TEST(CodeDomTest, EraseBranchTargetIsStillUsed)
     ASSERT_TRUE(e.is_err());
     EXPECT_EQ(e.unwrap_err(), EditError::StillUsed);
 
-    // retarget 到自身后仍被引用（goto → 自己）：换个目标——插入一个新 return
+    // retarget 到自身后仍被引用（goto → 自己）：换个目标，插入一个新 return
     // 并把 uses 换过去，旧 return 才可删。
     Insn nr;
     nr.op = Op::RETURN;
@@ -434,7 +434,7 @@ TEST(CodeDomTest, EraseBatchAllOrNothing)
 
 TEST(CodeDomTest, EraseBatchInternalCrossReferenceDiesTogether)
 {
-    // goto B; goto C; return —— A→B、B→C 全是批内互指：随批消亡，不算引用。
+    // goto B; goto C; return: A→B、B→C 全是批内互指：随批消亡，不算引用。
     // （逐条 erase 按顺序先删谁谁挡路；批量语义与成员消亡顺序无关。）
     auto d = CodeDom::importFrom(ByteView{mk({0xa7, 0x00, 0x03, 0xa7, 0x00, 0x03, 0xb1})});
     ASSERT_TRUE(d.is_ok());
@@ -453,7 +453,7 @@ TEST(CodeDomTest, EraseBatchInternalCrossReferenceDiesTogether)
 
 TEST(CodeDomTest, EraseBatchRetargetRewritesSurvivorFields)
 {
-    // goto B; nop; nop; return —— A（存活）→ B（批内）：无安排拒绝，有安排改锚。
+    // goto B; nop; nop; return: A（存活）→ B（批内）：无安排拒绝，有安排改锚。
     auto d = CodeDom::importFrom(ByteView{mk({0xa7, 0x00, 0x03, 0x00, 0x00, 0xb1})});
     ASSERT_TRUE(d.is_ok());
     CodeDom dom = std::move(d).unwrap();
@@ -470,7 +470,7 @@ TEST(CodeDomTest, EraseBatchRetargetRewritesSurvivorFields)
     EXPECT_EQ(dom.size(), 4u);
     EXPECT_EQ(dom.resolveLabel(dom.peek(a)->target).unwrap().insn, b);
 
-    // 安排缺失（只安排 B 不安排 C 无碍——C 无引用者；但完全无安排已验）。
+    // 安排缺失（只安排 B 不安排 C 无碍，C 无引用者；但完全无安排已验）。
     // 正常安排：B→R 改锚后成批删除。
     const std::vector<std::pair<InsnId, InsnId>> plan{{b, r}};
     ASSERT_TRUE(dom.eraseBatch({b, c}, plan).is_ok());
@@ -713,7 +713,7 @@ TEST(CodeDomTest, InsertShiftsBranchOffsets)
     ASSERT_TRUE(dom.roundtripEquals(ByteView{code}));
 
     // 在第一个 nop 前插入 3 条 nop：goto 的目标仍是同一个句柄，字节偏移
-    // 由导出重算——语义不变（跳到的还是原来那条指令）。
+    // 由导出重算，语义不变（跳到的还是原来那条指令）。
     const InsnId firstNop = dom.order()[2];
     for (int i = 0; i < 3; ++i) {
         Insn n;
@@ -829,7 +829,7 @@ void makeFarGotoDom(ca::usize nops, FarGotoDom& out)
 TEST(CodeDomTest, FarGotoAutoWidensOnExport)
 {
     // 39995 个 nop：初排 goto 3 字节时偏移 39998 放不下 i16；加宽后
-    // goto_w(5) + 39995 nop + return = 40001 字节，goto 偏移 40000——
+    // goto_w(5) + 39995 nop + return = 40001 字节，goto 偏移 40000，
     // 与手工 goto_w 夹具 longGotoWCode() 逐字节同构。
     FarGotoDom d;
     makeFarGotoDom(39995, d);
@@ -854,7 +854,7 @@ TEST(CodeDomTest, FarGotoAutoWidensOnExport)
 TEST(CodeDomTest, GotoWideningCascadeReachesFixpoint)
 {
     // 正向远跳 A（goto→ret）加宽后，后向跳 B（goto→A）的 |偏移| 被挤出
-    // i16——加宽发生在 B 与其目标之间。B 初排 -32765 压线合法，
+    // i16，加宽发生在 B 与其目标之间。B 初排 -32765 压线合法，
     // A 加宽 +2 后超限，第二轮才加宽：验证 fixpoint 不止跑一轮。
     // 布局：[A: goto→ret] nop×32764 [B: goto→A] ret。
     CodeDom dom;
@@ -897,7 +897,7 @@ TEST(CodeDomTest, GotoWideningCascadeReachesFixpoint)
 TEST(CodeDomTest, ConditionalBranchOverflowStillRejected)
 {
     // 条件分支没有宽形式：加宽须反转条件 + goto_w 桥接（插入指令），
-    // 导出期不做——仍然 Err(BranchOverflow)。
+    // 导出期不做，仍然 Err(BranchOverflow)。
     FarGotoDom d;
     makeFarGotoDom(39995, d);
     auto id = d.dom.get(d.dom.order().front());

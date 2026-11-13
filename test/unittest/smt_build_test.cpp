@@ -2,14 +2,14 @@
 /// @brief       StackMapTable 生成器测试。
 ///
 /// 三部分：
-/// 1. 单元——紧凑形态选择表驱动（same/same1/chop/append/full + delta 边界）、
+/// 1. 单元，紧凑形态选择表驱动（same/same1/chop/append/full + delta 边界）、
 ///    cat2 展开、Uninit offset 落 new pc、CP intern 复用、无控制流空产出、
 ///    版本门、防御拒绝路径。
-/// 2. javac oracle——对同源语料（loop/switch 扩展）剥原 SMT →
+/// 2. javac oracle，对同源语料（loop/switch 扩展）剥原 SMT →
 ///    重生成 → maxes 覆盖 + lower 写回 → 组装写回 → 重读解码展开，与原 SMT
 ///    展开按公共前缀逐槽比对（口径：多槽/更精确不判分歧）。javac
 ///    缺席时 skip。
-/// 3. JVM 真跑——javac 样本（异常/循环/switch/构造器链）+ 手拼 uninit
+/// 3. JVM 真跑，javac 样本（异常/循环/switch/构造器链）+ 手拼 uninit
 ///    样本，全链（剥 SMT + maxes 覆盖 + lower 写回 + 重生成 SMT）后
 ///    java 执行验收（整链端到端的最强门）。JDK 缺席时 skip。
 #include <gtest/gtest.h>
@@ -87,7 +87,7 @@ ClassBuilder baseClass(ca::u16 major = 52)
     return cb;
 }
 
-/// iconst_1; pop; return —— 无控制流最小载体。
+/// iconst_1; pop; return: 无控制流最小载体。
 std::shared_ptr<ClassSession> trivialClass(ca::u16 major = 52)
 {
     ClassBuilder cb = baseClass(major);
@@ -351,9 +351,9 @@ std::string regenSmtInSession(ClassSession& s, StubResolver& res, RegenStats& st
         }
         auto built = std::move(r).unwrap();
 
-        // 全链：maxes 覆盖（显式 API）→ lower 写回——布局未变，lower 不
+        // 全链：maxes 覆盖（显式 API）→ lower 写回，布局未变，lower 不
         // 触碰指令与嵌套属性；maxes 变化走手动链路的同一脏检查分支（覆盖
-        // 语义），与 JVM 真跑门共同锁「重算 maxes 可运行」。
+        // 语义），与 JVM 真跑门共同锁重算 maxes 可运行。
         if (!applyComputedMaxes(*p.unwrap(), sum, sig)) {
             return std::string("maxes adopt failed (") + std::string(sig.name) + ")";
         }
@@ -508,7 +508,7 @@ TEST(SmtBuildEntries, Cat2WithoutFillerRejected)
 }
 
 /// 引擎栈上 cat2 的交付口径：长值跨分支目标（合并点栈上持有 long）时，
-/// 交付帧的栈与 SMT 条目空间同序——值槽在前、Top 垫底在后。引擎内部
+/// 交付帧的栈与 SMT 条目空间同序，值槽在前、Top 垫底在后。引擎内部
 /// [垫底行, 值行] 的存储布局不得泄漏到 FrameAt（泄漏形态在 smtEntriesOf
 /// 处会以 BottomInFrame 被拒，B 批 junk 合并点样本即此暴露）。
 TEST(SmtBuildEntries, Cat2OnStackDeliveredValueFirst)
@@ -577,9 +577,9 @@ TEST(SmtBuildEntries, RefInternsClassAndBottomToTop)
     EXPECT_EQ(s->backing().cp.size(), before + 2);
 
     // Bottom：merge 冲突槽（Strict 域 int×Ref 边×边 meet 的冲突标记）→
-    // top_variable_info——HotSpot 声明帧的 top 槽吸收两路（ZKM 异常驱动
+    // top_variable_info，HotSpot 声明帧的 top 槽吸收两路（ZKM 异常驱动
     // 形实证）；冲突槽被 load 时引擎侧类型检查仍拒，序列化面只表达
-    // 「该槽状态不可用」。无名引用：防御拒绝不变。
+    // 该槽状态不可用。无名引用：防御拒绝不变。
     auto rb = smtEntriesOf(*s, {VType{VKind::Bottom, 0, {}}});
     ASSERT_TRUE(rb.is_ok());
     EXPECT_EQ(rb.unwrap()[0].tag, Ent::kTop);
@@ -593,7 +593,7 @@ TEST(SmtBuildEntries, RefInternsClassAndBottomToTop)
 // ---------------------------------------------------------------------------
 
 /// intonly/weirdSum 异常驱动形最小化：正常流抛点携带 Int 槽边 + handler
-/// 体覆盖槽后 any 区间内不抛指令（iinc）也发边携带 Ref 槽边——发射域
+/// 体覆盖槽后 any 区间内不抛指令（iinc）也发边携带 Ref 槽边，发射域
 /// 全发（HotSpot 对 any handler 区间逐指令合并，weirdSum 区间内 iinc 边
 /// 实证）→ StrictDomain::merge 冲突吸成 Bottom → 序列化面落
 /// top_variable_info（HotSpot 声明帧 top 槽吸收两路，ZKM 原罐 chop 同款）。
@@ -868,7 +868,7 @@ TEST(SmtBuildApi, UninitPayloadLandsOnNewPc)
     // 目标集合 = ifeq 目标 pc 13 + goto 目标 pc 16（两处都需帧）。
     ASSERT_EQ(r.attr->frames.size(), 2u);
 
-    // 合并点 pc 16：locals/stack 携带 Uninitialized(offset=0)——0 号指令是 new。
+    // 合并点 pc 16：locals/stack 携带 Uninitialized(offset=0)，0 号指令是 new。
     // 帧载荷里的 offset 是编码口径的 delta（首帧 = pc，其后 = 相邻差 - 1）。
     const auto& f = r.attr->frames[1];
     EXPECT_EQ(f.offset, 2u);   // 16 - 13 - 1
@@ -1096,7 +1096,7 @@ fs::path probeResource()
     return fs::path("test_resource") / "libjbc" / "smt_probe";
 }
 
-/// 手拼 UninitProbe.run：new 后分支再汇聚到同一 \<init\>——真实帧携带
+/// 手拼 UninitProbe.run：new 后分支再汇聚到同一 \<init\>，真实帧携带
 /// Uninitialized(offset) 条目（javac --release 8 产不出该形态，合成补位）。
 /// 执行结果 = "U"。
 Bytes buildUninitProbe()

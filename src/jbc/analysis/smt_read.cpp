@@ -125,7 +125,7 @@ readFramesFromSmt(ir::ClassSession& s, const ir::CodeUnit& u)
         return R(Ok(std::vector<SmtFrameView>{}));   // 属性缺席（合法）：空视图
     }
 
-    // 链头 = 隐式初始帧：this 形态 + 描述符参数，条目口径——链
+    // 链头 = 隐式初始帧：this 形态 + 描述符参数，条目口径，链
     // 算术（chop/append）在条目空间进行，不按 maxLocals 预垫 Top（预垫会把
     // append 载荷推到垫顶之后，错位全部槽号）。
     MethodSig sig;

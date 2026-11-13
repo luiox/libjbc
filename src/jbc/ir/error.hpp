@@ -40,7 +40,7 @@ enum class LowerError {
     CodeTooLarge,      ///< 方法体编码超出 64KB（JVMS 4.7.3：code_length ≤ 65535）
     CpAppendFailed,    ///< CP 只追加写入失败（容量/类型不符）
     NotPromoted,       ///< lower 的方法没有先 promote
-    RelocationNotModeled,  ///< 布局改变且存在无 handler 的受影响属性——明确失败
+    RelocationNotModeled,  ///< 布局改变且存在无 handler 的受影响属性，明确失败
     RelocationBadTarget,   ///< pcmap 无法精确重定向某个 pc 引用
     InvalidHandle,     ///< 成员身份句柄无效（已删除或来自另一会话）
     InvalidSeed,       ///< 新增成员的种子不合法（空名字/描述符、重名等）

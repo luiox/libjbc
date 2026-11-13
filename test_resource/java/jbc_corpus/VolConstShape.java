@@ -1,4 +1,4 @@
-// VolConstShape.java — libjbc 语料：静态常量族（CP Integer/Long/Float/Double/String/Class 全载荷）+ 静态初始化。
+// VolConstShape.java: libjbc 语料：静态常量族（CP Integer/Long/Float/Double/String/Class 全载荷）+ 静态初始化。
 package jbcx.corpus;
 
 public final class VolConstShape {

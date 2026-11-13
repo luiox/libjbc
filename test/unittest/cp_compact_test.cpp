@@ -76,7 +76,7 @@ TEST(CpCompact, StableMappingPinnedFace)
     ASSERT_TRUE(compactConstantPool(*sess).is_ok());
 
     // 子序映射：活条目按老索引升序原位保留，死条目 8/9/10 不落入
-    // 新池——本例活面无重复，映射逐条恒等：1→1 … 7→7。
+    // 新池，本例活面无重复，映射逐条恒等：1→1 … 7→7。
     const ClassFile& cf = sess->backing();
     ASSERT_EQ(cf.cp.size(), 8u);
     EXPECT_EQ(utf8At(cf, 1), "p/T");
@@ -238,7 +238,7 @@ TEST(CpCompact, DedupMergesDuplicatesFormsPreserved)
 TEST(CpCompact, MethodHandleKeyUsesRefNotKindColumn)
 {
     // MH/Dyn/Indy 的 a 列（reference_kind / bootstrap 下标）不是 CP 引用：
-    // 等价类键必须取引用列（b）的类号——同 kind 异引用不得并类，真重复才并。
+    // 等价类键必须取引用列（b）的类号，同 kind 异引用不得并类，真重复才并。
     jbc::test::ClassBuilder cb;
     const ca::u16 uT = cb.utf8("p/T");
     const ca::u16 uO = cb.utf8("java/lang/Object");
@@ -356,7 +356,7 @@ TEST(CpCompact, CompactClosedSetSideAttrsRemapped)
     jbc::test::detail::putU16(nmBody, cThr);
     jbc::test::detail::putU16(psBody, 1);
     jbc::test::detail::putU16(psBody, cT2);
-    // Record：一组件（name 与字段名 "value" 重复），带嵌套 Signature——组件
+    // Record：一组件（name 与字段名 "value" 重复），带嵌套 Signature，组件
     // 两槽 Utf8 与嵌套属性载荷三处都过压缩通道（两两内容重复 → 去重同条目）。
     jbc::test::detail::putU16(recBody, 1);
     jbc::test::detail::putU16(recBody, uRecName);

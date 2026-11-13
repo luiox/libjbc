@@ -328,7 +328,7 @@ TEST(RecordAttrTest, EncoderRejectsOutOfRangeFields)
 TEST(RecordAttrTest, NestedAttrDirtyReencodesParent)
 {
     // 父 Record 槽只置 Decoded，仅组件嵌套 Signature 槽被改：写回必须感知
-    // 嵌套置脏并重编码父体（attrNeedsReencode 递归闸）——这是嵌套槽
+    // 嵌套置脏并重编码父体（attrNeedsReencode 递归闸），这是嵌套槽
     // copy-through 闸门的反面钉门。
     const TwoCompClass fx = makeTwoCompClass();
     auto cf = jbc::test::readOk(fx.cls);

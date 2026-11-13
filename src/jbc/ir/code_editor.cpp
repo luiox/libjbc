@@ -143,8 +143,8 @@ Result<void, EditError> CodeEditor::moveRange(InsnId first, InsnId last, InsnId 
     if (firstPos >= lastPos || (!toEnd && atPos > firstPos && atPos < lastPos)) {
         return Err(EditError::BadRange);
     }
-    // 段已在锚点位置：整体无操作，kHeadStays 也不触发改绑——没有位移就
-    // 没有「留原地」的语义可执行，保持锚定现状才是无操作的本义。
+    // 段已在锚点位置：整体无操作，kHeadStays 也不触发改绑，没有位移就
+    // 没有留原地的语义可执行，保持锚定现状才是无操作的本义。
     const bool noop = toEnd ? lastPos == order.size()
                             : (atPos == firstPos || atPos == lastPos);
     if (noop || p == MoveRangePolicy::kHeadFollows) {
@@ -158,7 +158,7 @@ Result<void, EditError> CodeEditor::moveRange(InsnId first, InsnId last, InsnId 
     const InsnId successor = lastPos < order.size() ? order[lastPos] : kNoInsn;
     const std::vector<LabelId> heads = u_.dom.labelsAt(first);
     // 异常表边界引用的段首标签不可机械改绑：改边界 = 改保护区间语义，
-    // 与 erase 的 fallthrough 策略同规——调用方先显式 bindLabel/destroyLabel。
+    // 与 erase 的 fallthrough 策略同规，调用方先显式 bindLabel/destroyLabel。
     for (const CodeUnit::Exc& e : u_.exc) {
         for (LabelId label : {e.start, e.end, e.handler}) {
             for (const LabelId head : heads) {

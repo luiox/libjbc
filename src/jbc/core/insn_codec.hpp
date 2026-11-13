@@ -9,7 +9,7 @@
 ///   - decode 对每个操作数做边界检查；遇到保留码/越界结构返回 Err，不猜。
 ///   - encode 是 decode 的精确逆：对未编辑的序列，字节必须逐位一致
 ///     （switch 的 4 字节对齐 padding 按目标 pc 重算，与源一致）。
-///   - 本层不做任何「修改」——插入/删除/重定向属于 ir 层的 CodeDom。
+///   - 本层不做任何修改，插入/删除/重定向属于 ir 层的 CodeDom。
 ///     在 code 字节上直接做 pass 是设计明确禁止的路径。
 #pragma once
 
@@ -38,7 +38,7 @@ ca::u32 rawInsnSize(const RawInsn& in, ca::u32 pc) noexcept;
 /// @brief 把指令序列编码回 code 字节。
 ///
 /// 指令按序列顺序紧密排布，pc 字段被重算并写回 insns（调用后可见）。
-/// 分支偏移 i16 溢出返回 Err(Unencodable)——本层不做 goto→goto_w 自动拓宽，
+/// 分支偏移 i16 溢出返回 Err(Unencodable)，本层不做 goto→goto_w 自动拓宽，
 /// 拓宽是 editor 的显式变换，静默换码会改变指令身份。
 Result<std::vector<ca::u8>, WriteError> encodeInsns(std::vector<RawInsn>& insns);
 

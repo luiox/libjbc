@@ -3,7 +3,7 @@
 指令 DOM 与标签身份设计
 =======================
 
-状态：定稿。「目标形状」各节是设计裁决，落地进度以「迁移顺序」一节为准。
+状态：定稿。目标形状各节是设计裁决，落地进度以迁移顺序一节为准。
 
 指令编辑的核心不是把 ``InsnList`` 做成另一种链表，而是让一个对象同时拥有指令存储、顺序、控制流引用和边界引用。这样删除、插入、重排和跨方法复制都经过同一个 owner 校验，指令本身不需要保存链表指针，也不需要由调用方配对 ``remove`` 与 ``delete``\（ir_code_dom 头注）。
 
@@ -51,9 +51,9 @@ owner 是跨 ``CodeDom`` 安全所必需的身份信息，但它不应该是指�
 
 标签的身份必须独立于指令身份，但标签的语义必须是一个可重算的边界。推荐的最小表示是 ``LabelId { owner, slot, generation }``，其中 slot 指向 ``LabelSlot { anchor, live, generation }``，``anchor`` 是某条 ``InsnId`` 或方法末尾哨兵。它仍然是整数句柄，没有 Java 对象、C++ 裸指针或 intrusive 节点。
 
-插入操作要明确标签策略，而不能依赖链表偶然顺序。``insertBefore(id, in)`` 把新指令放在目标指令之前，同时保留附着在目标前置边界的标签；``insertAtLabel(label, in)`` 把新指令放在标签所在边界，标签继续指向插入后的第一条指令；``insertAfter(id, in)`` 把新指令放在目标之后。这样「跳转是否包含新插入的代码」由 API 名称决定，不由调用方猜测。
+插入操作要明确标签策略，而不能依赖链表偶然顺序。``insertBefore(id, in)`` 把新指令放在目标指令之前，同时保留附着在目标前置边界的标签；``insertAtLabel(label, in)`` 把新指令放在标签所在边界，标签继续指向插入后的第一条指令；``insertAfter(id, in)`` 把新指令放在目标之后。这样跳转是否包含新插入的代码由 API 名称决定，不由调用方猜测。
 
-从 classfile 导入时，分支目标 pc 映射为目标指令前的标签，异常表的 ``start_pc``、``handler_pc`` 和 ``end_pc`` 也全部映射为标签。每个控制流操作数独立创建标签：两个 goto 跳到同一条指令时各自持有不同的 ``LabelId``，只是解析到同一边界——一次重定向因此只影响一个字段，也不会把控制流 use 和元数据边界混在一起。写出时先由标签解析当前边界，再把边界转为 pc；标签没有固定 offset，插入、删除和重排不会留下需要手工修补的数字。
+从 classfile 导入时，分支目标 pc 映射为目标指令前的标签，异常表的 ``start_pc``、``handler_pc`` 和 ``end_pc`` 也全部映射为标签。每个控制流操作数独立创建标签：两个 goto 跳到同一条指令时各自持有不同的 ``LabelId``，只是解析到同一边界，一次重定向因此只影响一个字段，也不会把控制流 use 和元数据边界混在一起。写出时先由标签解析当前边界，再把边界转为 pc；标签没有固定 offset，插入、删除和重排不会留下需要手工修补的数字。
 
 方法末尾标签必须是合法的一等边界。``LabelTarget`` 的 ``kind == End`` 与无效句柄（Result 的 Err）在类型上分开，异常表的开区间端点直接使用 End 标签；``end_pc == code_length`` 的导入建立 End 标签，lower 时 End 端点映射到新 code 长度。
 
@@ -64,7 +64,7 @@ owner 是跨 ``CodeDom`` 安全所必需的身份信息，但它不应该是指�
 
 单条指令不能在两个 DOM 之间直接移动，因为它的分支和元数据引用仍属于源 owner。跨列表操作应返回一个拥有型的 ``DetachedCode``，其中包含指令序列、标签表、异常范围和一张旧句柄到新句柄的映射；插入目标 DOM 时一次性分配新身份并重写所有内部引用。无法解析的引用必须返回错误，不能把旧整数当成目标列表中的合法 slot。
 
-删除指令时，仍被 branch/switch 操作数字段引用（``usersOf``）或被存活 ``Boundary`` 标签锚定的指令返回 ``StillUsed``。``replaceAllUses(from, to)`` 只改写 branch/switch 操作数字段：每个字段获得一枚锚定 to 的新 ``ControlFlow`` 标签，锚定同一指令的 ``Boundary`` 标签保持原位，导入产生的旧 ``ControlFlow`` 标签随后销毁。字段改写后遗留的历史控制流标签不再保护锚点——``CodeEditor::setTarget`` 替换目标后删除旧目标不应被这类残留标签阻止（ir_code_editor 头注）。若异常表、局部变量表或行号表仍引用某边界，必须显式处理；这个规则保证「删节点后留下悬垂 label」在 API 层不可达。
+删除指令时，仍被 branch/switch 操作数字段引用（``usersOf``）或被存活 ``Boundary`` 标签锚定的指令返回 ``StillUsed``。``replaceAllUses(from, to)`` 只改写 branch/switch 操作数字段：每个字段获得一枚锚定 to 的新 ``ControlFlow`` 标签，锚定同一指令的 ``Boundary`` 标签保持原位，导入产生的旧 ``ControlFlow`` 标签随后销毁。字段改写后遗留的历史控制流标签不再保护锚点，``CodeEditor::setTarget`` 替换目标后删除旧目标不应被这类残留标签阻止（ir_code_editor 头注）。若异常表、局部变量表或行号表仍引用某边界，必须显式处理；这个规则保证删节点后留下悬垂 label在 API 层不可达。
 
 .. _instruction-dom-boundary:
 

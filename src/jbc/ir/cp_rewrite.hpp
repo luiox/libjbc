@@ -29,7 +29,7 @@ constexpr ca::u32 kMaxCpCount = 0xFFFF;
 ///        + 命中数。
 ///
 /// field 指向解码体内的 CP 索引字段：decodeAttr/peek 与 mutate 返回同一
-/// 对象（AttrSlot 缓存体指针），故 plan 期取的地址在落位期有效——两阶段
+/// 对象（AttrSlot 缓存体指针），故 plan 期取的地址在落位期有效，两阶段
 /// 之间不改写任何体结构、向量不重分配。
 struct PendingCpRewrite
 {
@@ -55,7 +55,7 @@ Result<ca::u32, E> internUtf8Dedup(core::ClassFile& cf, std::string_view s, E ca
 }
 
 /// @brief 阶段二容量预检（先算后写）：新串经查重后仍 miss 的条目数；重复
-///        新串只追加一次——首个落位后其余命中既有池。capacityError 由调用
+///        新串只追加一次，首个落位后其余命中既有池。capacityError 由调用
 ///        方给本族错误形状（SigAttrError / TaAttrError）。
 template <typename E>
 Result<void, E> precheckPendingCapacity(core::ClassFile&                     cf,

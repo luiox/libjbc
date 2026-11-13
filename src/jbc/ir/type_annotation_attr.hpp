@@ -1,12 +1,12 @@
 /// @defgroup ir_type_annotation_attr TypeAnnotations 手术
 ///
-/// Runtime{Visible,Invisible}TypeAnnotations 类名改写接线；见 doc:design-type。
+/// Runtime{Visible,Invisible}TypeAnnotations 类名改写处理；见 doc:design-type。
 
 /// @file        type_annotation_attr.hpp
-/// @brief       Runtime{Visible,Invisible}TypeAnnotations 的类名手术接线。
+/// @brief       Runtime{Visible,Invisible}TypeAnnotations 的类名手术处理。
 ///
-/// 类型注解体里承载类名的位置——注解类型描述符（type_index）与 'c'
-/// element_value 的类描述符（如 `@Anno(Expr.class)`）——是字段描述符形态，
+/// 类型注解体里承载类名的位置，注解类型描述符（type_index）与 'c'
+/// element_value 的类描述符（如 `@Anno(Expr.class)`），是字段描述符形态，
 /// 类名改写经 jbc::type::descriptor 的 span 手术面发生。
 /// target_info 里的 supertype/throws 下标指向 CP Class 条目（interfaces 表
 /// 与 Exceptions 表），随 CP Class 条目重指向自动跟随，不属本入口。
@@ -15,7 +15,7 @@
 ///   1. **显式调用出活**：调用方注入一对旧名/新名；未触发则槽保持
 ///      Untouched，字节逐字节 copy-through（硬门禁）。
 ///   2. **描述符层语义**：span 全名匹配 + 结构化替换，描述符语法非法
-///      （除基类型/void——它们不可能含类名，按无类名跳过）显式 Err 不猜。
+///      （除基类型/void，它们不可能含类名，按无类名跳过）显式 Err 不猜。
 ///   3. **失败显式 Err，不静默跳过**；全扫全有或全无（先全量预检后容量
 ///      预检再落位，失败不留半截改写、不追加任何 CP 条目）。
 ///   4. **CP 只追加 + 查重不膨胀**：新描述符 findUtf8 命中复用、miss 才

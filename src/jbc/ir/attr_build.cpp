@@ -4,7 +4,7 @@
 ///              （ClassSession 成员实现文件）。
 //
 // 挂载规则封闭表（单一知识源，勿在调用点散写）：
-//   - "Code" 一律拒绝——方法体的唯一管径是 promote → CodeEditor → lower，
+//   - "Code" 一律拒绝，方法体的唯一管径是 promote → CodeEditor → lower，
 //     从属性表侧面手挂 Code 会绕过 IR 一致性检查。
 //   - LNT / LVT / LVTT 允许多条（JVMS 未单例化，javac 也不合并重复表）。
 //   - 其余（含未知名）至多一条；重复挂载 Err(AlreadyMounted)，替换语义走
@@ -18,7 +18,7 @@
 //   BadMount       = 挂载点不接受（挂 Code）；
 //   CpAppendFailed = CP 容量预检不过。
 //
-// 全链「先算后写」：每个 attach 入口的执行序固定为
+// 全链先算后写：每个 attach 入口的执行序固定为
 //   1) 句柄解析；(2) 形状/域宽预检；(3) 挂载预检（单例/名字容量，不触碰
 //   模型）；(4) 规格容量预检（CP 追加数含属性名）；(5) 合成（CP 追加）；
 //   (6) 落位（attr table push）。任何一步失败都发生在其后续步骤之前，
@@ -41,7 +41,7 @@ namespace {
 
 constexpr int kMaxSynthDepth = 128;   ///< 合成递归深度闸（规格树的荒谬形态）
 
-/// @brief 方法描述符参数个数（长/双各算一个参数——MethodParameters/
+/// @brief 方法描述符参数个数（长/双各算一个参数，MethodParameters/
 ///        ParameterAnnotations 的行数语义）。解析失败（描述符损坏）按
 ///        InvalidSeed 收口：seed 支柱在合成期已校验，此处防御式兜底。
 Result<ca::u32, LowerError> methodDescArity(const ClassSession& s, SymbolId desc)
@@ -64,7 +64,7 @@ bool attrAllowsMultiple(std::string_view name) noexcept
 }
 
 /// @brief 注解类型描述符判据：JVMS 4.7.16 的 type_index / 'e' type_name 是
-///        「L<name>;」形态的字段类型描述符。合成面只做形态判据（非空 + L;
+///        L<name>;形态的字段类型描述符。合成面只做形态判据（非空 + L;
 ///        包围），泛型开剥离归 jbc::type 语义层。
 bool isClassFieldDescriptor(std::string_view s) noexcept
 {
@@ -83,7 +83,7 @@ bool elemWellFormed(const SemElemValue& e) noexcept
     case SemElemValue::Form::Nested:
         return e.nested != nullptr && isClassFieldDescriptor(e.nested->typeDesc);
     case SemElemValue::Form::Array:
-        // JVMS 数组 element_value 允许 0 项，但合成空数组无承载语义——
+        // JVMS 数组 element_value 允许 0 项，但合成空数组无承载语义，
         // 规格面拒绝；消费方确需空数组走低层面直接构造。
         return !e.array.empty();
     case SemElemValue::Form::Int:
@@ -104,7 +104,7 @@ bool annoWellFormed(const SemAnnotation& a) noexcept
     return isClassFieldDescriptor(a.typeDesc);
 }
 
-/// @brief 标量元素（Nested/Array 之外）的 CP 追加计数：miss 才计——与 intern
+/// @brief 标量元素（Nested/Array 之外）的 CP 追加计数：miss 才计，与 intern
 ///        家族同一去重判据，直接查 SemIndex 表。调用方保证 form 不是
 ///        Nested/Array（递归在 attach 入口统一走规格树遍历）。
 ca::u32 countScalarElem(const SemElemValue& e, SemIndex& ix)
@@ -166,7 +166,7 @@ std::optional<core::CpTag> mhRefTagOf(ca::u16 kind) noexcept
 
 /// @brief utf8 视图的既有索引解析：miss ⇒ 下游所有以该索引为键的映射
 ///        （byName/nat/ref/mh/mt…）必然 miss（池只追加，既有条目不可能
-///        引用尚不存在的下标）——计数链据此剪枝，与 intern 实现同构。
+///        引用尚不存在的下标），计数链据此剪枝，与 intern 实现同构。
 struct Utf8Known
 {
     ca::u32 idx = 0;
@@ -179,7 +179,7 @@ Utf8Known resolveUtf8(const SemIndex& ix, std::string_view s)
     return it == ix.utf8.end() ? Utf8Known{} : Utf8Known{it->second, true};
 }
 
-/// @brief BSM 编目计数器（miss 才计、保守超计可行、漏计不可——与
+/// @brief BSM 编目计数器（miss 才计、保守超计可行、漏计不可，与
 ///        countScalarElem 同一纪律）。与带去重 intern 的查找序列严格同构：
 ///        utf8→下游键；utf8 命中才查二级表，miss 直接按全链计加。
 ca::u32 countHandleAdditions(const SemIndex& ix, core::CpTag refTag,
@@ -507,7 +507,7 @@ Result<core::AnnotationsAttr::ElemValue, LowerError> ClassSession::synthElem(
     case Form::String:
         out.tag = 's';
         // 's' 的 const_value_index 直接指向 Utf8（JVMS 4.7.16.1 + javac
-        // 同形——javac 对 "hi" 编 s#7 而 #7=Utf8）：注解
+        // 同形，javac 对 "hi" 编 s#7 而 #7=Utf8）：注解
         // 字符串不隔 CONSTANT_String 条目。
         out.cp = internUtf8Sem(e.str);
         return Ok(std::move(out));
@@ -515,7 +515,7 @@ Result<core::AnnotationsAttr::ElemValue, LowerError> ClassSession::synthElem(
         out.tag = 'c';
         // 'c' 的 const_value_index 指向 Utf8（JVMS 4.7.22 + javac 同形）：
         // 基本类型/void 用对应类型描述符（"I"/"V"/...），类类型用类型描
-        // 述符（"Ljava/lang/String;"）——并非 CONSTANT_Class 条目。JVM 的
+        // 述符（"Ljava/lang/String;"），并非 CONSTANT_Class 条目。JVM 的
         // 'c' 解析器按此类描述符语义 readback（int.class 等）。
         out.cp = internUtf8Sem(e.str);
         return Ok(std::move(out));
@@ -606,7 +606,7 @@ Result<void, LowerError> ClassSession::attachAnnotationsToTable(
         return rp;
     }
     // 规格容量预检：全树追加数 + 属性名（属性名的 miss 数与 mountPrecheck
-    // 同判据，重叠安全——两次判定同一事实）。
+    // 同判据，重叠安全，两次判定同一事实）。
     {
         ca::u32 additions = 0;
         for (const SemAnnotation& a : annos) {
@@ -699,7 +699,7 @@ Result<void, LowerError> ClassSession::attachParameterAnnotations(
         }
     }
     // 描述符 arity 硬契约：参数组数必须等于方法参数个数（HotSpot 类解析对
-    // 失配抛 MalformedParametersException，合成面提前拦下——同上方域宽闸）。
+    // 失配抛 MalformedParametersException，合成面提前拦下，同上方域宽闸）。
     {
         const Result<ca::u32, LowerError> rArity = methodDescArity(*this, mu->desc);
         if (rArity.is_err()) {
@@ -825,8 +825,8 @@ Result<void, LowerError> ClassSession::attachMethodParameters(
             return Err(LowerError::DomainOverflow);
         }
     }
-    // 描述符 arity 硬契约：行数等于方法参数个数，实例方法额外放行「描述符
-    // arity + 1」的接收者形态——JVMS 4.7.24 允许 MethodParameters 把 receiver
+    // 描述符 arity 硬契约：行数等于方法参数个数，实例方法额外放行描述符
+    // arity + 1的接收者形态，JVMS 4.7.24 允许 MethodParameters 把 receiver
     // 计入参数行（javac 对非静态方法恒带 this 行）；反射入口对失配产物抛
     // MalformedParametersException，能被 JVM 证伪的垃圾按域宽闸门同一纪律
     // 提前拦下（接收者行内容不可静态证伪，只按行数放行）。
@@ -1148,7 +1148,7 @@ Result<ca::u32, LowerError> ClassSession::internDynamic(ca::u32 bsmIndex,
                                                         std::string_view desc)
 {
     // BSM 依赖锚点存在性：条目下标必须绑定在既有 BootstrapMethods 属性上
-    // （JVM 类解析对无锚 BSM 引用直接拒——condy/indy 共用条目空间）。
+    // （JVM 类解析对无锚 BSM 引用直接拒，condy/indy 共用条目空间）。
     const Result<core::BootstrapMethodsAttr*, LowerError> rb = seekBsmAttr(*this);
     if (rb.is_err()) {
         return Err(rb.unwrap_err());
@@ -1265,7 +1265,7 @@ Result<ca::u32, LowerError> ClassSession::appendBootstrapMethod(
             return Err(LowerError::CpAppendFailed);
         }
     }
-    // (5) 合成（CP 追加；条件参数此刻必命中 (3) 的锚点闸——预检与合成之间
+    // (5) 合成（CP 追加；条件参数此刻必命中 (3) 的锚点闸，预检与合成之间
     //     条目数只增不减）。
     const Result<ca::u32, LowerError> rh = internMethodHandle(handle);
     if (rh.is_err()) {
@@ -1280,7 +1280,7 @@ Result<ca::u32, LowerError> ClassSession::appendBootstrapMethod(
         }
         argCp[i] = ra.unwrap();
     }
-    // (6) 落位：同形条目命中复用——但仅在计数为 0（纯命中）时可能成立：
+    // (6) 落位：同形条目命中复用，但仅在计数为 0（纯命中）时可能成立：
     //     计数 > 0 必有真追加，追加下标 ≥ 池既有容量，不可能与既有条目同值。
     if (body != nullptr) {
         for (ca::u32 i = 0; i < body->entries.size(); ++i) {

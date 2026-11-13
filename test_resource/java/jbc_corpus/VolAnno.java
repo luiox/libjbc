@@ -1,4 +1,4 @@
-// VolAnno.java — libjbc 语料：注解全形态（RUNTIME/CLASS 保留 + 元素值全 tag）。
+// VolAnno.java: libjbc 语料：注解全形态（RUNTIME/CLASS 保留 + 元素值全 tag）。
 package jbcx.corpus;
 
 import java.lang.annotation.ElementType;
@@ -66,7 +66,7 @@ public final class VolAnno {
         }
     }
 
-    // 运行时反射读注解（类在，读法不在字节码层面——仅作编译形态）。
+    // 运行时反射读注解（类在，读法不在字节码层面，仅作编译形态）。
     static int annotationShapes() {
         return Annotated.class.getAnnotations().length
             + Full.class.getMethods().length

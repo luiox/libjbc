@@ -6,7 +6,7 @@
 /// @brief       JVM 指令码表：枚举、操作数形状、助记符。
 ///
 /// 这是 codec 层的字节格式知识：一个 opcode 加它的操作数布局唯一决定指令长度。
-/// 帧计算需要的栈效应不放在表里——invoke*/ldc/*load 的效应依赖 CP 描述符，
+/// 帧计算需要的栈效应不放在表里，invoke*/ldc/*load 的效应依赖 CP 描述符，
 /// 独立在 analysis 的 FrameEngine 里按 op 分派。
 #pragma once
 
