@@ -3,7 +3,7 @@
 ///        hasCode/collectCodeUnits、CodeCollectFilter、makeSessionFromBytes、findMethod。
 ///
 /// 全部用关内建的 ClassBuilder 字节构造（不依赖本机语料），畸形输入逐字节
-/// 受控——这与 test_class_bytes.hpp 的测试哲学一致。
+/// 受控，这与 test_class_bytes.hpp 的测试哲学一致。
 #include <gtest/gtest.h>
 
 #include <memory>
@@ -25,9 +25,9 @@ using Bytes = std::vector<ca::u8>;
 namespace {
 
 /// 三个方法的类，覆盖 CodeVisit 的三种互斥状态：
-///   [0] withCode   — 正常 Code（iconst_1; pop; return）
-///   [1] abstractM  — ACC_ABSTRACT，无 Code 属性
-///   [2] brokenCode — Code 属性存在但指令畸形（goto 跳进操作数中间）
+///   [0] withCode  : 正常 Code（iconst_1; pop; return）
+///   [1] abstractM : ACC_ABSTRACT，无 Code 属性
+///   [2] brokenCode: Code 属性存在但指令畸形（goto 跳进操作数中间）
 Bytes makeThreeMethodClass()
 {
     ClassBuilder cb;
@@ -53,7 +53,7 @@ Bytes makeThreeMethodClass()
 
     // 畸形 code：goto +1（0xa7 0x00 0x01）目标 pc=1 落在操作数中间，
     // importFrom 拒绝（BadTarget）→ promote 报 BadInstructions。
-    // 结构本身合法（长度与声明一致），reader/lazy 解码都不拦——留给 promote。
+    // 结构本身合法（长度与声明一致），reader/lazy 解码都不拦，留给 promote。
     std::vector<AttrSpec> badAttrs;
     badAttrs.push_back(AttrSpec{codeIdx, jbc::test::codeContent(0, 0, {0xa7, 0x00, 0x01})});
     cb.addMethod(0x0009, brokenIdx, voidIdx, std::move(badAttrs));
@@ -70,7 +70,7 @@ std::shared_ptr<ClassSession> sessionOf(const Bytes& bytes)
 }   // namespace
 
 // ===========================================================================
-// hasCode / collectCodeUnits——「无 Code」与「真失败」分流
+// hasCode / collectCodeUnits，无 Code与真失败分流
 // ===========================================================================
 
 TEST(CodeCollectShortcutTest, HasCodeDistinguishesNoCodeAndRange)
@@ -103,12 +103,12 @@ TEST(CodeCollectShortcutTest, CollectCodeUnitsSeparatesNoCodeFromFailure)
     EXPECT_EQ(visits[0].unit->dom.size(), 3u);
     EXPECT_EQ(visits[0].error, PromoteError::Ok);
 
-    // [1] abstract：NoCode——与 Failed 不同的通道。
+    // [1] abstract：NoCode，与 Failed 不同的通道。
     EXPECT_EQ(visits[1].kind, jbc::ir::CodeVisit::Kind::NoCode);
     EXPECT_EQ(visits[1].methodIdx, 1u);
     EXPECT_EQ(visits[1].unit.get(), nullptr);
 
-    // [2] 畸形指令：Failed（真失败），错误码明确——这就是旧写法
+    // [2] 畸形指令：Failed（真失败），错误码明确，这就是旧写法
     //     `if (p.is_err()) continue;` 静默吞掉的那类。
     EXPECT_EQ(visits[2].kind, jbc::ir::CodeVisit::Kind::Failed);
     EXPECT_EQ(visits[2].methodIdx, 2u);
@@ -122,7 +122,7 @@ TEST(CodeCollectShortcutTest, CollectCodeUnitsReusesPromotedUnit)
     ASSERT_NE(s, nullptr);
 
     // 先 promote 方法 0 并持有句柄，再收集：已 promote 的方法必须复用
-    // 现有 CodeUnit（重建会使既有句柄失效——promoteMethod 幂等语义在
+    // 现有 CodeUnit（重建会使既有句柄失效，promoteMethod 幂等语义在
     // 收集场景是陷阱，collectCodeUnits 刻意避开）。
     auto kept = jbc::ir::promoteMethod(*s, 0);
     ASSERT_TRUE(kept.is_ok());
@@ -166,19 +166,19 @@ TEST(CodeCollectShortcutTest, CollectCodeUnitsOnAbstractOnlyClassAllNoCode)
 }
 
 // ===========================================================================
-// collectCodeUnits 按族过滤——CodeCollectFilter 两维（指令族/属性族）
+// collectCodeUnits 按族过滤，CodeCollectFilter 两维（指令族/属性族）
 // ===========================================================================
 
 namespace {
 
 /// 七个方法的类，覆盖过滤器全部分面：
-///   [0] invokeM   — invokestatic（Invoke 族）
-///   [1] branchM   — goto（Branch 族）
-///   [2] fieldM    — getstatic（FieldAccess 族）
-///   [3] plainM    — nop; return（不属任何族）
-///   [4] smtM      — nop; return + 嵌套 StackMapTable（attrKinds 维度命中）
-///   [5] abstractM — 无 Code（NoCode 分流，受 includeNoCode 管）
-///   [6] brokenM   — Code 存在但指令畸形（Failed 分流，恒保留）
+///   [0] invokeM  : invokestatic（Invoke 族）
+///   [1] branchM  : goto（Branch 族）
+///   [2] fieldM   : getstatic（FieldAccess 族）
+///   [3] plainM   : nop; return（不属任何族）
+///   [4] smtM     : nop; return + 嵌套 StackMapTable（attrKinds 维度命中）
+///   [5] abstractM: 无 Code（NoCode 分流，受 includeNoCode 管）
+///   [6] brokenM  : Code 存在但指令畸形（Failed 分流，恒保留）
 Bytes makeFamilyClass()
 {
     ClassBuilder cb;
@@ -281,7 +281,7 @@ TEST(CodeCollectFilterTest, InsnFamilyBitClassifiesAndExcludes)
     EXPECT_NE(insnFamilyBit(Op::GOTO), 0u);
     EXPECT_NE(insnFamilyBit(Op::GETFIELD), 0u);
     EXPECT_NE(insnFamilyBit(Op::LDC), 0u);
-    // 常规数据搬运不属任何族（族 = 调用方关心的「重」指令）。
+    // 常规数据搬运不属任何族（族 = 调用方关心的重指令）。
     EXPECT_EQ(insnFamilyBit(Op::NOP), 0u);
     EXPECT_EQ(insnFamilyBit(Op::RETURN), 0u);
     EXPECT_EQ(insnFamilyBit(Op::ILOAD), 0u);
@@ -311,7 +311,7 @@ TEST(CodeCollectFilterTest, InsnFamilyFilterSelectsMatchingMethods)
     f.insnFamilies = bit(InsnFamily::FieldAccess);
     EXPECT_EQ(idxOf(s, f), (std::vector<ca::usize>{2, 5, 6}));
 
-    // 无 LDC/NEW：CpConst 无命中——只剩分流记录。
+    // 无 LDC/NEW：CpConst 无命中，只剩分流记录。
     f.insnFamilies = bit(InsnFamily::CpConst);
     EXPECT_EQ(idxOf(s, f), (std::vector<ca::usize>{5, 6}));
 
@@ -374,14 +374,14 @@ TEST(CodeCollectFilterTest, IncludeNoCodeFalseKeepsFailed)
     ASSERT_EQ(visits.size(), 2u);
     EXPECT_EQ(visits[0].methodIdx, 0u);
     EXPECT_EQ(visits[0].kind, CodeVisit::Kind::Ok);
-    // Failed 恒保留——过滤不复活「静默吞失败」。
+    // Failed 恒保留，过滤不复活静默吞失败。
     EXPECT_EQ(visits[1].methodIdx, 6u);
     EXPECT_EQ(visits[1].kind, CodeVisit::Kind::Failed);
     EXPECT_EQ(visits[1].error, PromoteError::BadInstructions);
 }
 
 // ===========================================================================
-// makeSessionFromBytes——一步从字节建会话
+// makeSessionFromBytes，一步从字节建会话
 // ===========================================================================
 
 TEST(MakeSessionFromBytesTest, OneStepBuildsSameSessionAsThreeStep)
@@ -435,7 +435,7 @@ TEST(MakeSessionFromBytesTest, HonorsReadOptions)
 }
 
 // ===========================================================================
-// ClassUnit::findMethod——按名字/描述符定位方法
+// ClassUnit::findMethod，按名字/描述符定位方法
 // ===========================================================================
 
 namespace {
@@ -494,7 +494,7 @@ TEST(FindMethodTest, FindMethodIndexFeedsPromoteAndLower)
     ASSERT_NE(s, nullptr);
     const jbc::ir::ClassUnit& u = s->unit();
 
-    // 找到的下标直接喂 promote/lower——这是本 API 的目标用法。
+    // 找到的下标直接喂 promote/lower，这是本 API 的目标用法。
     const ca::usize overload = u.findMethod("m", "(I)V");
     ASSERT_NE(overload, jbc::ir::kNoMethod);
     auto p = jbc::ir::promoteMethod(*s, overload);

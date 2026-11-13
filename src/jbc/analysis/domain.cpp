@@ -20,14 +20,14 @@ VType StrictDomain::merge(const VType& a, const VType& b)
     }
     if (a.k == VKind::Top || b.k == VKind::Top) {
         // Strict verifier 类型格：top = 不可用值，汇合支配（JVMS 4.10.1.4
-        // 帧匹配口径——单边未赋值槽的合并不可指派到具体类型）。与
+        // 帧匹配口径，单边未赋值槽的合并不可指派到具体类型）。与
         // BestEffort 形状格的吸收语义（ShapeDomain）格分离。
         return VType{};
     }
     if (a.k == VKind::ReturnAddress || b.k == VKind::ReturnAddress) {
         // returnAddress 只与自身合并（JVMS §4.10.2.5 合并族；同值
         // 已被上方 sameAs 早退吸收）。异值互并 = 不同 jsr 调用点共享同一
-        // 子程序入口——精确语义需逐调用点状态快照（JVMS §4.10.2.5 的
+        // 子程序入口，精确语义需逐调用点状态快照（JVMS §4.10.2.5 的
         // touched-bit-vector 机制），本域显式拒绝（fail loud，不伪造帧）。
         rejectSubroutine();
         return VType{VKind::Bottom, 0, {}};
@@ -51,13 +51,13 @@ VType StrictDomain::merge(const VType& a, const VType& b)
         }
         return std::move(r).unwrap();
     }
-    // 尺寸类冲突 / Null × 原始类型：Bottom 吸收（形状格同款语义——
+    // 尺寸类冲突 / Null × 原始类型：Bottom 吸收（形状格同款语义，
     // 不再 reject）。Strict 域的 meet 是边×边数据流合流，而 HotSpot
-    // split verifier 的合并对象是「到达边 × SMT 声明帧」——声明帧的
+    // split verifier 的合并对象是到达边 × SMT 声明帧，声明帧的
     // top 槽吸收两路（intony c.a(I)I 实证：正常流 slot3=int 与异常
     // handler 出口 slot3=Throwable 在 join 直接相遇，声明帧该槽 top，
     // verifier 无冲突；边×边 meet 则必撞）。Bottom 槽后续若被 load，
-    // 消费点的类型检查仍会拒——fail-closed 不丢，只是把冲突标记留到
+    // 消费点的类型检查仍会拒，fail-closed 不丢，只是把冲突标记留到
     // 真消费点。
     return VType{VKind::Bottom, 0, {}};
 }
@@ -99,7 +99,7 @@ VType StrictDomain::newValue(const ir::Insn& in, ir::InsnId, VKind shape)
         switch (cp_.tagOf(in.cp)) {
         case core::CpTag::String: return nameRef("java/lang/String");
         // ldc 类常量装载的是 Class 对象（验证器类型 java/lang/Class），
-        // 不是常量命名的类类型本身——后者沿 astore 流进异常 handler 的
+        // 不是常量命名的类类型本身，后者沿 astore 流进异常 handler 的
         // 合并帧会让产物 StackMapTable 与 JVM 验证器实算帧冲突。
         case core::CpTag::Class: return nameRef("java/lang/Class");
         case core::CpTag::MethodType: return nameRef("java/lang/invoke/MethodType");

@@ -1,4 +1,4 @@
-// VolAdapter.java — libjbc 语料：委托/适配器/DTO 形态（大量小方法：转发/装箱/边界/格式化）。
+// VolAdapter.java: libjbc 语料：委托/适配器/DTO 形态（大量小方法：转发/装箱/边界/格式化）。
 package jbcx.corpus;
 
 public final class VolAdapter {

@@ -5,7 +5,7 @@ import java.lang.annotation.Target;
 import java.util.List;
 
 /**
- * record 语料：带注解组件——组件槽带 RuntimeVisibleAnnotations 嵌套属性
+ * record 语料：带注解组件，组件槽带 RuntimeVisibleAnnotations 嵌套属性
  * （RECORD_COMPONENT 目标的 RUNTIME 注解，javac 落在 Record 属性的组件
  * 属性表上，字段/访问器同步传播）。泛型接口组件另带 Signature 嵌套属性。
  */

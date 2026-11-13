@@ -1,7 +1,7 @@
 /// @file        use_case.cpp
 /// @brief       消费者视角可用性用例：把 libjbc 当外部库完成三件真实的事。
 ///
-/// 任务 1（扫描）：语料统计——方法/异常表/invokedynamic 计数 + 帧自预言。
+/// 任务 1（扫描）：语料统计，方法/异常表/invokedynamic 计数 + 帧自预言。
 /// 任务 2（变换）：全语料方法入口插 nop → lower → 重读验证（指令数 +1、
 ///                maxStack 不变、字节增长统计）。
 /// 任务 3（往返）：未变换类 writeClass 与原字节逐字节一致。
@@ -147,7 +147,7 @@ int main()
             continue;
         }
         // 先快照各方法原始指令数（lower 会把编辑写回 backing，之后 re-promote
-        // 拿到的是编辑后的尺寸——验证基准必须是编辑前的）。
+        // 拿到的是编辑后的尺寸，验证基准必须是编辑前的）。
         std::vector<ca::usize> origSizes(s->unit().methods.size(), 0);
         for (ca::usize i = 0; i < s->unit().methods.size(); ++i) {
             auto p = promoteMethod(*s, i);
@@ -163,8 +163,8 @@ int main()
             }
             jbc::ir::CodeUnit& cu = *p.unwrap();
             CodeEditor ed(cu);
-            // 入口插「ldc marker; pop」：带 CP 操作数的真实插桩（loadConst
-            // 自动处理 LDC/LDC_W 域宽），栈中性；pc 后移两位——LNT/SMT/LVT
+            // 入口插ldc marker; pop：带 CP 操作数的真实插桩（loadConst
+            // 自动处理 LDC/LDC_W 域宽），栈中性；pc 后移两位，LNT/SMT/LVT
             // 由 relocation contract 自动重定向，帧形状保持不变。
             const auto first = cu.dom.order().empty() ? jbc::ir::InsnId{}
                                                       : cu.dom.order()[0];
@@ -204,7 +204,7 @@ int main()
                 allOk = false;
                 break;
             }
-            // 首条指令语义回到「标记字符串」——写读一致。
+            // 首条指令语义回到标记字符串，写读一致。
             const jbc::ir::Insn* f = p2.unwrap()->dom.peek(p2.unwrap()->dom.order()[0]);
             jbc::ir::ClassSession::ConstSem cv;
             if (f == nullptr || !s2->constOf(*f, cv) ||

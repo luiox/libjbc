@@ -8,7 +8,7 @@
 ///
 /// 描述符层（descriptor.hpp ）之下是擦除后的运行时类型真相；签名层在其
 /// 之上表达 javac 写进 Signature 属性的泛型语义（类型参数/实参/通配符/嵌套
-/// 泛型/内部类成员/throws）。本模块与描述符层同一风格：视图进、值出——解析
+/// 泛型/内部类成员/throws）。本模块与描述符层同一风格：视图进、值出，解析
 /// 零分配（树节点字符串全部借用输入串的字节），只在实际产出新串的反解/手术
 /// 入口才分配。
 ///
@@ -16,10 +16,10 @@
 ///   1. **roundtrip 恒等**：合法输入 parse→unparse 逐字节恒等（树不做任何
 ///      归一化，一切字节各归其位）；
 ///   2. **畸形显式 Err**：解析失败返回 SigError{码, 字节偏移}，绝不静默
-///      吞——「结构可确定」之前不存在降级形态；
+///      吞，结构可确定之前不存在降级形态；
 ///   3. **手术显式调用**：类名手术只经本模块 API 发生（span 坐标 / rename
 ///      便捷面），改写其余字节原样保留；Signature 属性的定位与写回在本纯
-///      函数层不做（copy-through 纪律），属性层接线见 jbc::ir::sig_attr
+///      函数层不做（copy-through 纪律），属性层处理见 jbc::ir::sig_attr
 ///      。
 ///
 /// 语法真源 JVMS 4.7.9.1，产生式一一对应（注释逐条标注）。
@@ -186,7 +186,7 @@ Result<SigClassSignature, SigError> parseClassSignature(std::string_view s);
 Result<SigMethodSignature, SigError> parseMethodSignature(std::string_view s);
 
 /// @brief 解析字段签名（FieldTypeSignature）。裸基元（dims==0 的 Primitive）
-///        在此非法——基元只在方法参数/返回位作为 TypeSignature 出现。
+///        在此非法，基元只在方法参数/返回位作为 TypeSignature 出现。
 Result<SigType, SigError> parseFieldSignature(std::string_view s);
 
 /// @brief 自动分派解析（形态未知的场合）。
@@ -269,12 +269,12 @@ struct SigRenameResult
 ///        位与写回属消费者）。
 ///
 /// 在签名中找内部名恰为 old_internal 的类类型改写为 new_internal。内部名在
-/// 签名字节里有两种等价形态——'.' 段链（`Outer<T>.Inner`）与段名内嵌 '$'
-/// （`Outer$Inner`，javac 常规产物）——统一按全名相等匹配（见 /// SigClassType）。形态纪律（v1 后收窄到段链形态轴）：**扁平段链**（单个
-/// 段名、无 '.' 后缀段）允许跨 '$' 段形态替换——new 内部名按 '$' 合成写
+/// 签名字节里有两种等价形态，'.' 段链（`Outer<T>.Inner`）与段名内嵌 '$'
+/// （`Outer$Inner`，javac 常规产物），统一按全名相等匹配（见 /// SigClassType）。形态纪律（v1 后收窄到段链形态轴）：**扁平段链**（单个
+/// 段名、无 '.' 后缀段）允许跨 '$' 段形态替换，new 内部名按 '$' 合成写
 /// 满本段（javac/kotlinc 通行非规范 $ 形式，JVM 签名词法可读），部分$
 /// 混淆器把嵌套类抹平段数，跨混淆器映射还原赖此；**真嵌套段链**不做结构
-/// 重排——部件按段对齐，越界即不命中（原字节原样，零改写）。其余字节原
+/// 重排，部件按段对齐，越界即不命中（原字节原样，零改写）。其余字节原
 /// 样保留；未命中返回 hits==0 与原串。
 Result<SigRenameResult, SigError>
 renameClassInSignature(std::string_view signature, SignatureForm form,

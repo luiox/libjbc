@@ -95,10 +95,10 @@ private:
 /// @brief 一个带三处挂载点 TypeAnnotations 的最小类。
 ///
 /// - 类级 RuntimeVisibleTypeAnnotations：supertype_target 一条（typeIndex=
-///   VTag 注解描述符，'c' 值 = Ldemo/Expr;）——interface 下标 0 是合法
+///   VTag 注解描述符，'c' 值 = Ldemo/Expr;），interface 下标 0 是合法
 ///   （superclass 占位，JVMS 允许指向 interfaces[0]）。
 /// - 字段级 RuntimeVisibleTypeAnnotations：empty_target 一条（typeIndex=
-///   Ldemo/Expr; 命中行 + 'c' void 值——基类型跳过对照）。
+///   Ldemo/Expr; 命中行 + 'c' void 值，基类型跳过对照）。
 /// - 方法 Code 内 RuntimeInvisibleTypeAnnotations：CAST offset 一条
 ///   （typeIndex=Ldemo/Expr; 命中行，带 type_path 实参段）。
 struct TaClass
@@ -347,7 +347,7 @@ TEST(TaAttrTest, UnknownTargetTypeFailsDecode)
 
 TEST(TaAttrTest, BadDescriptorFailsWholeScan)
 {
-    // 字段级 'c' 值是坏描述符（L;：类名空，BadClassName）——全扫全有或全无。
+    // 字段级 'c' 值是坏描述符（L;：类名空，BadClassName），全扫全有或全无。
     ClassBuilder cb;
     const ca::u16 thisIdx = cb.utf8("p/Use");
     const ca::u16 superIdx = cb.utf8("java/lang/Object");

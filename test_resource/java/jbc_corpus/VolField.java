@@ -1,4 +1,4 @@
-// VolField.java — libjbc 语料：字段访问全族（getfield/putfield/getstatic/putstatic + 常量字段 + 复合赋值）。
+// VolField.java: libjbc 语料：字段访问全族（getfield/putfield/getstatic/putstatic + 常量字段 + 复合赋值）。
 package jbcx.corpus;
 
 public final class VolField {

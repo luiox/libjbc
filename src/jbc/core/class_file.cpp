@@ -1,8 +1,8 @@
 /// @file        class_file.cpp
 /// @brief       单类 DOM 的查询与 lazy 解码入口。
 ///
-/// 本文件只做模型侧的事（名字解析、属性查找、解码分派）。「怎么从字节解出
-/// 一个属性」属于 codec，实现在 attr_codec.cpp。
+/// 本文件只做模型侧的事（名字解析、属性查找、解码分派）。怎么从字节解出
+/// 一个属性属于 codec，实现在 attr_codec.cpp。
 #include "jbc/core/class_file.hpp"
 
 #include "jbc/core/attr_codec.hpp"

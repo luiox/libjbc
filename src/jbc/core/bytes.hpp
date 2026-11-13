@@ -6,7 +6,7 @@
 /// @brief       字节视图、源字节区段与边界检查游标。
 ///
 /// libjbc core 的底座。三条不变量支撑上层的 lazy 与保真：
-///   - ByteSpan 只记录「在原字节流中的 offset/length」，不复制内容；
+///   - ByteSpan 只记录在原字节流中的 offset/length，不复制内容；
 ///   - Cursor 的所有读取都返回 Result，越界即 Err，绝不 UB；
 ///   - 大端定长读取集中在此，codec 层不再手写位移。
 #pragma once
@@ -30,8 +30,8 @@ using ca::core::Result;
 
 /// @brief 源字节流中的一段：lazy 与保真的共同载体。
 ///
-/// 只记 offset/length，不复制内容。模型中一切「尚未被修改的实体」都持有
-/// 一段 span——常量池条目、属性内容、Code 字节——写回时原样 copy 回去，
+/// 只记 offset/length，不复制内容。模型中一切尚未被修改的实体都持有
+/// 一段 span，常量池条目、属性内容、Code 字节，写回时原样 copy 回去，
 /// 因此保真不依赖重编码正确，也不依赖 relocation 猜测。
 struct ByteSpan
 {
@@ -106,7 +106,7 @@ private:
 /// @brief 边界检查游标：classfile 顺序解析的唯一读取入口。
 ///
 /// 每次读取前校验剩余长度，不足即返回 Err(ReadError::Truncated)，绝不越界读。
-/// 解析器的每一行都是「取 n 字节 → 前进 n」，不手工维护裸指针。
+/// 解析器的每一行都是取 n 字节 → 前进 n，不手工维护裸指针。
 class Cursor
 {
 public:

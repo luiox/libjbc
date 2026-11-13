@@ -13,7 +13,7 @@ constexpr ca::u32 kMaxDims = 255;
 constexpr ca::u32 kMaxNesting = 255;
 
 /// @brief 签名词法保留字符（JVMS 4.7.9.1：Identifier 不得含这 7 个 ASCII 字符；
-///        其余字节一律按标识符内容放行——roundtrip 保真的前提）。
+///        其余字节一律按标识符内容放行，roundtrip 保真的前提）。
 bool isReserved(char c) noexcept
 {
     return c == '.' || c == ';' || c == '[' || c == '/' || c == '<' || c == '>' || c == ':';
@@ -444,11 +444,11 @@ bool segmentNameMatches(std::string_view seg_name, std::string_view head,
 ///
 /// 两种等价字节形态分开处理：
 ///   - **扁平段链**（单段名，无 '.' 后缀段）：包前缀 + 段名与 old 全名
-///     **逐字节比对**（段名内 '$' 只是普通字符，不参与结构解读——kotlin
-///     `$$inlined$` 连 $ 空段真名的存在否决了「$ 一律是嵌套分隔」的全局
+///     **逐字节比对**（段名内 '$' 只是普通字符，不参与结构解读，kotlin
+///     `$$inlined$` 连 $ 空段真名的存在否决了$ 一律是嵌套分隔的全局
 ///     假设）；命中即将本段整段替换为 new 全名原文（最简且对任意形态可
 ///     靠）。替换串进签名前先经 @ref isValidSigInternalName 校验。
-///   - **真嵌套段链**（多个段名，canonical '.' 形态）：延续部件机器——
+///   - **真嵌套段链**（多个段名，canonical '.' 形态）：延续部件机器，
 ///     段名内的每个 '$' 使该段多消费一个 old 部件，替换时新部件按同结构
 ///     '$' 合成，段链结构原样保留、部件越界不命中（不做结构重排）。带空
 ///     '$' 段的规则名对链模式不可达（切不出合法部件），按不命中处理。
@@ -1034,7 +1034,7 @@ renameClassInSignature(std::string_view signature, SignatureForm form,
         }
     }
     // '$' 部件视图（真嵌套 '.' 段链匹配专用）：带空 $ 段的规则名切不出
-    // 合法部件——对链模式不可达，空向量即降级为该规则不命中。
+    // 合法部件，对链模式不可达，空向量即降级为该规则不命中。
     auto        old_parts_r = splitInternalName(old_internal);
     auto        new_parts_r = splitInternalName(new_internal);
     static const std::vector<std::string_view> kNoParts;

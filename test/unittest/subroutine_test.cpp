@@ -4,16 +4,16 @@
 /// 语义依据 JVMS §4.10.2.5 族（jsr 压返回地址、ret 经局部槽跳回、
 /// 子程序未改写的局部槽保留调用方值）+  jsr/ret/astore 指令语义。
 /// 五部分：
-/// 1. 合成样本——嵌套子程序双返回点、子程序改写/保留调用方槽的对照、
+/// 1. 合成样本，嵌套子程序双返回点、子程序改写/保留调用方槽的对照、
 ///    入口栈上返回地址载荷。
-/// 2. 多调用点共享入口——returnAddress 只与自身合并，异调用
+/// 2. 多调用点共享入口，returnAddress 只与自身合并，异调用
 ///    点互并在 Strict 域显式拒绝（failAt = 入口合并点）。
-/// 3. 畸形路径行为表——ret 读非返回地址槽（Int/Null/空槽）、jsr 指向非
+/// 3. 畸形路径行为表，ret 读非返回地址槽（Int/Null/空槽）、jsr 指向非
 ///    指令偏移（promote 层结构拒绝）、jsr 为方法末条指令（返回点越界）。
-/// 4. SMT 生成裁决钉死——子程序帧显式 Err(Subroutine)（JVMS §4.7.4 tag 集
+/// 4. SMT 生成裁决钉死，子程序帧显式 Err(Subroutine)（JVMS §4.7.4 tag 集
 ///    无 returnAddress 形态）；v49 走版本门 Err(ClassTooOld)（v≤49 不带
 ///    SMT 走旧校验是规范许可行为）。
-/// 5. JVM 真跑门——v49 手造样本（无 SMT）javap 结构核对 + 本机 java 实际
+/// 5. JVM 真跑门，v49 手造样本（无 SMT）javap 结构核对 + 本机 java 实际
 ///    加载执行，验证造码真实可验、语义正确；畸形样本 JVM 侧同样拒绝。
 #include <gtest/gtest.h>
 
@@ -152,7 +152,7 @@ TEST(SubroutineTest, NestedSubroutinesExactReturnSites)
     ASSERT_GE(frames[atBret].locals.size(), 3u);
     expectRetAddr("B ret slot", frames[atBret].locals[2], 11);
 
-    // B 返回点（pc14，A 的 ret 所在）：B 出口态并入——栈空、local2 携带
+    // B 返回点（pc14，A 的 ret 所在）：B 出口态并入，栈空、local2 携带
     // B 返回地址、local1 保持 A 的返回地址。
     const ca::usize atAret = indexAtPc(*p.unwrap(), 14);
     ASSERT_NE(atAret, static_cast<ca::usize>(-1));
@@ -217,7 +217,7 @@ TEST(SubroutineTest, SubroutineRewritesAndPreservesCallerSlots)
     EXPECT_EQ(frames[atEntry].locals[2].k, VKind::Int);
 
     // 返回点（pc7）：local1 被子程序改写为 Null（不再 Int），local2 保留
-    // 调用方值 Int——改写/保留双对照；local3 的返回地址随出口态保留
+    // 调用方值 Int，改写/保留双对照；local3 的返回地址随出口态保留
     //（JVMS 忠实形态：槽内容不因 ret 清除）。
     const ca::usize atSite = indexAtPc(*p.unwrap(), 7);
     ASSERT_NE(atSite, static_cast<ca::usize>(-1));
@@ -389,7 +389,7 @@ TEST(SubroutineTest, MalformedJsrNoReturnSite)
 
 /// jsr 指向非法偏移：JVMS §4.9.2 结构约束（跳转目标必须是方法内某条指令
 /// 的 opcode）由 promote 层拒绝（importFrom 的 BadTarget 面），帧计算前
-/// 即不可达——结构校验归 reader/promote，帧域不重复把关。
+/// 即不可达，结构校验归 reader/promote，帧域不重复把关。
 TEST(SubroutineTest, MalformedJsrToNonInsnOffsetPromoteRejects)
 {
     // 0 nop / 1 nop / 2 jsr→6 / 5 goto→8（3 字节，pc6 落在其中间）
@@ -445,7 +445,7 @@ Bytes minimalJsrCode()
 TEST(SubroutineTest, SmtBuildRejectsSubroutineFrames)
 {
     // v50：Strict 帧可算（引擎版本无关），但 full_frame 的
-    // verification_type_info 无 returnAddress 形态（JVMS §4.7.4）——显式
+    // verification_type_info 无 returnAddress 形态（JVMS §4.7.4），显式
     // Err(Subroutine)，不改码 Top/Int 伪造帧。
     auto s = methodClass(minimalJsrCode(), 1, 2, 50);
     ASSERT_NE(s, nullptr);
@@ -462,7 +462,7 @@ TEST(SubroutineTest, SmtBuildRejectsSubroutineFrames)
 
 TEST(SubroutineTest, SmtBuildOnV49HitsVersionGateFirst)
 {
-    // v49：SMT 属性无定义——版本门先行（Err(ClassTooOld)）；v≤49 不带 SMT
+    // v49：SMT 属性无定义，版本门先行（Err(ClassTooOld)）；v≤49 不带 SMT
     // 走旧校验是规范许可行为（JVMS §4.10.1 failover），不需要也不得生成。
     auto s = methodClass(minimalJsrCode(), 1, 2, 49);
     ASSERT_NE(s, nullptr);
@@ -492,7 +492,7 @@ int runTool(const std::string& cmd)
 }
 
 /// javap 解析：PATH 缺席时从 java.home（java -XshowSettings:properties）
-/// 推导 <home>\bin\javap——Oracle javapath 目录只链 java/javac/jshell
+/// 推导 <home>\bin\javap，Oracle javapath 目录只链 java/javac/jshell
 ///（本机实测形态），javap 常不在 PATH。
 std::string resolveJavap()
 {
@@ -680,7 +680,7 @@ Bytes buildSubMainClass()
     return cb.build();
 }
 
-/// BadSub：ret 读非返回地址槽（iconst_0; istore_1; ret 1）——JVM 侧应
+/// BadSub：ret 读非返回地址槽（iconst_0; istore_1; ret 1），JVM 侧应
 /// VerifyError（旧推理 verifier 同样拒绝）。
 Bytes buildBadSubClass()
 {
@@ -785,4 +785,4 @@ TEST(SubroutineJvmGate, RealRunOnV49Classes)
 }
 
 // libjstr/libjhasm 不在 libjbc 依赖闭包内；JASM 文本路线需引依赖，按任务
-// 边界不引入——造码全走 test_class_bytes.hpp 手写字节先例。
+// 边界不引入，造码全走 test_class_bytes.hpp 手写字节先例。

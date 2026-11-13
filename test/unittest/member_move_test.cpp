@@ -1,13 +1,13 @@
 /// @file        member_move_test.cpp
 /// @brief       成员增删/搬移/从零建类的 JVM 真跑门（JDK 在位时执行，缺席 skip）：
-///   1. 跨类搬移——两个 javac 产物类，static 字段 + static 方法从供体搬入
+///   1. 跨类搬移，两个 javac 产物类，static 字段 + static 方法从供体搬入
 ///      宿主（adoptField/adoptMethod + 消费者侧 owner 重映射），宿主单独
 ///      落盘后 java 真跑：调用搬过去的 static 成员、反射核对字段值，输出
 ///      与搬移前供体侧 oracle 等价；隔离 classpath（无供体类）证明搬移
 ///      产物零残留依赖。供体含分支体回归面（if 前向/goto 后向/
-///      tableswitch/lookupswitch/异常表/体内私有成员引用）——分支体重放
+///      tableswitch/lookupswitch/异常表/体内私有成员引用），分支体重放
 ///      双缺陷在场时 adopt 必败。
-///   2. 从零建类——makeSession(NewClassSeed) 空类起步 + addMethod 构建
+///   2. 从零建类，makeSession(NewClassSeed) 空类起步 + addMethod 构建
 ///      main，写出的类 java 真跑出输出。
 #include <gtest/gtest.h>
 
@@ -208,7 +208,7 @@ TEST(MemberMoveJvm, CrossClassStaticMoveKeepsBehavior)
     host->unit().version = (49u << 16);
     ASSERT_TRUE(host->commitClassMetadata().is_ok());
 
-    // 宿主单独落盘：隔离目录里只有 Host.class——跑得起来即证明零残留依赖。
+    // 宿主单独落盘：隔离目录里只有 Host.class，跑得起来即证明零残留依赖。
     auto outBytes = jbc::test::writeOk(host->backing());
     ASSERT_FALSE(outBytes.empty());
     const fs::path hostOnlyDir = fs::path("test") / "libjbc_member_move" / "host_only";

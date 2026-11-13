@@ -5,7 +5,7 @@
 /// @file        insn.hpp
 /// @brief       codec 层的指令值类型：字节格式的忠实表达。
 ///
-/// RawInsn 是「字节格式知识」的结构化投影——分支存原始相对偏移、switch
+/// RawInsn 是字节格式知识的结构化投影，分支存原始相对偏移、switch
 /// 存原始 case 表，pc 记录来源位置。它不懂句柄、不懂所有权，因此可以被自由
 /// 拷贝；句柄化（可编辑 DOM）是 ir 层的事，两层之间用 import/export 转换。
 #pragma once

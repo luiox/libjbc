@@ -1,4 +1,4 @@
-// VolKernel.java — libjbc 语料：计算内核（循环 + 条件 + 调用协同的小算法体，丰富合并点/回边形态）。
+// VolKernel.java: libjbc 语料：计算内核（循环 + 条件 + 调用协同的小算法体，丰富合并点/回边形态）。
 package jbcx.corpus;
 
 public final class VolKernel {

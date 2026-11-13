@@ -1,4 +1,4 @@
-// VolLongMethod.java — libjbc 语料：长方法（大 code_length / 大帧 / 深合并点）。
+// VolLongMethod.java: libjbc 语料：长方法（大 code_length / 大帧 / 深合并点）。
 package jbcx.corpus;
 
 public final class VolLongMethod {

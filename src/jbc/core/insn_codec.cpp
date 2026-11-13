@@ -8,7 +8,7 @@ namespace jbc::core {
 
 namespace {
 
-/// cursor 上读 1/2/4 字节有符号/无符号整数（大端）——指令操作数的最小读集。
+/// cursor 上读 1/2/4 字节有符号/无符号整数（大端），指令操作数的最小读集。
 bool rdU1(ByteView v, ca::usize pos, ca::u8& out) noexcept
 {
     if (pos >= v.size()) return false;
@@ -292,7 +292,7 @@ void wrS4(std::vector<ca::u8>& v, ca::i32 s) noexcept
     v.push_back(static_cast<ca::u8>(u & 0xff));
 }
 
-/// 单条指令的编码长度（在已知 pc 下——switch 依赖 4 字节对齐 padding）。
+/// 单条指令的编码长度（在已知 pc 下，switch 依赖 4 字节对齐 padding）。
 ca::u32 insnSize(const RawInsn& in, ca::u32 pc) noexcept
 {
     if (in.wide) {
@@ -416,7 +416,7 @@ Result<std::vector<ca::u8>, WriteError> encodeInsns(std::vector<RawInsn>& insns)
     }
 
     // 操作数域宽校验：i16 放不下的分支偏移、u1 放不下的 LDC 索引都必须
-    // 显式失败——静默截断会产出貌似合法但跳错位置 / 引用错条目的 class。
+    // 显式失败，静默截断会产出貌似合法但跳错位置 / 引用错条目的 class。
     // goto→goto_w、LDC→LDC_W 拓宽是 editor 的显式变换（loadConst 已自动选）；
     // 其余域宽同理：CP2 族超 u16、u8/i8/i16 操作数越界
     // 一律 Err，唯一的合法出路是显式拓宽（wide 前缀 / 宽形状指令）。
@@ -470,7 +470,7 @@ Result<std::vector<ca::u8>, WriteError> encodeInsns(std::vector<RawInsn>& insns)
         const ca::u32 before = static_cast<ca::u32>(out.size());
         encodeOne(in, out);
         if (out.size() - before != insnSize(in, in.pc)) {
-            // 内部不一致（大小计算与实际编码分叉）——防御性检查。
+            // 内部不一致（大小计算与实际编码分叉），防御性检查。
             return Err(WriteError::Unencodable);
         }
     }

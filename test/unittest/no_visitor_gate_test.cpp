@@ -1,11 +1,11 @@
 /// @file        no_visitor_gate_test.cpp
 /// @brief       visitor 清零门禁（doc:design-visitor visitor 清零）：src 内不得出现
-///              visitor 形状——类型名、visit* 方法、std::function 回调 sink。
+///              visitor 形状，类型名、visit* 方法、std::function 回调 sink。
 ///
-/// 判定标准不是类名里有没有 Visitor，而是数据「拉回来还是推给你」（doc:design-visitor）；
+/// 判定标准不是类名里有没有 Visitor，而是数据拉回来还是推给你（doc:design-visitor）；
 /// 本测试把它落成三个机械模式。注释与字符串先被掩蔽（替换为空格、保留换行，
-/// 行号因此仍然准确），所以「设计上拒绝 visitor」这类正当描述不会误伤。
-/// 确需豁免：先改 doc:design-visitor 的条款，再改这里——门禁与文档同源。
+/// 行号因此仍然准确），所以设计上拒绝 visitor这类正当描述不会误伤。
+/// 确需豁免：先改 doc:design-visitor 的条款，再改这里，门禁与文档同源。
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -23,7 +23,7 @@ namespace fs = std::filesystem;
 
 namespace {
 
-/// 掩蔽注释与字符串字面量：逐字符替换为空格，换行保留——掩蔽后行号不漂移。
+/// 掩蔽注释与字符串字面量：逐字符替换为空格，换行保留，掩蔽后行号不漂移。
 std::string maskNoise(const std::string& src)
 {
     std::string out(src.size(), ' ');
@@ -96,7 +96,7 @@ struct Violation
 
 /// 定位 src 根：优先运行目录约定（xmake `set_rundir("$(projectdir)")` →
 /// 仓根），回退 __FILE__（编译期路径，测试文件在 test/unittest/ 下）。
-/// 两处都找不到 = 测试环境错配，返回空由调用方 FAIL——门禁缺席必须可见，
+/// 两处都找不到 = 测试环境错配，返回空由调用方 FAIL，门禁缺席必须可见，
 /// 不做 skip。
 fs::path srcRoot()
 {
@@ -114,8 +114,8 @@ fs::path srcRoot()
 }
 
 /// 门禁扫描的扩展名集合：src 现用 .hpp/.cpp，另收常见 C++ 头/源扩展。
-/// 集合外的文件在扫描循环里显式报出（FAIL）——新扩展静默逃逸门禁与
-/// 「门禁缺席必须可见」同一性质，不允许。
+/// 集合外的文件在扫描循环里显式报出（FAIL），新扩展静默逃逸门禁与
+/// 门禁缺席必须可见同一性质，不允许。
 constexpr std::array<std::string_view, 10> kScanExt = {
     ".h", ".hpp", ".hh", ".hxx", ".inl",
     ".cpp", ".cc", ".cxx", ".inc", ".ipp"};
@@ -179,10 +179,10 @@ TEST(NoVisitorGate, SrcHasNoVisitorShapes)
     }
     EXPECT_TRUE(unclassified.empty())
         << "src 下存在不在扫描集合里的文件（" << unclassified.size()
-        << " 个）——新扩展必须显式加进 kScanExt（并接受门禁扫描）或移出 "
+        << " 个），新扩展必须显式加进 kScanExt（并接受门禁扫描）或移出 "
            "src，不允许静默逃逸：" << msg.str();
     EXPECT_TRUE(hits.empty())
         << "visitor 形状残留（" << hits.size() << " 处 / 扫描 " << scanned
-        << " 文件）——libjbc 不含 visitor，无论公共 API、codec 内部还是 adapter"
+        << " 文件），libjbc 不含 visitor，无论公共 API、codec 内部还是 adapter"
            "（doc:design-visitor visitor 清零）：" << msg.str();
 }

@@ -385,7 +385,7 @@ inline Bytes codeContent(ca::u16 maxStack,
 
 /// @brief 一个有字段、方法、Code 属性（含异常表与嵌套未知属性）和类级未知属性的类。
 ///
-/// 刻意包含一个 libjbc 不认识的 `WeirdCustomAttr`——它正是保真写回的主要照顾对象。
+/// 刻意包含一个 libjbc 不认识的 `WeirdCustomAttr`，它正是保真写回的主要照顾对象。
 inline Bytes makeRichClass()
 {
     ClassBuilder cb;

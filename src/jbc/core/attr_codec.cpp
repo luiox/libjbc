@@ -9,7 +9,7 @@ namespace jbc::core {
 
 namespace {
 
-/// @brief 「Code」属性名（modified UTF-8 下与 ASCII 一致，可直接 memcmp）。
+/// @brief Code属性名（modified UTF-8 下与 ASCII 一致，可直接 memcmp）。
 constexpr std::string_view kCodeAttrName = "Code";
 constexpr std::string_view kBootstrapMethodsName = "BootstrapMethods";
 constexpr std::string_view kLineNumberTableName  = "LineNumberTable";
@@ -39,7 +39,7 @@ constexpr std::string_view kAnnotationDefaultName = "AnnotationDefault";
 constexpr std::string_view kMethodParametersName  = "MethodParameters";
 constexpr std::string_view kConstantValueName     = "ConstantValue";
 
-/// @brief u16 域宽检查：编码闸门的基础谓词（——超界显式
+/// @brief u16 域宽检查：编码闸门的基础谓词（，超界显式
 ///        Err，禁止 static_cast 静默截断）。
 bool fitsU16(ca::u32 v) noexcept
 {
@@ -212,7 +212,7 @@ Result<void, WriteError> encodeCodeBody(const ClassFile& cf, const CodeAttr& c, 
 
 /// @brief 编码 Record 属性体（不含 name_index 与 length）。组件嵌套属性
 ///        经 @ref encodeAttr 落槽（未触碰 copy-through、触碰重编码），失败
-///        向上传播——与 Code 嵌套同一通道。
+///        向上传播，与 Code 嵌套同一通道。
 Result<void, WriteError> encodeRecordBody(const ClassFile& cf, const RecordAttr& r,
                                           ByteSink& out, ByteView source)
 {
@@ -269,8 +269,8 @@ Result<void, ReadError> readAttrSlots(Cursor& cur,
         }
         const ca::u32 length = rl.unwrap();
 
-        // span 记录的是「属性内容」的范围（不含 name_index 与 length 本身），
-        // 且一律为源字节流中的绝对偏移——写回时按它直接取字节。
+        // span 记录的是属性内容的范围（不含 name_index 与 length 本身），
+        // 且一律为源字节流中的绝对偏移，写回时按它直接取字节。
         const ca::usize contentStart = cur.pos();
         if (cur.remaining() < length) {
             diag.error(ReadError::BadAttributeLength, static_cast<ca::u32>(contentStart));
@@ -301,7 +301,7 @@ Result<void, ReadError> readAttrSlots(Cursor& cur,
 /// @brief 内部紧凑读取器：任一读失败置 ok=false，后续读返回 0。
 ///
 /// 长表驱动的属性解码（StackMapTable/注解）每字段三行 Result 样板会淹没
-/// 结构本身；统一在解码函数末尾检查一次。不用异常——畸形输入是预期输入。
+/// 结构本身；统一在解码函数末尾检查一次。不用异常，畸形输入是预期输入。
 class Ard
 {
 public:
@@ -390,7 +390,7 @@ Ard makeReader(const ClassFile& cf, const AttrSlot& slot, bool& spanOk)
 
 /// @brief 声明结构读完后的 trailing 保留。
 ///
-/// 合法属性在声明结构之后应正好结束；多余字节属于畸形输入，但边界可确定——
+/// 合法属性在声明结构之后应正好结束；多余字节属于畸形输入，但边界可确定，
 /// 保留进属性体的 trailing 副本并降级记录，mutate 触发重编码时原样写回，
 /// 不静默丢弃。与 @ref decodeCodeAttr 的 Code 体 trailing 同族。
 void keepBodyTrailing(ClassFile& cf, const AttrSlot& slot, std::vector<ca::u8>& out, const Ard& r)
@@ -642,7 +642,7 @@ Result<std::unique_ptr<AttrBody>, ReadError> decodeSignature(ClassFile& cf, cons
 
 /// @brief CharacterRangeTable 解码（javac -Xjcov 私有属性，规格见属性体
 ///        注释）：u2 行数 + 每行 {u2, u2, u4, u4, u2}。行数声明与剩余字节
-///        不符（半截行 / 声明超出实际）时 Ard 置 Truncated，显式失败——
+///        不符（半截行 / 声明超出实际）时 Ard 置 Truncated，显式失败，
 ///        边界可确定的部分不猜测容忍（同纪律）。
 Result<std::unique_ptr<AttrBody>, ReadError> decodeCharacterRangeTable(ClassFile& cf,
                                                                        const AttrSlot& slot)
@@ -831,7 +831,7 @@ Result<std::unique_ptr<AttrBody>, ReadError> decodePermittedSubclassesBody(
 ///        decodeAttrBody）。形状：u2 组件数 + 组件（name/desc 两 u2 +
 ///        嵌套属性表）逐个落槽。组件嵌套属性只读目录（与 Code 嵌套同款
 ///        lazy）；半截组件 Err，嵌套表长度越界（malformed）同样显式 Err
-///        ——继续解析只会得到错误的组件边界，不猜。
+///        ，继续解析只会得到错误的组件边界，不猜。
 Result<std::unique_ptr<AttrBody>, ReadError> decodeRecordBody(ClassFile& cf,
                                                               const AttrSlot& slot)
 {
@@ -911,7 +911,7 @@ void readTargetGroups(Ard& r, std::vector<Row>& out)
 /// @brief Module typed 解码（公开直读入口，不触碰槽状态；分派面走
 ///        decodeAttrBody）。形状：u2 名/旗语/版本三槽 + requires/exports/
 ///        opens/uses/provides 五段逐个落表（JVMS 4.7.25，体在 provides 后
-///        结束——主类走独立 ModuleMainClass）。半截体 Err，trailing 保留。
+///        结束，主类走独立 ModuleMainClass）。半截体 Err，trailing 保留。
 Result<std::unique_ptr<AttrBody>, ReadError> decodeModuleBody(ClassFile& cf,
                                                               const AttrSlot& slot)
 {
@@ -1170,8 +1170,8 @@ Result<void, ReadError> readTargetInfo(Ard& r, TypeAnnotationsAttr::Annotation& 
         a.catchIndex = r.u2();
         break;
     default:
-        // 0x43..0x46：instanceof/new/方法引用——offset 载荷；0x47 cast——
-        // offset + type_index；0x48..0x4B：调用/引用类型实参——offset +
+        // 0x43..0x46：instanceof/new/方法引用，offset 载荷；0x47 cast，
+        // offset + type_index；0x48..0x4B：调用/引用类型实参，offset +
         // type_argument_index。
         if (a.targetType >= TA::kOffsetBase && a.targetType <= TA::kOffsetMax) {
             a.offset = r.u2();

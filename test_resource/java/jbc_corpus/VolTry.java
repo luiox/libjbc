@@ -1,4 +1,4 @@
-// VolTry.java — libjbc 语料：异常表全形态（try/catch/finally/multi-catch/嵌套/TWR/rethrow）。
+// VolTry.java: libjbc 语料：异常表全形态（try/catch/finally/multi-catch/嵌套/TWR/rethrow）。
 package jbcx.corpus;
 
 public final class VolTry {

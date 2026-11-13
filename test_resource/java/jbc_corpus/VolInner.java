@@ -1,4 +1,4 @@
-// VolInner.java — libjbc 语料：内部类/静态嵌套/匿名类/局部类（this$0/access$ 合成成员 + InnerClasses 属性）。
+// VolInner.java: libjbc 语料：内部类/静态嵌套/匿名类/局部类（this$0/access$ 合成成员 + InnerClasses 属性）。
 package jbcx.corpus;
 
 public class VolInner {

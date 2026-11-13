@@ -30,7 +30,7 @@ using jbc::test::ClassBuilder;
 namespace {
 
 /// Module 体：名/旗语/版本三槽 + 五段全形态（JVMS 4.7.25，体在 provides 后
-/// 结束——主类走独立 ModuleMainClass 属性）。
+/// 结束，主类走独立 ModuleMainClass 属性）。
 Bytes moduleBody(
     ca::u16 nameCp, ca::u16 flags, ca::u16 verCp,
     const std::vector<std::tuple<ca::u16, ca::u16, ca::u16>>& requires,
@@ -621,7 +621,7 @@ TEST(ModuleCompact, ModuleFamilySlotsRemapAndDedupe)
     //   1 "p/T" 2 "java/lang/Object" 3 "Module" 4 "ModulePackages"
     //   5 "ModuleMainClass" 6 "jbc.corpus" 7 "jbc.corpus"(重复→去重)
     //   8 "svc" 9 "svc"(重复) 10 "app/Main"(重复由 Class 侧共享)
-    //   11 "java.logging" 12 "svc/Svc"(死条目只被 Module uses 引用？否——
+    //   11 "java.logging" 12 "svc/Svc"(死条目只被 Module uses 引用？否，
     //   uses 引用它即活；真正的死条目是 13 "dead/Unused")
     ClassBuilder cb;
     const ca::u16 uThis = cb.utf8("p/T");

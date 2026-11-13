@@ -1,12 +1,12 @@
 /// @defgroup ir_sig_attr 签名属性手术
 ///
-/// Signature/LVTT 类名改写的属性层接线；见 doc:design-type。
+/// Signature/LVTT 类名改写的属性层处理；见 doc:design-type。
 
 /// @file        sig_attr.hpp
-/// @brief       泛型签名的属性层手术：类名改写的属性层接线。
+/// @brief       泛型签名的属性层手术：类名改写的属性层处理。
 ///
 /// 类名手术（rename）经 libjbc 编辑路径发生时，泛型签名在类文件中的两处
-/// 宿主若不随之重写，产出即悬垂泛型——JVM 按签名解析泛型会指回旧名：
+/// 宿主若不随之重写，产出即悬垂泛型，JVM 按签名解析泛型会指回旧名：
 /// Signature 属性（class/method/field 三级挂载点）与 LocalVariableTypeTable
 /// 行的 descriptor 列（字段形态签名）。本模块把  的签名树
 /// 手术面（纯函数）接到属性层：调用方显式注入一对旧名/新名并触发手术，
@@ -47,7 +47,7 @@ using ca::core::Result;
 /// 三个失败族如实分立，不做跨族映射：签名层失败（解析失败/形态不一致/
 /// 坏名）原样携带 jbc::type::SigError （含字节偏移）；槽解码失败
 /// （属性体半截等，降级事实见 ClassFile::diagnostics ）与 CP 容量预检
-/// 失败各自成族——三者发生时都未改写任何槽；CpCapacity 另未追加任何条目。
+/// 失败各自成族，三者发生时都未改写任何槽；CpCapacity 另未追加任何条目。
 struct SigAttrError
 {
     /// @brief 失败族。
@@ -95,7 +95,7 @@ struct SigAttrRenameSummary
 ///
 /// 形态按挂载点自动判定（契约 2）。**全有或全无**：先对全部属性做
 /// 解码 + 解析 + 改名预检（纯读，任何一步失败即 Err 且未改写任何槽、未
-/// 追加任何 CP 条目），再统一做容量预检，最后才 intern 落位置脏——调用方
+/// 追加任何 CP 条目），再统一做容量预检，最后才 intern 落位置脏，调用方
 /// 拿到 Err 即可整类放弃，不会遇到半改写状态。
 Result<SigAttrRenameSummary, SigAttrError>
 renameClassInSignatureAttrs(core::ClassFile& cf, std::string_view old_internal,
@@ -114,7 +114,7 @@ struct LvttRenameSummary
 ///        类名改写。
 ///
 /// LVTT 的 descriptor 列承载**字段形态签名**（JVMS 4.7.9.1
-/// FieldTypeSignature）——泛型签名在类文件中的第二处宿主。
+/// FieldTypeSignature），泛型签名在类文件中的第二处宿主。
 /// 逐行走 renameClassInSignature （form 固定 Field），
 /// 双形态全名匹配 / 扁平段链跨形态 / 真嵌套链不命中零改写逐字适用。
 ///
@@ -124,7 +124,7 @@ struct LvttRenameSummary
 /// 最后才 intern 落位置脏。未命中的表不置脏，写回逐字节 copy-through。
 /// 新串经 findUtf8 查重落位（命中复用不膨胀，逆向 rename 复用回原条目）。
 ///
-/// LVT 行（LocalVariableTable，擦除后描述符）不属本入口——描述符手术归
+/// LVT 行（LocalVariableTable，擦除后描述符）不属本入口，描述符手术归
 /// 描述符层（jbc::type descriptor 的 span 面），签名/描述符两族不混。
 Result<LvttRenameSummary, SigAttrError>
 renameClassInLocalVariableTypeTables(core::ClassFile& cf,

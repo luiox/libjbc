@@ -7,7 +7,7 @@
 ///     改名带 prior / 类级实改记；
 ///   - 折叠语义：add+remove → removals 桶 / remove+add → 存活+created /
 ///     改名 A→B→A → A 存活 B 消失；
-///   - 等价性前提：记账面纯观察——同一批变换带/不带 ChangeSet 消费，写回
+///   - 等价性前提：记账面纯观察，同一批变换带/不带 ChangeSet 消费，写回
 ///     字节逐位一致。
 #include <gtest/gtest.h>
 
@@ -64,7 +64,7 @@ std::shared_ptr<ClassSession> sessionOf(const Bytes& bytes)
     return r.is_ok() ? std::move(r).unwrap() : nullptr;
 }
 
-/// adopt 供体类 d/D：grab()I 有体（iconst_7; ireturn）——与目标类成员异名
+/// adopt 供体类 d/D：grab()I 有体（iconst_7; ireturn），与目标类成员异名
 /// （会话内名字+描述符唯一性预检挡同名挂入），无 CP 操作数（重放免池结构）。
 Bytes makeDonorClass()
 {
@@ -389,7 +389,7 @@ TEST(ChangeSetTest, FoldRenameAtoBtoA)
 // 观察面不动字节
 // ===========================================================================
 
-/// 同一批变换：带 ChangeSet 消费与纯变换的写回字节逐位一致——记账是纯观察。
+/// 同一批变换：带 ChangeSet 消费与纯变换的写回字节逐位一致，记账是纯观察。
 TEST(ChangeSetTest, RecordingDoesNotAlterWrittenBytes)
 {
     const Bytes original = makeOneMemberClass();

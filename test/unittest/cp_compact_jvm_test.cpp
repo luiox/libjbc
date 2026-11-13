@@ -4,7 +4,7 @@
 /// 样本覆盖 Signature（泛型继承 + 泛型方法 + 桥接）、RuntimeVisible Annotations
 /// （含 Class 载荷）、Exceptions、InnerClasses、ConstantValue、BootstrapMethods
 /// （lambda）、LNT/LVT（-g）。膨胀池（大量未引用 internString）→ 压缩 → 落盘
-/// → java 真跑，输出与原类逐字节一致——反射读到的注解/签名/泛型/异常面未损。
+/// → java 真跑，输出与原类逐字节一致，反射读到的注解/签名/泛型/异常面未损。
 #include <gtest/gtest.h>
 
 #include <filesystem>
@@ -45,7 +45,7 @@ void spitCp(const fs::path& p, const Bytes& bytes)
 }
 
 /// 编译 test_resource/libjbc/cp_compact 样本（-g：带上 LNT/LVT 调试面；
-/// --release 8：真跑门样本锚定 v52 形态——Nest 族三件自 v55/v61 才出现，
+/// --release 8：真跑门样本锚定 v52 形态，Nest 族三件自 v55/v61 才出现，
 /// 本门的面在注解/泛型/异常/lambda，nest 面由语料压缩扫与 remapper JVM 门
 /// 覆盖）。
 bool compileCpSample(const fs::path& outDir)

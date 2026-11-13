@@ -1,8 +1,8 @@
 /// @file        enclosing_method_attr_test.cpp
 /// @brief       EnclosingMethod（JVMS 4.7.7）typed 建模单测：分派接线钉门、
 ///              typed 解码/编码（含 method_index=0 形态）、半截体显式失败、
-///              trailing 保持、u16 域宽闸门，以及「typed 读写与既有 Raw
-///              手术口径一致」的对拍。
+///              trailing 保持、u16 域宽闸门，以及typed 读写与既有 Raw
+///              手术口径一致的对拍。
 ///
 /// 分派已接线：decodeAttrBody 对 "EnclosingMethod" 返回
 /// typed 体；Raw 手术 oracle 从槽
@@ -120,7 +120,7 @@ Bytes typedSurgery(const Bytes& cls)
 }
 
 /// Raw 手术 oracle：字节手术语义的测试内
-/// 逐字节镜像（口径对齐用，非第二套手术——生产手术已迁 typed）。体字节
+/// 逐字节镜像（口径对齐用，非第二套手术，生产手术已迁 typed）。体字节
 /// 从槽源 span 直接取，不依赖 decodeAttr 的分派形态。
 Bytes rawSurgeryOracle(const Bytes& cls)
 {

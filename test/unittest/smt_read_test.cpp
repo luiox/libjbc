@@ -2,13 +2,13 @@
 /// @brief       Preserve 读侧（SMT 语义帧视图）+ maxes 采用测试。
 ///
 /// 四部分：
-/// 1. 读侧链展开单测——same/append/chop/full 链算术、隐式初始帧（this 形态
+/// 1. 读侧链展开单测，same/append/chop/full 链算术、隐式初始帧（this 形态
 ///    + 描述符参数 + cat2 展开）、紧凑形态载荷校验、maxes 边界。
-/// 2. 读侧防御面——chop 下溢 / locals/stack 超声明 maxes / tag-8 不落 new /
+/// 2. 读侧防御面，chop 下溢 / locals/stack 超声明 maxes / tag-8 不落 new /
 ///    CP 条目坏 / 目标不对齐 / 形态标签与载荷矛盾，一律显式 Err。
-/// 3. maxes 采用 API——覆盖语义（ok 才采用、u16 域外不采用）+ lower 写回
+/// 3. maxes 采用 API，覆盖语义（ok 才采用、u16 域外不采用）+ lower 写回
 ///    重读集成。
-/// 4. javac oracle——读↔算对拍（读侧视图 vs Strict 计算帧，逐目标逐槽）与
+/// 4. javac oracle，读↔算对拍（读侧视图 vs Strict 计算帧，逐目标逐槽）与
 ///    maxes 对拍（重算 vs 原文件声明）。javac 缺席时 skip。
 #include <gtest/gtest.h>
 
@@ -107,7 +107,7 @@ ca::u32 smtNameCp(ClassFile& cf)
     return cf.cp.addUtf8("StackMapTable");
 }
 
-/// 手拼 SMT 属性挂进方法 Code（读侧测试不经 codec 编码——保真形态直接
+/// 手拼 SMT 属性挂进方法 Code（读侧测试不经 codec 编码，保真形态直接
 /// 可读；经 codec 的编码路径由 roundtrip/attr_extra 面覆盖）。返回属性引用。
 SmtAttr& attachSmt(ClassFile& cf, MemberInfo& m)
 {
@@ -318,7 +318,7 @@ TEST(SmtReadChain, CtorInitialFrameCarriesUninitThisAtMaxLocalsBoundary)
     ASSERT_EQ(views.size(), 2u);
 
     // 链头 this 槽 = UninitThis（构造器口径，与 Strict 播种同源）；1 槽恰
-    // 等 maxLocals——边界不溢出。
+    // 等 maxLocals，边界不溢出。
     EXPECT_EQ(views[0].pc, 0u);
     ASSERT_EQ(views[0].frame.locals.size(), 1u);
     EXPECT_EQ(views[0].frame.locals[0].k, VKind::UninitThis);
@@ -504,7 +504,7 @@ TEST(MaxesApi, OkSummaryOverwritesBothFields)
 TEST(MaxesApi, ParameterFloorEntersAdoptedLocals)
 {
     // 引擎 maxLocals 只计 store 触达：只读参数的方法观测值低于 verifier
-    // 要求——采用值并入参数槽地板（this + 描述符参数）。
+    // 要求，采用值并入参数槽地板（this + 描述符参数）。
     CodeUnit u;
     u.maxStack  = 1;
     u.maxLocals = 0;

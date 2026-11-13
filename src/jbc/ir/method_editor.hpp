@@ -6,9 +6,9 @@
 /// @brief       从零建方法的一步编辑面：Result-only 门面，不持有错误状态。
 ///
 /// 从零建一个方法体原本要串 addMethod → promoteMethod → CodeEditor →
-/// lowerMethod 四段接线。本文件只压缩接线层数，不改变错误模型：每个可
+/// lowerMethod 四步流程。本文件只压缩衔接层数，不改变错误模型：每个可
 /// 失败操作仍然当场返回该段自己的 Result，没有任何跨调用保留的失败态，
-/// 也没有「出错后静默 no-op」的对象状态。析构不自动 commit——析构函数
+/// 也没有出错后静默 no-op的对象状态。析构不自动 commit，析构函数
 /// 无法汇报 LowerError，自动提交会把错误塞进第二条通道。
 #pragma once
 
@@ -25,9 +25,9 @@ namespace jbc::ir {
 
 /// @brief 从零建方法的失败记录：段 + 该段原始错误码。
 ///
-/// 与 SessionError 同构：横跨多个错误族的入口如实保留「段 + 码」，不做
+/// 与 SessionError 同构：横跨多个错误族的入口如实保留段 + 码，不做
 /// 跨族有损映射，也不新增错误枚举。本结构只作为返回值载荷出现一次，不
-/// 驻留任何对象——它不是第二条汇报通道。
+/// 驻留任何对象，它不是第二条汇报通道。
 struct MethodBuildError
 {
     enum class Stage : ca::u8 {
@@ -53,7 +53,7 @@ struct MethodBuildError
 
 const char* to_string(MethodBuildError::Stage s) noexcept;
 
-/// @brief 新建方法并打开编辑面：addMethod + promoteMethod 的一次接线。
+/// @brief 新建方法并打开编辑面：addMethod + promoteMethod 一次调用完成。
 ///
 /// - seed.withCode 必须为 true（abstract/native 没有方法体，不属于本入口）；
 ///   为 false 时 Err(Stage::Add, InvalidSeed)，不挂入成员。
@@ -98,7 +98,7 @@ private:
 
 /// @brief 直线体一步入口：addMethod → promote → 逐条 append → lower。
 ///
-/// `body` 是平铺指令序列，不能携带控制流目标（target/targets/keys）——
+/// `body` 是平铺指令序列，不能携带控制流目标（target/targets/keys），
 /// 标签只能在 CodeUnit 的 CodeDom 上创建/绑定，带分支的体请用
 /// MethodEditor 的 code() 全量面。违反时 Err(Stage::Edit, BadOperand,
 /// insnIndex)，在挂入成员之前就拒绝。

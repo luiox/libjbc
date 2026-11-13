@@ -6,7 +6,7 @@
 /// 覆盖面：分派接线钉门、typed 解码（公开直读不触碰槽状态）、半截体显式
 /// 失败、trailing 保持、域宽闸门（u1 参数维 + u2 索引面）、重编码字节恒等。
 /// 注解体（type_index + element_value 全形态）与 Runtime{Visible,Invisible}-
-/// Annotations 共用同一模型的决策由「复用 readAnnotation/writeAnnotation」
+/// Annotations 共用同一模型的决策由复用 readAnnotation/writeAnnotation
 /// 落实，此处对嵌套/'['/'e'/'c' 形态逐一断言防分派旁路。
 #include <gtest/gtest.h>
 
@@ -219,7 +219,7 @@ TEST(ParameterAnnotationsAttrTest, DirectDecodeLeavesSlotUntouched)
 TEST(ParameterAnnotationsAttrTest, NestedAndArrayValueShapesRoundtrip)
 {
     // 同参数双注解：注解 0 带 '@' 嵌套 + 'e' 枚举，注解 1 带 '[' 数组
-    // （'c' 类字面量元素）——全形态经共用注解体通道往返。
+    // （'c' 类字面量元素），全形态经共用注解体通道往返。
     const Bytes inner = annoBytes(0x11, {{0x21, evConst('c', 0x31)}});
     const Bytes body  = paramAnnosBody({{annoBytes(0x10, {{0x20, evNested(inner)},
                                                           {0x22, evEnum(0x12, 0x32)}}),

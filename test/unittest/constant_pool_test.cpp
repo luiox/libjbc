@@ -9,7 +9,7 @@ using namespace jbc::core;
 using jbc::test::Bytes;
 using jbc::test::ClassBuilder;
 
-/// Utf8 条目必须是源字节流的视图，而不是副本——这是「解析不需要为字符串付费」
+/// Utf8 条目必须是源字节流的视图，而不是副本，这是解析不需要为字符串付费
 /// 的直接证据。视图落在源字节范围内即证明没有另分配。
 TEST(ConstantPoolTest, Utf8IsZeroCopyViewIntoSource)
 {
@@ -72,7 +72,7 @@ TEST(ConstantPoolTest, WideEntriesTakeTwoSlots)
 }
 
 /// 只追加：新条目一律 append，已有索引及其内容永不改变。
-/// 这是「未知属性里的 CP 引用不会失效」的结构性保证。
+/// 这是未知属性里的 CP 引用不会失效的结构性保证。
 TEST(ConstantPoolTest, AppendNeverInvalidatesExistingIndex)
 {
     ClassBuilder cb;
@@ -119,7 +119,7 @@ TEST(ConstantPoolTest, OutOfRangeIndexIsRejected)
 }
 
 /// 宽条目的第二槽越出 constant_pool_count 属 CP 结构损坏：
-/// 后续条目边界无法确定，且宽容写回会使槽位比输入多 1——reader 阶段即 Err，
+/// 后续条目边界无法确定，且宽容写回会使槽位比输入多 1，reader 阶段即 Err，
 /// 不产出降级模型。
 TEST(ConstantPoolTest, WideEntryOverflowingCountIsRejected)
 {
@@ -130,7 +130,7 @@ TEST(ConstantPoolTest, WideEntryOverflowingCountIsRejected)
     cb.setThis(cb.classRef(cb.utf8("p/T")));
     cb.setSuper(cb.classRef(cb.utf8("java/lang/Object")));
 
-    // 声明 count = l+1：Long 的第二槽 #l+1 恰好越出池——畸形输入。
+    // 声明 count = l+1：Long 的第二槽 #l+1 恰好越出池，畸形输入。
     // 解析在 CP 阶段就该失败，而不是把畸形池读成降级模型再写回多一槽。
     Bytes bytes = cb.build();
     const ca::u16 broken = static_cast<ca::u16>(l + 1);
@@ -175,7 +175,7 @@ TEST(ConstantPoolTest, AppendedUtf8IsDeduplicatedInArena)
     auto cf = jbc::test::readOk(cb.build());
     ASSERT_NE(cf, nullptr);
 
-    // 解析来的条目一个都不在 arena 里——扫描路径不碰 arena。
+    // 解析来的条目一个都不在 arena 里，扫描路径不碰 arena。
     EXPECT_EQ(cf->cp.internedCount(), 0u);
     EXPECT_TRUE(cf->cp.arenaOwnsAllAppended());
 
@@ -197,8 +197,8 @@ TEST(ConstantPoolTest, AppendedUtf8IsDeduplicatedInArena)
     EXPECT_FALSE(cf->cp.at(1).utf8InArena);  // 解析来的第一个条目
 }
 
-/// 归属断言：所有「新增」的 Utf8 视图必须确实落在 arena 的 chunk 内。
-/// 这把「新增串的生命周期」从注释约定变成可断言的事实。
+/// 归属断言：所有新增的 Utf8 视图必须确实落在 arena 的 chunk 内。
+/// 这把新增串的生命周期从注释约定变成可断言的事实。
 TEST(ConstantPoolTest, AppendedUtf8ViewsBelongToArena)
 {
     ClassBuilder cb;
@@ -261,7 +261,7 @@ TEST(ConstantPoolTest, Utf8RefExposesLibcaStringType)
     EXPECT_TRUE(cf->cp.arenaOwnsAllAppended());
 }
 
-/// 未知 CP tag 必须报错而不是猜——猜错一个 tag 会让整个 CP 的对齐错位。
+/// 未知 CP tag 必须报错而不是猜，猜错一个 tag 会让整个 CP 的对齐错位。
 TEST(ConstantPoolTest, UnknownTagIsRejected)
 {
     ClassBuilder cb;
@@ -312,7 +312,7 @@ TEST(ConstantPoolTest, MutateAtMarksDirtyAndReencodes)
 }
 
 /// 对照组：经 at() 改写而不置脏 → 写回按源 span 复制，改写被静默还原。
-/// 这是文档化的既定语义（at() 不置脏），本用例把「陷阱是契约」钉死——
+/// 这是文档化的既定语义（at() 不置脏），本用例把陷阱是契约钉死，
 /// 若有人让 at() 自动置脏，此用例红，倒逼其面对全量重编码的语义变化。
 TEST(ConstantPoolTest, AtWithoutDirtyRestoresOriginalOnWrite)
 {

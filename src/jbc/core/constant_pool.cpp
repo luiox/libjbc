@@ -2,7 +2,7 @@
 /// @brief       常量池解析与写回。
 ///
 /// 解析期不复制 UTF8 字节、不校验 UTF-8 合法性：classfile 的 UTF8 是 modified
-/// UTF-8，而本层只负责「忠实表达字节」。合法性由需要文本语义的上层决定。
+/// UTF-8，而本层只负责忠实表达字节。合法性由需要文本语义的上层决定。
 #include "jbc/core/constant_pool.hpp"
 
 #include <cstring>
@@ -236,7 +236,7 @@ Result<void, ReadError> ConstantPool::parse(Cursor& cur, Diagnostics& diag)
             entries_.push_back(ph);
             ++i;
             if (i >= static_cast<ca::u32>(count)) {
-                // 宽条目的第二个槽位越出 constant_pool_count：CP 结构损坏——
+                // 宽条目的第二个槽位越出 constant_pool_count：CP 结构损坏，
                 // 后续条目边界无法确定，且宽容写回会使槽位比输入多 1（既不
                 // 保真也不报错）。与其他 CP 结构错误一致，reader 阶段即 Err，
                 // 不走降级通道。
@@ -408,7 +408,7 @@ ca::u32 ConstantPool::addUtf8(std::string_view s)
 
     if (!s.empty()) {
         // modified UTF-8 不保证是合法 UTF-8（混淆常往里塞任意字节），走
-        // intern_raw 跳过校验——它与 JVM 的编解码 1:1 往返，字节不会失真。
+        // intern_raw 跳过校验，它与 JVM 的编解码 1:1 往返，字节不会失真。
         const ca::str::Utf8StringRef ref =
             arena_.intern_raw(reinterpret_cast<const ca::u8*>(s.data()), s.size());
         e.utf8        = ref.data();

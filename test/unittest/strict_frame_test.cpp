@@ -2,19 +2,19 @@
 /// @brief       Strict 帧计算域测试。
 ///
 /// 三部分：
-/// 1. 合成样本——策略三态 API、new+\<init\> 翻转、同/异 offset Uninit 合并、
+/// 1. 合成样本，策略三态 API、new+\<init\> 翻转、同/异 offset Uninit 合并、
 ///    跨类合并经 resolver、jsr/ret 子程序往返（专项面在
 ///    subroutine_test.cpp）、描述符精确注入。冲突/不可算
 ///    样本断言 Err + failAt 指向正确指令。
-/// 2. 异常边精确传播——Strict 出口边播种 handler 入口（抛出点
+/// 2. 异常边精确传播，Strict 出口边播种 handler 入口（抛出点
 ///    locals + catch_type 精确类）、any 播 Throwable、死 try 的 handler
 ///    不可达、多抛出点合并（同类/resolver/冲突+failAt）；BestEffort 对照
 ///    逐项保持基础播种。
-/// 3. javac oracle——本机 javac 编译带 StackMapTable 的样本（--release 8），
+/// 3. javac oracle，本机 javac 编译带 StackMapTable 的样本（--release 8），
 ///    解码 SMT 条目展开成全帧，与 Strict 域算出的分支目标帧与 handler
 ///    入口帧逐槽比对（验收口径：可算者与 javac 一致）。javac 缺席时 skip。
 ///    语料与展开/比对机制在 smt_oracle_util.hpp（与生成器 oracle 共用）。
-/// 4. 语料全量两态 oracle——自产语料 + golden 语料类逐方法两态统计：
+/// 4. 语料全量两态 oracle，自产语料 + golden 语料类逐方法两态统计：
 ///    可算 → 与 SMT 展开公共前缀逐槽一致（可指派性口径）；不可算 → 显式
 ///    Err 带指令定位；断言零伪帧。stub resolver 用语料自收层级 + JDK 种子，
 ///    知识缺席显式拒绝（不伪造 Object 兜底帧）。
@@ -88,7 +88,7 @@ ClassBuilder baseClass()
     return cb;
 }
 
-/// iconst_1; pop; return —— 策略面的最小载体。
+/// iconst_1; pop; return: 策略面的最小载体。
 std::shared_ptr<ClassSession> trivialClass()
 {
     ClassBuilder cb = baseClass();
@@ -131,7 +131,7 @@ TEST(StrictFrameTest, StrictWithoutResolverFailsLoud)
 TEST(StrictFrameTest, PreserveComputeRefusesReadSideIsSeparate)
 {
     // Preserve 读侧实现在 smt_read.hpp 的独立入口
-    // （读属性不是数据流）。compute 对 Preserve 恒显式拒绝——语义路由不
+    // （读属性不是数据流）。compute 对 Preserve 恒显式拒绝，语义路由不
     // 误导，本测试锁死该拒绝面。
     auto s = trivialClass();
     ASSERT_NE(s, nullptr);
@@ -284,7 +284,7 @@ namespace {
 
 /// 0 new X / 3 dup / 4 astore_1 / 5 iconst_1 / 6 ifeq→13 / 9 aload_1 /
 /// 10 goto→16 / 13 aload_1 / 14-15 nop / 16 invokespecial X.<init>:V /
-/// 19 return —— 合并点两路的栈与 local1 都是同一 new（offset 0）的
+/// 19 return: 合并点两路的栈与 local1 都是同一 new（offset 0）的
 /// Uninitialized（同 offset 合并保持，翻转同时更新栈与局部变量）。
 std::shared_ptr<ClassSession> sameOffsetMergeClass()
 {
@@ -320,7 +320,7 @@ std::shared_ptr<ClassSession> sameOffsetMergeClass()
 }
 
 /// 0 iconst_1 / 1 ifeq→10 / 4 new A / 7 goto→13 / 10 new B / 13 astore_1 /
-/// 14 return —— 合并点是两个不同 new 的 Uninitialized（冲突样本）。
+/// 14 return: 合并点是两个不同 new 的 Uninitialized（冲突样本）。
 std::shared_ptr<ClassSession> uninitConflictClass(const char* aName, const char* bName)
 {
     ClassBuilder cb = baseClass();
@@ -350,7 +350,7 @@ std::shared_ptr<ClassSession> uninitConflictClass(const char* aName, const char*
 }
 
 /// 0 iconst_1 / 1 ifeq→10 / 4 getstatic A.f:LA; / 7 goto→13 / 10 getstatic B.f:LB; /
-/// 13 astore_1 / 14 return —— 合并点两路是不同类的已初始化引用。
+/// 13 astore_1 / 14 return: 合并点两路是不同类的已初始化引用。
 std::shared_ptr<ClassSession> refBranchMergeClass()
 {
     ClassBuilder cb = baseClass();
@@ -381,7 +381,7 @@ std::shared_ptr<ClassSession> refBranchMergeClass()
     return sessionOf(cb.build());
 }
 
-/// 0 aconst_null / 1 ifnull→8 / 4 iconst_1 / 5 goto→8 / 8 nop / 9 return（()V）——
+/// 0 aconst_null / 1 ifnull→8 / 4 iconst_1 / 5 goto→8 / 8 nop / 9 return（()V），
 /// 汇合点 8 的两条可达入边栈深不一致：ifnull 弹空边 [] vs goto 携值边 [int]。
 /// Verifier 必拒形态（JVMS §4.10.1 汇合不变量），帧引擎必须显式拒绝。
 /// 合并点取 nop 而非消费指令：首边到达即转移不失败，失败面留给 join 守卫。
@@ -565,7 +565,7 @@ TEST(StrictFrameTest, StackDepthMismatchStrictRejectsAtMergePoint)
 
 TEST(StrictFrameTest, StackDepthMismatchBestEffortAlsoRejects)
 {
-    // 栈深不一致是结构性数据流缺陷而非类型精度问题——BestEffort 同规显式
+    // 栈深不一致是结构性数据流缺陷而非类型精度问题，BestEffort 同规显式
     // 拒绝（此前短侧补 top 被深侧吸收 = 静默选边，把必拒形态算成 ok）。
     auto s = stackDepthMismatchClass();
     ASSERT_NE(s, nullptr);
@@ -584,7 +584,7 @@ TEST(StrictFrameTest, StackDepthMismatchBestEffortAlsoRejects)
 
 TEST(StrictFrameTest, InvokeRetKindFollowsDescriptor)
 {
-    // 形状域的 CP 装载结果此前按「1 槽→Ref、2 槽→Long」粗化——()I 结果以
+    // 形状域的 CP 装载结果此前按1 槽→Ref、2 槽→Long粗化，()I 结果以
     // Ref 入帧，与 LDC 位按 CP tag 的精确映射不一致，读↔算对拍系统性误报。
     auto s = invokeRetShapeClass();
     ASSERT_NE(s, nullptr);
@@ -635,7 +635,7 @@ TEST(StrictFrameTest, FieldRetKindsFollowDescriptor)
 TEST(StrictFrameTest, LdcClassConstantLoadsClassObject)
 {
     // ldc 类常量装载的是 Class 对象（java/lang/Class），不是常量命名的
-    // 类类型本身——否则该类型沿 astore 流进异常 handler 的合并帧后，
+    // 类类型本身，否则该类型沿 astore 流进异常 handler 的合并帧后，
     // 重算的 StackMapTable 会与 JVM 验证器实算帧冲突（ZKM 同步混淆形
     // ldc class + monitorenter + 假 handler 释放锁实测踩中）。
     ClassBuilder cb = baseClass();
@@ -812,7 +812,7 @@ TEST(StrictFrameTest, JsrRetBestEffortUnchanged)
 namespace {
 
 /// static m(String,int)：0 iload_1 / 1 ifeq→8 / 4 aload_0 / 5 goto→8 /
-/// 8 aconst_null / 9 astore_2 / 10 return —— 参数 String 与 null 在合并点汇合。
+/// 8 aconst_null / 9 astore_2 / 10 return: 参数 String 与 null 在合并点汇合。
 std::shared_ptr<ClassSession> paramMergeClass()
 {
     ClassBuilder cb = baseClass();
@@ -985,7 +985,7 @@ void putRef(Bytes& b, ca::u16 cpIdx)
 /// 多覆盖指令 → 同一 handler：Strict 发射域是 try 范围内全部可达指令
 /// （JVM 校验器对范围内每条有帧指令做 handler 可指派性检查，§4.10.1.4
 /// 保守口径），入口帧 = 各覆盖点 in-state locals 逐槽 verifier 合并
-/// （Top 支配——任一覆盖点缺席的槽裁决为 Top，全边已赋值槽具体保持）
+/// （Top 支配，任一覆盖点缺席的槽裁决为 Top，全边已赋值槽具体保持）
 /// + [catch_type 精确类]。try 起点在设置 store 之后可见局部值携带；覆盖
 /// 设置段时每个槽都有缺席覆盖点，全部支配为 Top。BestEffort 对照保持基
 /// 础播种（空 locals + 万能 Ref）。
@@ -998,7 +998,7 @@ TEST(StrictFrameExcTest, HandlerEntryCarriesThrowPointLocals)
         // 0 iconst_1 / 1 istore_2（设置段，是否被 try 覆盖由 excStart 定）/
         // 2 getstatic T.g / 5 pop / 6 getstatic T.g / 9 astore_0 /
         // 10 iconst_1 / 11 istore_1 / 12 getstatic T.f / 15 pop /
-        // 16 return / 17 astore_2（handler，顺序伪边被截断——只能经异常
+        // 16 return / 17 astore_2（handler，顺序伪边被截断，只能经异常
         // 边进入）/ 18 return
         Bytes code;
         code.push_back(0x04);              // 0 iconst_1
@@ -1050,7 +1050,7 @@ TEST(StrictFrameExcTest, HandlerEntryCarriesThrowPointLocals)
     // 席覆盖点 → 全部支配合并为 Top。
     run(0, VKind::Top, VKind::Top, VKind::Top);
 
-    // BestEffort 对照：handler 入口仍是基础播种——空 locals + 万能 Ref。
+    // BestEffort 对照：handler 入口仍是基础播种，空 locals + 万能 Ref。
     {
         ClassBuilder cb = baseClass();
         const ExcClassCp cp = excCpOf(cb);
@@ -1169,7 +1169,7 @@ TEST(StrictFrameExcTest, DeadTryHandlerUnreachableInStrict)
 }
 
 /// 多抛出点异类引用在 handler locals 合并：经 resolver 求公共父类。
-/// try 从首个 store 之后开始（store 自身不在 try 内）——首抛点的 in-state
+/// try 从首个 store 之后开始（store 自身不在 try 内），首抛点的 in-state
 /// 已携带 local0，入口边不出现缺席槽，合并是真引用 × 真引用。
 TEST(StrictFrameExcTest, HandlerLocalsMergeViaResolver)
 {
@@ -1269,7 +1269,7 @@ TEST(StrictFrameExcTest, HandlerLocalsConflictAbsorbedToBottom)
 }
 
 /// 两条异常表条目指向同一 handler（javac 多 catch 的编码形态）：两表的
-/// catch_type 值都并入 handler 入口栈，经 resolver 收敛为公共父类——
+/// catch_type 值都并入 handler 入口栈，经 resolver 收敛为公共父类，
 /// 若只并首表（旧播种语义）栈会停在首表类型。
 TEST(StrictFrameExcTest, MultiCatchEntriesMergeCatchTypes)
 {
@@ -1371,7 +1371,7 @@ TEST(StrictFrameOracle, ComputedFramesMatchJavacSmt)
                 << jbc::analysis::to_string(sum.fail);
 
             // handler 入口 pc 集合：不再豁免（入口帧纳入比对），仅用于
-            // 计量「含 handler 帧 N 个」的验证口径。
+            // 计量含 handler 帧 N 个的验证口径。
             std::set<ca::u32> handlerPcs;
             for (const jbc::ir::CodeUnit::Exc& e : p.unwrap()->exc) {
                 auto t = p.unwrap()->dom.resolveLabel(e.handler);
@@ -1403,7 +1403,7 @@ TEST(StrictFrameOracle, ComputedFramesMatchJavacSmt)
                 const std::vector<VType> expLocals =
                     headOf(ef.locals, trimmedSize(ef.locals));
                 // locals 按公共前缀逐槽一致：javac 对死变量做 chop 投影
-                //（monitor 副本等——§10.2.6 陈述口径差异的读侧体现），声明
+                //（monitor 副本等，§10.2.6 陈述口径差异的读侧体现），声明
                 // 的 locals 可少于计算所得（JVMS 4.10.1.4 可指派性允许
                 // handler/目标帧声明更少 locals），截去部分不构成约束；
                 // 前缀内仍要求逐槽一致（含 handler 帧）。
@@ -1439,17 +1439,17 @@ TEST(StrictFrameOracle, ComputedFramesMatchJavacSmt)
 
 // ---------------------------------------------------------------------------
 // 语料全量两态 oracle（strict oracle 扩容）：自产语料（jbc_corpus）+ golden
-// 注解样本类，逐方法两态统计——
+// 注解样本类，逐方法两态统计，
 //   可算 → 与 SMT 展开公共前缀逐槽一致（可指派性口径：计算帧槽可指派到
-//          javac 陈述槽即一致，「更精确类型不算分歧」§10.4.1）；
+//          javac 陈述槽即一致，更精确类型不算分歧§10.4.1）；
 //   不可算 → 显式 Err 且 failAt 定位到存活指令（§10.1.3 验收口径）。
 // 断言零伪帧（ok 但与 SMT 矛盾）。两类已知陈述口径差异按机制排除并单独
 // 计数，不算伪帧：
 //   1) §10.3.7 死 try handler：try 范围内无可抛指令时 javac 仍为 handler
-//      陈述帧、引擎按 §10.3.4 判不可达——以「覆盖范围内无 canThrow 指令」
+//      陈述帧、引擎按 §10.3.4 判不可达，以覆盖范围内无 canThrow 指令
 //      机械识别（engine 的可抛全集 detail::canThrow 单一知识源）；
 //   2) stub 知识外的跨类合并：resolver 拒绝（Unresolvable）落入不可算态，
-//      不伪造 Object 兜底帧——实证：Object 兜底会把 javac 陈述接口/子类
+//      不伪造 Object 兜底帧，实证：Object 兜底会把 javac 陈述接口/子类
 //      的汇合槽陈述成 Object，真 verifier 必拒（伪帧）。
 // ---------------------------------------------------------------------------
 
@@ -1470,12 +1470,12 @@ std::string_view arrayElementOf(std::string_view name)
 /// 语料 stub resolver（§10.1 契约的测试内实现，不进库）。
 ///
 /// 求解纪律：同名自解；空名不可解；数组协变规则；跨类沿层级图（superclass
-/// 边 + implements/extends-interface 边，接口边优先展开——更具体的公共类型
+/// 边 + implements/extends-interface 边，接口边优先展开，更具体的公共类型
 /// 优先）求首个公共祖先。**节点知识必须完整**：只出现在 parent/ifaces 表内
-///（或为 Object 根）的节点可展开，知识缺席即 Unresolvable——不伪造 Object
+///（或为 Object 根）的节点可展开，知识缺席即 Unresolvable，不伪造 Object
 /// 兜底帧（兜底帧与 javac 陈述矛盾即伪帧，语料实证：PluginRunner.
 /// initDCState 汇合槽 javac 陈述接口 ClassFileSource2、FilterManager 构造器
-/// 汇合槽陈述 List）。求解结果经驻留表交付——VType.name 是借用视图，不得
+/// 汇合槽陈述 List）。求解结果经驻留表交付，VType.name 是借用视图，不得
 /// 指向临时串。
 class CorpusResolver final : public ITypeResolver
 {
@@ -1585,7 +1585,7 @@ private:
         return true;
     }
 
-    /// 跨类父链求解：x 闭包完整 + y 层序展开首个命中（接口边优先——
+    /// 跨类父链求解：x 闭包完整 + y 层序展开首个命中（接口边优先，
     /// 更具体的公共类型优先）即公共祖先；知识缺席拒绝，不伪造 Object 兜底。
     ca::core::Result<VType, TypeMergeError> crossClassLca(std::string_view xs,
                                                           std::string_view ys)
@@ -1650,9 +1650,9 @@ private:
     }
 };
 
-/// JDK 族种子（测试内知识，按语料所需渐增；缺席不猜测——resolver 拒绝、
+/// JDK 族种子（测试内知识，按语料所需渐增；缺席不猜测，resolver 拒绝、
 /// 比对按精确/数组规则）。superclass 链入 parent，接口边入 ifaces。接口
-/// 节点必须以（可空的）ifaces 条目标记为已知——求解闭包只展开表内节点。
+/// 节点必须以（可空的）ifaces 条目标记为已知，求解闭包只展开表内节点。
 void seedJdkHierarchy(ParentMap& parent, IfaceMap& ifaces)
 {
     const auto mark = [&ifaces](const std::string& n) {
@@ -1799,7 +1799,7 @@ bool refAssignable(const ParentMap& parent, const IfaceMap& ifaces,
 }
 
 /// 槽级一致性：sameSlot 精确相等，或计算槽可指派到 javac 陈述槽
-///（null ⊆ 引用、子类/实现类 ⊆ 父类/接口、数组协变——陈述口径差异
+///（null ⊆ 引用、子类/实现类 ⊆ 父类/接口、数组协变，陈述口径差异
 /// 不算分歧）；其余即矛盾（伪帧证据）。
 bool slotConsistent(const ParentMap& parent, const IfaceMap& ifaces,
                     const VType& got, const VType& exp)
@@ -2034,7 +2034,7 @@ TEST(StrictFrameOracle, CorpusSmtTwoState)
                 }
                 if (!frameOk) {
                     ++pseudoFrames;
-                    ADD_FAILURE() << where << " @" << ef.offset << ": pseudo frame — "
+                    ADD_FAILURE() << where << " @" << ef.offset << ": pseudo frame: "
                                   << evidence << "\n  computed locals "
                                   << slotsText(gotLocals) << "\n  smt locals "
                                   << slotsText(expLocals);

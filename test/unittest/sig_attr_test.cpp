@@ -270,8 +270,8 @@ TEST(SigAttrTest, NestedChainCrossShapeSkipsAsNoReach)
     ASSERT_NE(cf, nullptr);
     const Bytes before = jbc::test::writeOk(*cf);
 
-    // old 两段（Outer$Inner）、new 一段：真嵌套段链不再产生 Err——部件
-    // 越界并入「不命中」族，原字节与 CP 零改写（跳过语义）。
+    // old 两段（Outer$Inner）、new 一段：真嵌套段链不再产生 Err，部件
+    // 越界并入不命中族，原字节与 CP 零改写（跳过语义）。
     auto r = renameClassInSignatureAttrs(*cf, "demo/Box$Inner", "demo/Moved");
     ASSERT_TRUE(r.is_ok());
     const SigAttrRenameSummary st = std::move(r).unwrap();
@@ -421,7 +421,7 @@ TEST(SigAttrTest, MountPointDecidesForm)
     ASSERT_TRUE(r.is_err());
     EXPECT_EQ(std::move(r).unwrap_err().kind, SigAttrError::Kind::Signature);
 
-    // 单槽原语允许调用方显式给 Field 形态吗？不行——字段形态不接受方法串；
+    // 单槽原语允许调用方显式给 Field 形态吗？不行，字段形态不接受方法串；
     // 显式给 Method 形态则命中（挂载点知识在调用方手里的合法用法）。
     auto m = renameClassInSignatureAttr(*cf, cf->attrs[0], SignatureForm::Method,
                                         "demo/Box", "demo/Renamed");
@@ -645,8 +645,8 @@ TEST(SigAttrTest, LvttReverseRenameRestoresBytes)
 
 TEST(SigAttrTest, LvttNestedChainCrossShapeSkips)
 {
-    // 真嵌套 '.' 段链跨形态：部件越界并入「不命中」族（原显式拒绝语义
-    // 并入零改写跳过，不再 Err）——行串原样，全扫零写。
+    // 真嵌套 '.' 段链跨形态：部件越界并入不命中族（原显式拒绝语义
+    // 并入零改写跳过，不再 Err），行串原样，全扫零写。
     ClassBuilder cb;
     const ca::u16 thisIdx = cb.utf8("p/Use");
     const ca::u16 superIdx = cb.utf8("java/lang/Object");
@@ -677,7 +677,7 @@ TEST(SigAttrTest, LvttNestedChainCrossShapeSkips)
 
 TEST(SigAttrTest, LvttBadRowSignatureFailsWholeScan)
 {
-    // 一行非签名（擦除基元描述符 I）：字段形态解析失败——全扫全有或全无。
+    // 一行非签名（擦除基元描述符 I）：字段形态解析失败，全扫全有或全无。
     ClassBuilder cb;
     const ca::u16 thisIdx = cb.utf8("p/Use");
     const ca::u16 superIdx = cb.utf8("java/lang/Object");

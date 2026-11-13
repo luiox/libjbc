@@ -1,4 +1,4 @@
-// jdk_fixture_gtest.hpp — jdk_fixture 的 gtest 语义封装
+// jdk_fixture_gtest.hpp: jdk_fixture 的 gtest 语义封装
 //
 // 修复"吞失败"掩蔽（#917 评审）：此前调用方对 runWithRunner 的 nullopt 一律
 // GTEST_SKIP，导致"被测产物运行失败"（如 keychain Phase 3 key2 不自洽的首链
@@ -8,7 +8,7 @@
 //   - JVM 运行失败  → 测试失败并带关键输出（异常栈 / exit code）。
 // 仅供 gtest 测试目标包含；非 gtest 消费方请直接用 jdk_fixture.hpp。
 //
-// .. 实现注记：GTEST_SKIP 宏展开带 return，只能落在 void 语境——因此 SKIP
+// .. 实现注记：GTEST_SKIP 宏展开带 return，只能落在 void 语境，因此 SKIP
 // 分支独立成 void helper（TestPartResult 记到当前测试），runRunnerChecked
 // 本体保持 bool 返回，调用方以 `if (!runJvmChecked(...)) return;` 短路收尾。
 
@@ -59,7 +59,7 @@ inline bool runRunnerChecked(const JdkToolchain& tc, const RunnerSpec& spec, std
 
 /// 负向用例两步收口（R12-NIT-3 收敛 5 处同款三行 SKIP 守卫）：
 /// - JdkUnavailable → 走 skipOnJdkUnavailable 记官方 SKIP，返回 true（调用方
-///   必须立即 return——与 runRunnerChecked 同款 bool 短路体例，保证 SKIP 后
+///   必须立即 return，与 runRunnerChecked 同款 bool 短路体例，保证 SKIP 后
 ///   的追加断言不被执行）；
 /// - 其余终态 → EXPECT_FALSE(ok)（谓词与消息原样保留，!ok ⇔ nullopt 时代
 ///   的 nullopt 语义），返回 false，调用方可继续追加失败原因断言。

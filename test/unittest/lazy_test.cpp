@@ -11,7 +11,7 @@ using jbc::test::ClassBuilder;
 using jbc::test::makeRichClass;
 
 /// lazy 的第一条承诺：解析一个类，一个属性体都不会被创建。
-/// 这是「扫描几万个类」可行性的全部来源。
+/// 这是扫描几万个类可行性的全部来源。
 TEST(LazyTest, NothingIsDecodedUntilAsked)
 {
     const Bytes bytes = makeRichClass();
@@ -33,7 +33,7 @@ TEST(LazyTest, NothingIsDecodedUntilAsked)
     }
 }
 
-/// 只解一个属性：其余仍保持未解码——lazy 是逐个的，不是全有全无。
+/// 只解一个属性：其余仍保持未解码，lazy 是逐个的，不是全有全无。
 TEST(LazyTest, DecodingOneAttrLeavesOthersLazy)
 {
     const Bytes bytes = makeRichClass();
@@ -70,7 +70,7 @@ TEST(LazyTest, DecodeIsIdempotent)
 }
 
 /// 改动不可能被忘记：可变访问只有 mutate() 一个入口，它顺手置脏。
-/// 旧库「改了但没标记 → 改动被静默丢弃」这类 bug 在此结构上写不出来。
+/// 旧库改了但没标记 → 改动被静默丢弃这类 bug 在此结构上写不出来。
 TEST(LazyTest, MutateIsTheOnlyWayToChangeAndItMarksDirty)
 {
     const Bytes bytes = makeRichClass();
@@ -79,7 +79,7 @@ TEST(LazyTest, MutateIsTheOnlyWayToChangeAndItMarksDirty)
 
     AttrSlot& slot = cf->methods[0].attrs[0];
 
-    // 未解码时 mutate() 只能返回空——不存在「边解边改」的歧义状态。
+    // 未解码时 mutate() 只能返回空，不存在边解边改的歧义状态。
     EXPECT_EQ(slot.mutate(), nullptr);
 
     ASSERT_TRUE(cf->decodeAttr(slot).is_ok());
@@ -133,7 +133,7 @@ TEST(LazyTest, NestedCodeAttributesAreLazyToo)
     EXPECT_EQ(raw[3], 0xEF);
 }
 
-/// 未建模属性解码为 RawAttr，字节一个不少——不猜语义，也不丢。
+/// 未建模属性解码为 RawAttr，字节一个不少，不猜语义，也不丢。
 TEST(LazyTest, UnknownAttrDecodesToRawBytes)
 {
     const Bytes bytes = makeRichClass();
@@ -152,7 +152,7 @@ TEST(LazyTest, UnknownAttrDecodesToRawBytes)
     EXPECT_EQ(raw[1], 0xBB);
 }
 
-/// 没有源字节就不能 lazy 解码——这不是隐藏的降级，是明确的失败。
+/// 没有源字节就不能 lazy 解码，这不是隐藏的降级，是明确的失败。
 TEST(LazyTest, DecodeRequiresSourceBytes)
 {
     const Bytes bytes = makeRichClass();

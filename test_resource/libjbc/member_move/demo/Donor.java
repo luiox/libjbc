@@ -6,7 +6,7 @@ package demo;
  * classify/dive/pickName 是分支体 adopt 回归面（member_move 夹具零分支体
  * 缺口）：for 循环的后向 goto、if 的前向分支、int tableswitch、String
  * lookupswitch、try/catch 异常表，以及体内引用供体自身私有成员（dive）的
- * 重映射面——javac 产物经 adoptMethod 搬移后 JVM 真跑必须与供体侧 oracle
+ * 重映射面，javac 产物经 adoptMethod 搬移后 JVM 真跑必须与供体侧 oracle
  * 等价。
  */
 public final class Donor {

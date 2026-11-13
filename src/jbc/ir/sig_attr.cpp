@@ -28,7 +28,7 @@ bool isSignatureSlot(const core::ClassFile& cf, const core::AttrSlot& slot) noex
 /// 契约见 PendingCpRewrite）；未命中返回 0（槽原样）；失败透传。
 ///
 /// 体长 > 2 的畸形输入（尾部垃圾同族）落位时只改 u2 索引，尾部经 trailing
-/// 原样保留——重编码写回天然不丢尾。
+/// 原样保留，重编码写回天然不丢尾。
 Result<ca::u32, SigAttrError> planSlot(core::ClassFile& cf, core::AttrSlot& slot,
                                        jbc::type::SignatureForm form,
                                        std::string_view old_internal,

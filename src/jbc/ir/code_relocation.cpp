@@ -15,9 +15,9 @@
 namespace jbc::ir {
 
 /// 句柄 → 新 pc（导出后）。死句柄（不在 order 里）返回 Err：静默回落会把
-/// 异常表边界写成 pc 0（方法入口），产出坏 classfile——死句柄只能来自绕过
+/// 异常表边界写成 pc 0（方法入口），产出坏 classfile，死句柄只能来自绕过
 /// CodeEditor::erase 的越权改动，lower 在此显式失败（不猜、不静默）。
-/// 「方法末尾」不在这里兜底：end 的空句柄哨兵由调用点显式展开成 code 长度。
+/// 方法末尾不在这里兜底：end 的空句柄哨兵由调用点显式展开成 code 长度。
 Result<ca::u32, LowerError> pcOfId(const CodeDom& dom,
                                    const std::vector<core::RawInsn>& raw, InsnId id)
 {
@@ -70,8 +70,8 @@ relocateLnt(const core::LineNumberTableAttr& lnt,
 /// LVT/LVTT 重定向（fail-closed）：startPc 必须精确命中 pcmap；区间终点
 /// oldEnd = startPc + length 必须命中 pcmap（落在旧指令起点），或严格等于
 /// oldCodeLen（只有这一种 miss 允许，映射到 newCodeLen）；其余 miss 与
-/// u32 溢出都返回 RelocationBadTarget——静默钳到新长度会把「终点落在指令
-/// 操作数中间」的畸形输入写成合法形态。
+/// u32 溢出都返回 RelocationBadTarget，静默钳到新长度会把终点落在指令
+/// 操作数中间的畸形输入写成合法形态。
 Result<LocalVariableRelocation, LowerError>
 relocateLvt(const core::LocalVariableTableAttr& lvt,
             const std::unordered_map<ca::u32, ca::u32>& pcmap,
@@ -184,7 +184,7 @@ relocateSmt(const core::StackMapTableAttr& smt,
 }
 
 /// TypeAnnotations 重定向（JVMS 4.7.20/4.7.21 的 Code 内挂载形态）：只动
-/// 携带字节码偏移的目标——localvar/resourcevar 行（start/length 走与 LVT
+/// 携带字节码偏移的目标，localvar/resourcevar 行（start/length 走与 LVT
 /// 相同的 fail-closed 终点规则）与 offset/cast/type-arg 族（单偏移精确
 /// 命中 pcmap）。catch 目标的 catch_index 指向异常表条目下标，lower 重建
 /// 异常表保持条目顺序与条数，下标稳定，不动；type_param/supertype/
@@ -192,8 +192,8 @@ relocateSmt(const core::StackMapTableAttr& smt,
 /// 类型路径与元素值不含 pc。未知 target_type 在解码层已拒绝（Err
 /// UnsupportedFeature），到不了这里。
 ///
-/// Annotation 携带 unique_ptr 载荷不可拷贝，因此拆成「纯计算 plan +
-/// 就地 apply」两步：plan 全量成功才允许 apply（all-or-nothing），
+/// Annotation 携带 unique_ptr 载荷不可拷贝，因此拆成纯计算 plan +
+/// 就地 apply两步：plan 全量成功才允许 apply（all-or-nothing），
 /// apply 只写标量字段，不会再失败。
 Result<TannRelocation, LowerError>
 planTann(const core::TypeAnnotationsAttr& ta,
@@ -266,7 +266,7 @@ void applyTann(core::TypeAnnotationsAttr& ta, const TannRelocation& plan)
 /// CharacterRangeTable 重定向（javac -Xjcov 私有属性，Code 嵌套）：每行的
 /// start_pc 与 end_pc 都是旧 code 中的指令起始 pc（end_pc 是 javac 写出的
 /// entry.endPc-1，含末指令），各自精确命中 pcmap，miss 即 RelocationBadTarget
-/// ——不存在「指向 code 长」的合法 miss（含末指令语义决定了它总是指令 pc）。
+/// ，不存在指向 code 长的合法 miss（含末指令语义决定了它总是指令 pc）。
 /// 字符区间与 flags 不携带 pc，原样保留。
 Result<CrtRelocation, LowerError>
 relocateCrt(const core::CharacterRangeTableAttr& crt,

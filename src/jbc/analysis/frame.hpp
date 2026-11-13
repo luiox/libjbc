@@ -6,9 +6,9 @@
 /// @brief       帧引擎：操作数栈/局部变量的数据流。
 ///
 /// 单一起原则：写出与 analysis 用同一实现。两条计算档位（FramePolicy）：
-/// BestEffort（缺省）是形状数据流——类型只到尺寸类（cat1/cat2/引用），
+/// BestEffort（缺省）是形状数据流，类型只到尺寸类（cat1/cat2/引用），
 /// 合并冲突降级为 Top 并计数，足够 maxStack/maxLocals 的重算与自对拍；
-/// Strict 档是类型精确数据流——transfer 携带精确类名与
+/// Strict 档是类型精确数据流，transfer 携带精确类名与
 /// Uninitialized 形态，合并经注入的 ITypeResolver 求解，算不动以指令级
 /// 诊断显式拒绝（验收口径：可算者与 javac 一致、不可算者显式拒绝并给
 /// 指令定位）。ITypeResolver 可注入：公共父类求解需要类层级，默认
@@ -38,9 +38,9 @@ struct MethodSig;
 
 /// @brief 形状/类型格的值类别。
 ///
-/// Top 与 Bottom 是两个语义不同的格元素：Top 是「未知」（合并时被任何已知
-/// 类型吸收，单调向下）；Bottom 是「合并冲突」（吸收一切，best-effort 继续
-/// 按 1 槽处理，Strict 下则触发显式拒绝）。二者混用会让格失去单调性——
+/// Top 与 Bottom 是两个语义不同的格元素：Top 是未知（合并时被任何已知
+/// 类型吸收，单调向下）；Bottom 是合并冲突（吸收一切，best-effort 继续
+/// 按 1 槽处理，Strict 下则触发显式拒绝）。二者混用会让格失去单调性，
 /// 带环方法的数据流不收敛。
 enum class VKind : ca::u8 {
     Top = 0,
@@ -111,7 +111,7 @@ enum class TypeMergeError : ca::u8 {
 
 /// @brief 引用合并策略接口（merge 单方法面）。
 ///
-/// 只解决「两个具体引用类型的公共父类」；结构性规则（Top 吸收、Null 底、
+/// 只解决两个具体引用类型的公共父类；结构性规则（Top 吸收、Null 底、
 /// Uninitialized 按 offset 判等）由计算域内置，不经此接口。实现体归
 /// 上层消费方（层次图求解）；libjbc 内置 ShapeResolver 作默认降级。字符串
 /// 参数是借用视图（寿命 = 常量池）。
@@ -154,7 +154,7 @@ struct FrameSummary
     ca::usize degraded = 0;   ///> 类型冲突降级为 Top 的次数（best-effort 度量）
     enum class Fail {
         None = 0,
-        Underflow,     ///< 栈下溢（数据流不一致——畸形或超出 best-effort 范围）
+        Underflow,     ///< 栈下溢（数据流不一致，畸形或超出 best-effort 范围）
         BadLocal,      ///< 局部变量索引越界（> 65535 语义外）
         BadCpRef,      ///< CP 引用无法解析（描述符缺失等）
         Wide,
@@ -177,9 +177,9 @@ struct FrameSummary
 
 const char* to_string(FrameSummary::Fail f) noexcept;
 
-/// @brief 一条指令「到达帧」的快照：进入该指令时的 locals/stack 形状。
+/// @brief 一条指令到达帧的快照：进入该指令时的 locals/stack 形状。
 ///
-/// 值语义、自持有——与旧栈 analysis 的 `Analyzer::getFrames()` 相对（那边
+/// 值语义、自持有，与旧栈 analysis 的 `Analyzer::getFrames()` 相对（那边
 /// 结果借用 Analyzer 寿命，是 ownership-model 六制之⑥；这里拷贝即独立）。
 /// reachable=false 表示死代码（无到达帧）。Strict 档的 VType.name 是借用
 /// 视图（CP / 域内驻留表），寿命随常量池/引擎，不随本结构体。
@@ -206,7 +206,7 @@ public:
     explicit FrameEngine(const core::ConstantPool& cp);
 
     /// @brief 档位形态：Strict 未随附 resolver 时 compute 显式 Err(NoResolver)
-    ///        （fail loud）；Preserve 档 compute 恒 Err(NotSupported)——读侧
+    ///        （fail loud）；Preserve 档 compute 恒 Err(NotSupported)，读侧
     ///        语义是读属性不是数据流，装配点在 smt_read.hpp 的独立入口。
     FrameEngine(const core::ConstantPool& cp, FramePolicy policy);
 
@@ -253,7 +253,7 @@ ca::i32 fieldSlots(std::string_view desc);
 ///        一条；）。
 ///
 /// this 形态（构造器 UninitThis / 其余精确类名）与描述符参数逐条入列，与
-/// 引擎 MethodSig 播种（domain.hpp analyze）同源同义——那边走域钩子按槽
+/// 引擎 MethodSig 播种（domain.hpp analyze）同源同义，那边走域钩子按槽
 /// 播种（cat2 双槽 + bottom 行），这边是 SMT 条目空间的同一事实。SMT 读侧
 /// （readFramesFromSmt）以本序列为链头；槽级展开（cat2 → 值槽 + Top 垫底）
 /// 由交付层按需进行。
@@ -261,21 +261,21 @@ std::vector<VType> initialLocalsOf(const MethodSig& sig);
 
 /// @brief 把帧计算观测到的 maxes 采用到 CodeUnit（显式 API）。
 ///
-/// 语义按裁决执行：Strict 档显式重算 = 覆盖——重算结果即真值，CodeUnit 里
+/// 语义按裁决执行：Strict 档显式重算 = 覆盖，重算结果即真值，CodeUnit 里
 /// 的现值只是旧栈产物；低于原值亦采用（Top 支配口径下重算值与 verifier
 /// 一致）。本函数只做这一件事，不触碰 lower/管线：BestEffort 手动链路与
-/// promote 拷贝语义零变化，「lower 时自动重算」的隐式接线不做（管线级策略
+/// promote 拷贝语义零变化，lower 时自动重算的隐式衔接不做（管线级策略
 /// 归后续批）。
 ///
 /// 两个 verifier 地板并入采用值（FrameSummary 记的是数据流触达，不含两条
 /// 规范性底线； 成文）：
-/// - maxLocals ≥ 参数槽地板（this + 描述符参数，按 @p sig 求值）——引擎的
+/// - maxLocals ≥ 参数槽地板（this + 描述符参数，按 @p sig 求值），引擎的
 ///   maxLocals 只计 store 触达，只读参数的方法观测值会低于 verifier 要求；
-/// - maxStack ≥ 1（@p u 带异常表时）——handler 入口栈恒有异常值。
+/// - maxStack ≥ 1（@p u 带异常表时），handler 入口栈恒有异常值。
 ///
 /// @return 是否采用。summary 非 ok（失败计算无真值）或地板并入后的取值超
 ///         出 u16 编码域（Code 属性 maxes 是 u16，截断即伪造）时不采用且
-///         不改动任何字段——调用方以返回值为准，不隐默丢。
+///         不改动任何字段，调用方以返回值为准，不隐默丢。
 bool applyComputedMaxes(ir::CodeUnit& u, const FrameSummary& computed,
                         const MethodSig& sig) noexcept;
 

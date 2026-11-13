@@ -1,6 +1,6 @@
 """Sphinx 配置：libjbc 设计规格层（宏观）。
 
-规范见 README.md「文档规范」：本目录只收 RST 设计规格；markdown 属人读/
+规范见 README.md文档规范：本目录只收 RST 设计规格；markdown 属人读/
 AI 方向层，不进 doctree。CI 以 -W --keep-going 构建，警告即失败。
 """
 

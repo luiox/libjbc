@@ -19,7 +19,7 @@ namespace {
 /// @brief 断言签名解析成功且 roundtrip 逐字节恒等，返回形态供后续断言。
 ///
 /// 按值收 Result：树节点含 unique_ptr（SigTypeParam::class_bound 等），只移不
-/// 拷——从 unwrap() move 出来后按 NRVO/move 返回。
+/// 拷，从 unwrap() move 出来后按 NRVO/move 返回。
 template <typename T>
 T expectOk(Result<T, SigError> r, std::string_view sig)
 {
@@ -147,7 +147,7 @@ TEST(SignatureTest, WildcardArgumentForms)
     EXPECT_EQ(low.bound->kind, SigType::Kind::TypeVar);
 
     // 通配符 × 数组 × 嵌套泛型交叠（JVMS TypeArguments 无逗号分隔：`*[I*TV;`
-    // 即三实参——上界数组、无界、不变类型变量）。
+    // 即三实参，上界数组、无界、不变类型变量）。
     auto mixed = expectOk(parseFieldSignature("Ljava/util/Map<+[I*TV;>;"),
                           "Ljava/util/Map<+[I*TV;>;");
     const auto& args = mixed.class_type.segments[0].type_args;
@@ -582,7 +582,7 @@ TEST(SignatureTest, RenameInnerClassByInternalName)
     EXPECT_EQ(std::string_view(res2.signature.c_str(), res2.signature.byte_length()),
               "Lnp/New<TT;>.Renamed;");
 
-    // 跨形态：扁平段链（单段名）把嵌套名改成顶级名——new 内部名按 '$'
+    // 跨形态：扁平段链（单段名）把嵌套名改成顶级名，new 内部名按 '$'
     // 合成写满本段（javac 通行非规范 $ 形态）；真嵌套段链不做结构重排，
     // 部件越界即不命中（原串零改写）。
     auto flat = renameClassInSignature(dollar_sig, SignatureForm::Field,
@@ -624,7 +624,7 @@ TEST(SignatureTest, RenameNoHitAndBadNames)
     EXPECT_TRUE(renameClassInSignature(sig, SignatureForm::Field, "a/B", "").is_err());
     EXPECT_TRUE(renameClassInSignature(sig, SignatureForm::Field, "a/B;", "x/Y").is_err());
     EXPECT_TRUE(renameClassInSignature(sig, SignatureForm::Field, "a/B", "x;Y").is_err());
-    // 尾 '$' / 连 '$'（kotlin 空段真名）字符集合法——不再 Err：本扁平
+    // 尾 '$' / 连 '$'（kotlin 空段真名）字符集合法，不再 Err：本扁平
     // 签名无命中返回 hits==0；真嵌套 '.' 段链对带空 $ 段的规则名不可达
     // （按不命中降级，见跨形态口径）。
     auto dollarTail = renameClassInSignature(sig, SignatureForm::Field, "a/B$", "x/Y$Z");

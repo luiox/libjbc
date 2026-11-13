@@ -1,4 +1,4 @@
-// DumpSigRef.java — B1 反射对照的 dump 助手：把样本的全部泛型声明按
+// DumpSigRef.java: B1 反射对照的 dump 助手：把样本的全部泛型声明按
 // Type.getTypeName() 渲染为行式文本，供 C++ 侧与签名树渲染对拍。
 // 行格式：
 //   class|<fq binary>|<super>|I:<itf>...|P:<name>|PB:<bound>...

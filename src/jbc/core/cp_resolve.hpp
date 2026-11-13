@@ -11,12 +11,12 @@
 ///
 /// 为什么放 core 而不是收进 ClassSession：BSM 本体与实参都是裸 CP 索引（拿不
 /// 到 Insn），指令坐标的语义层（memberOf/constOf）覆盖不到 MethodHandle 的
-/// 目标——constOf 对它只报 kind 不报指向；压缩与扫描两侧需要同一套一跳原语。
+/// 目标，constOf 对它只报 kind 不报指向；压缩与扫描两侧需要同一套一跳原语。
 /// 失败一律返回 false / 空 view，不产生诊断：调用方自决失败面（降级、拒绝
-/// 或记档），与 utf8Of 的「非 Utf8 返回空」同款探测语义。
+/// 或记档），与 utf8Of 的非 Utf8 返回空同款探测语义。
 ///
 /// 严格口径：MethodHandle 的 reference_kind ∉ 1..9 视为结构不符，解析失败，
-/// 不做「非字段 kind 一律按方法」的宽松兜底——那会把损坏池悄悄解析成假语义。
+/// 不做非字段 kind 一律按方法的宽松兜底，那会把损坏池悄悄解析成假语义。
 /// kind 与引用条目 tag 的匹配裁决与 validateReferences 同款：1..4 → Fieldref，
 /// 5..8 → Methodref/InterfaceMethodref，9 → InterfaceMethodref（kind 6/7 的
 /// InterfaceMethodref 是 JVMS v52+ 的合法交叉形态，javac 确实产出）。

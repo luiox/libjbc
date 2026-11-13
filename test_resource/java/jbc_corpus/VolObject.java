@@ -1,4 +1,4 @@
-// VolObject.java — libjbc 语料：instanceof/checkcast/monitor/StringBuilder/Object 方法族。
+// VolObject.java: libjbc 语料：instanceof/checkcast/monitor/StringBuilder/Object 方法族。
 package jbcx.corpus;
 
 public final class VolObject {

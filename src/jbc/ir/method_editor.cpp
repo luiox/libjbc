@@ -6,7 +6,7 @@ namespace jbc::ir {
 namespace {
 
 /// 平铺体不允许携带控制流指令：标签只能在 CodeUnit 的 CodeDom 上创建与
-/// 绑定，批量入口没有受理标签的位置。按指令形状判定而非「target 非空」——
+/// 绑定，批量入口没有受理标签的位置。按指令形状判定而非target 非空，
 /// 未绑定分支的目标恰好是 kNoLabel，按目标判会把坏体放行到 append 阶段。
 /// 非控制流指令上残留的 targets/keys 同样视为脏形状。
 bool hasControlFlow(const Insn& in) noexcept

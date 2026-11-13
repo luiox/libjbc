@@ -1,8 +1,8 @@
 /// @file        corpus_util.hpp
 /// @brief       语料解析：env 注入 > 仓内自产（javac 现场编译）。
 ///
-/// 最强护栏（>1000 方法帧 oracle、语料往返、attr/ir/insn 语料门）基于
-/// 「仓内自产、JDK-only 依赖」的语料设施，仓内缺席即 skip：
+/// 最强护栏（>1000 方法帧 oracle、语料往返、attr/ir/insn 真实语料对拍）基于
+/// 仓内自产、JDK-only 依赖的语料设施，仓内缺席即 skip：
 ///
 /// 1. `LIBJBC_REAL_CLASS_DIR` 环境变量注入时语义不变（CI/本机注入任意语料目录），
 ///    注入但目录缺席按缺席处理（不静默回退，保持注入的权威性）。
@@ -126,8 +126,8 @@ inline fs::path moduleManifestPath()
 
 /// @brief 编译旗语指纹（manifest 标记行）：旗语升级即整批重编。
 ///
-/// `-g` 产出 LVT/LVTT 调试属性——LVTT 签名列是泛型签名的第二处宿主，
-/// 语料门需要它在自产模式下可复现（env 注入模式的分布另计）。
+/// `-g` 产出 LVT/LVTT 调试属性，LVTT 签名列是泛型签名的第二处宿主，
+/// 真实语料对拍需要它在自产模式下可复现（env 注入模式的分布另计）。
 constexpr const char* kCompileFlagsMark = "flags=-g";
 
 inline std::vector<fs::path> collectSources()
@@ -591,7 +591,7 @@ inline bool moduleBuildNeeded()
 
 /// @brief 现场编译 module 语料。样本全部平铺在语料根（包名写在源内，产物
 ///        布局由 -d 展开），module-info.java 与全部类源同一次 javac 调用编
-///        译——module 指令只对同调用的类生效。返回 false = 语料缺席（能力
+///        译，module 指令只对同调用的类生效。返回 false = 语料缺席（能力
 ///        或源缺失，调用方降级）；javac 能力具备但样本源编译失败是仓内缺
 ///        陷，直接 ADD_FAILURE。
 inline bool produceModuleCorpus()
@@ -670,7 +670,7 @@ inline fs::path annotManifestPath()
 }
 
 /// @brief annot 语料编译旗语指纹（manifest 标记行）：旗语升级即整批重编。
-///        -parameters 产出 MethodParameters——注解族语料门需要它在自产模式
+///        -parameters 产出 MethodParameters，注解族语料门需要它在自产模式
 ///        下可复现（env 注入模式的分布另计）。
 constexpr const char* kAnnotCompileFlagsMark = "flags=-g -parameters --release 8";
 

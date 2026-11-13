@@ -8,7 +8,7 @@
 ///      压缩收编后语义保持。
 ///   2. JVM 真跑门（JDK 在位时执行，缺席 skip）：反射读回参数名/旗语、
 ///      参数注解全族、注解默认值、类级注解与 ConstantValue 静态常量。
-///      枚举常量由真实 Java 源（bu/Op）经 extraJavaSources 同场编译——
+///      枚举常量由真实 Java 源（bu/Op）经 extraJavaSources 同场编译，
 ///      合成注解与 javac 产物同 classpath 混合部署的互操作实证。
 #include <gtest/gtest.h>
 
@@ -70,7 +70,7 @@ bool expectOk(const R& r, const char* what)
 }
 
 /// 从零 seed 会话（this/super 建骨架，名字内部名形态；注解类需追加
-/// java/lang/annotation/Annotation 接口——javac 的 @interface 语义糖）。
+/// java/lang/annotation/Annotation 接口，javac 的 @interface 语义糖）。
 SessionPtr seedSession(ca::u32 access, const char* thisName,
                        std::vector<std::string_view> interfaces = {})
 {
@@ -574,7 +574,7 @@ TEST(ClassBuildAttrs, MountAndSpecFailures)
         EXPECT_EQ(s->attachConstantValue(fk, cvInt(1)).unwrap_err(),
                   jbc::ir::LowerError::AlreadyMounted);
         // arity 失配先行于单例判（规格形状是更深一层的失败面）。非静态方法
-        // 的「arity+1」接收者形态合法（JVMS 4.7.24）：2 行先过 arity、撞上
+        // 的arity+1接收者形态合法（JVMS 4.7.24）：2 行先过 arity、撞上
         // 单例判；越界到 arity+2 才是 InvalidSeed。
         EXPECT_EQ(s->attachMethodParameters(f, {ParamNameRow{"b0", 0}, ParamNameRow{"b1", 0}})
                       .unwrap_err(),
@@ -627,7 +627,7 @@ TEST(ClassBuildAttrs, MountAndSpecFailures)
             256, std::vector<SemAnnotation>{});
         EXPECT_EQ(s->attachParameterAnnotations(m, true, g256).unwrap_err(),
                   jbc::ir::LowerError::DomainOverflow);
-        // arity 硬契约：行数/参数组数超出「描述符参数个数 + 接收者行」上限
+        // arity 硬契约：行数/参数组数超出描述符参数个数 + 接收者行上限
         // → InvalidSeed（m 非静态，2 行是合法接收者形态，会真的落位）。
         EXPECT_EQ(s->attachMethodParameters(
                       m,

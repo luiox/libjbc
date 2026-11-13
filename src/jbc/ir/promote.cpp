@@ -47,7 +47,7 @@ Result<CodeUnitRef, PromoteError> promoteMethod(ClassSession& s, MethodId method
     ClassUnit& u        = s.unit();
     MethodUnit* mu = u.method(method);
     if (mu == nullptr) {
-        // 死句柄（已删除/外来会话）与「方法存在但没有体」是两类失败：
+        // 死句柄（已删除/外来会话）与方法存在但没有体是两类失败：
         // 失效语义显式可判别，不混入 NoCode。
         return Err(PromoteError::InvalidHandle);
     }
@@ -113,7 +113,7 @@ Result<CodeUnitRef, PromoteError> promoteMethod(ClassSession& s, MethodId method
 
     unit->method = method;
     mu->code = std::move(unit);
-    // 保活：返回句柄持会话 shared_ptr——CodeUnit 是会话内部指针，句柄
+    // 保活：返回句柄持会话 shared_ptr，CodeUnit 是会话内部指针，句柄
     // 存活则会话（连同 backing）存活。
     return Ok(CodeUnitRef(s.shared_from_this(), mu->code.get()));
 }

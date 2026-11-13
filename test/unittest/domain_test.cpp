@@ -1,7 +1,7 @@
 /// @file        domain_test.cpp
 /// @brief       值域搭车引擎测试：来源追踪 / 常量折叠 / 熔断 / 入参与异常播种。
 ///
-/// 三个领域各 ~40 行——这就是「换值域不写 transfer 表」的实证：旧栈
+/// 三个领域各 ~40 行，这就是换值域不写 transfer 表的实证：旧栈
 /// analysis 换 Interpreter 要重写整张 per-opcode 表；这里只实现域钩子。
 #include <gtest/gtest.h>
 
@@ -145,7 +145,7 @@ public:
 
     Const newValue(const jbc::ir::Insn& in, jbc::ir::InsnId, jbc::analysis::VKind shape) override
     {
-        // 只折 int 常量族；其余（含 ldc，cp 需读表——本演示域从简）未知。
+        // 只折 int 常量族；其余（含 ldc，cp 需读表，本演示域从简）未知。
         if (shape != jbc::analysis::VKind::Int) {
             return Const{};
         }
@@ -209,7 +209,7 @@ public:
 };
 
 // ---------------------------------------------------------------------------
-// 域三：非单调域（故意破坏格——验证熔断兜底）
+// 域三：非单调域（故意破坏格，验证熔断兜底）
 // ---------------------------------------------------------------------------
 
 struct Bad
@@ -614,7 +614,7 @@ TEST(DomainSigTest, ExceptionEntrySeeded)
 TEST(DomainSigTest, HandlerSeedMergesWithLateNormalEdge)
 {
     // 处理器入口的正常边晚于种子处理到达（入口块之后的深路径才跳进
-    // handler）：种子不得抢先单跑——旧实现把 [exc] 单槽状态在 analyze 入口
+    // handler）：种子不得抢先单跑，旧实现把 [exc] 单槽状态在 analyze 入口
     // 无条件入队，handler 体系在正常边并入前先以残缺帧执行，直链上需要
     // 双操作数的 iand 当场 Underflow。正确语义是 verifier 口径：入口帧 =
     // 全部入边汇合。
@@ -655,7 +655,7 @@ TEST(DomainSigTest, HandlerSeedKeepsFallthroughEdge)
 {
     // 顺序边直落处理器入口（fake-try 连续体：handler 就是 try 之后的自然
     // 续体）：截断会把唯一真实入边丢掉，种子单跑同样在 iand 下溢。基础档
-    // 不截断——handler 入口按普通汇合点参与数据流。
+    // 不截断，handler 入口按普通汇合点参与数据流。
     const Bytes code = {
         0x04,   // 0 iconst_1          ; [1]
         0x05,   // 1 iconst_2          ; [1,2]
@@ -714,7 +714,7 @@ TEST(DomainDiagTest, FailReportsFaultingInstruction)
 
 TEST(DomainDiagTest, RetMarksSubroutineFact)
 {
-    // jsr; return; L: astore_1; ret 1 —— 引擎不建模子程序：ok 仍真（best-effort
+    // jsr; return; L: astore_1; ret 1: 引擎不建模子程序：ok 仍真（best-effort
     // 完成），但 hasSubroutine 显式标记 + degraded 计数，"算不动"可查询。
     const Bytes code = {
         0xa8, 0x00, 0x04,   // 0 jsr -> 4

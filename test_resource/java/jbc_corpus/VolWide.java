@@ -1,5 +1,5 @@
-// VolWide.java — libjbc 语料：wide 前缀形态（局部变量/参数槽下标 > 255）+ 大 maxLocals 帧。
-// 130 个 double 局部 = 260 槽、250 个混合参数 ≈ 375 槽——尾部访问必须走 wide store/load。
+// VolWide.java: libjbc 语料：wide 前缀形态（局部变量/参数槽下标 > 255）+ 大 maxLocals 帧。
+// 130 个 double 局部 = 260 槽、250 个混合参数 ≈ 375 槽，尾部访问必须走 wide store/load。
 package jbcx.corpus;
 
 public final class VolWide {

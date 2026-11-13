@@ -2,8 +2,8 @@
 /// @brief       SMT oracle 测试设施：javac 样本语料 + SMT 解码展开比对。
 ///
 /// 由 strict_frame_test 与 smt_build_test 共用：同一份
-/// javac（--release 8）语料、同一套「SMT 帧链 → 全帧展开」机制、同一套
-/// 「公共前缀逐槽一致」比对判据与陈述口径。语料覆盖
+/// javac（--release 8）语料、同一套SMT 帧链 → 全帧展开机制、同一套
+/// 公共前缀逐槽一致比对判据与陈述口径。语料覆盖
 /// loop 与 switch 两样本（回边与 switch 目标帧）。
 #pragma once
 
@@ -232,8 +232,8 @@ inline bool compileOracleSamples(const fs::path& root)
 
 /// 最小 stub resolver（真实现归上层消费方，测试内只配最小层）：
 /// 同类返回本类；跨类沿父链求首个公共祖先（缺省父 = Object）；
-/// 空名参与跨类合并视为不可解（防止「无名 Ref 被静默兜底」掩盖缺陷）。
-/// 求解结果经内部驻留表交付——VType.name 是借用视图，不得指向临时串。
+/// 空名参与跨类合并视为不可解（防止无名 Ref 被静默兜底掩盖缺陷）。
+/// 求解结果经内部驻留表交付，VType.name 是借用视图，不得指向临时串。
 class StubResolver final : public ITypeResolver
 {
 public:
@@ -298,7 +298,7 @@ private:
     }
 };
 
-/// 字节 → 会话（失败返回空——调用方 ASSERT_NE）。
+/// 字节 → 会话（失败返回空，调用方 ASSERT_NE）。
 inline std::shared_ptr<jbc::ir::ClassSession> sessionOf(const Bytes& bytes)
 {
     auto cf = readOk(bytes);

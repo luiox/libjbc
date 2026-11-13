@@ -1,9 +1,9 @@
 /// @file        roundtrip_test.cpp
 /// @brief       保真写回：未触碰即原样，触碰才重编码。
 ///
-/// 这是 libjbc core 的核心验收。旧库的 roundtrip 是「重编码一遍希望它一样」，
-/// 这里是「没碰过的东西根本不经过编码器」——判据从「编码器正确」降级为
-/// 「copy 正确」，后者几乎不可能错。
+/// 这是 libjbc core 的核心验收。旧库的 roundtrip 是重编码一遍希望它一样，
+/// 这里是没碰过的东西根本不经过编码器，判据从编码器正确降级为
+/// copy 正确，后者几乎不可能错。
 #include <gtest/gtest.h>
 
 #include "jbc/jbc.hpp"
@@ -25,7 +25,7 @@ TEST(RoundtripTest, UntouchedClassIsByteIdentical)
 }
 
 /// 解码全部属性但不修改 → 仍然字节相同。
-/// 证明「看过」不等于「改过」：解码不置脏，写回依旧走 copy。
+/// 证明看过不等于改过：解码不置脏，写回依旧走 copy。
 TEST(RoundtripTest, DecodingEverythingKeepsBytesIdentical)
 {
     const Bytes bytes = makeRichClass();
@@ -43,7 +43,7 @@ TEST(RoundtripTest, DecodingEverythingKeepsBytesIdentical)
     EXPECT_EQ(out, bytes);
 }
 
-/// 未知属性必须原样往返——它们是 hostile 样本 roundtrip 断裂的主要来源。
+/// 未知属性必须原样往返，它们是 hostile 样本 roundtrip 断裂的主要来源。
 TEST(RoundtripTest, UnknownAttributesSurviveByteForByte)
 {
     const Bytes bytes = makeRichClass();
@@ -144,7 +144,7 @@ TEST(RoundtripTest, UnencodableModificationIsRejected)
     auto cf = jbc::test::readOk(bytes);
     ASSERT_NE(cf, nullptr);
 
-    // 手动构造一个「已修改但无 body」的非法状态，模拟编码器缺失。
+    // 手动构造一个已修改但无 body的非法状态，模拟编码器缺失。
     cf->methods[0].attrs[1].body  = nullptr;
     cf->methods[0].attrs[1].state = AttrSlot::State::Modified;
 
@@ -193,7 +193,7 @@ TEST(RoundtripTest, OversizedCodeIsRejected)
 }
 
 /// 类属性表之后的尾部垃圾（trailing 同族）：未修改往返必须
-/// 字节一致——静默丢尾即保真违约。
+/// 字节一致，静默丢尾即保真违约。
 TEST(RoundtripTest, ClassTrailingBytesRoundtripUntouched)
 {
     Bytes bytes = makeRichClass();

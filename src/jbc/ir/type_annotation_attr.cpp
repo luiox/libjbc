@@ -27,7 +27,7 @@ bool isTaSlot(const core::ClassFile& cf, const core::AttrSlot& slot) noexcept
 /// @brief 对一个承载字段描述符的 CP 槽位做纯预检（解析 + span 命中 + 改写
 ///        串计算），不改写、不 intern。
 ///
-/// 基类型/void 描述符（B C D F I J S Z V）不可能含类名，直接跳过——
+/// 基类型/void 描述符（B C D F I J S Z V）不可能含类名，直接跳过，
 /// `@Anno(void.class)` 的 'c' 值是合法输入，不是畸形。
 Result<ca::u32, TaAttrError> planDescriptorPos(core::ClassFile& cf, core::AttrSlot& slot,
                                                ca::u32& field, std::string_view old_internal,

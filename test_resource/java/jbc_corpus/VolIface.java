@@ -1,4 +1,4 @@
-// VolIface.java — libjbc 语料：接口默认方法/静态方法/常量 + 多实现冲突消解 + 桥方法。
+// VolIface.java: libjbc 语料：接口默认方法/静态方法/常量 + 多实现冲突消解 + 桥方法。
 package jbcx.corpus;
 
 public final class VolIface {

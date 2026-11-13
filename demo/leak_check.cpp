@@ -32,8 +32,8 @@ using Bytes = std::vector<ca::u8>;
 // 动态分配计数（release 下亦可用）
 //
 // CRT 调试堆只活在 _DEBUG 里，而 debug 全链重编代价很大。这里补一条随时能跑
-// 的路子：接管全局 operator new/delete，统计「活着的对象数」。跑完一段工作
-// 负载后它应当回到起点——回不去就是有东西没释放。
+// 的路子：接管全局 operator new/delete，统计活着的对象数。跑完一段工作
+// 负载后它应当回到起点，回不去就是有东西没释放。
 //
 // 实现一律走 malloc/free，与 MSVC 默认 operator new/delete 的底层一致，避免
 // 跨堆释放。C++17 的 aligned 版本也必须接管，否则计数会漏。
@@ -134,7 +134,7 @@ std::vector<fs::path> collect(const fs::path& root, std::size_t limit)
 
 std::size_t oneTransformRound(const Bytes& bytes);
 
-/// @brief 一轮「读 → 全解码 → 写回 → 析构」。返回处理成功的类数。
+/// @brief 一轮读 → 全解码 → 写回 → 析构。返回处理成功的类数。
 std::size_t oneRound(const std::vector<fs::path>& files)
 {
     using namespace jbc::core;
@@ -170,7 +170,7 @@ std::size_t oneRound(const std::vector<fs::path>& files)
 }
 
 /// @brief v0.3+ 变换链路一轮：session/promote/编辑（插桩+语义 setter）/
-/// erase 双策略/帧引擎/lower/写回/重读——全部新建路径进泄漏口径。
+/// erase 双策略/帧引擎/lower/写回/重读，全部新建路径进泄漏口径。
 std::size_t oneTransformRound(const Bytes& bytes)
 {
     using namespace jbc::core;
@@ -244,7 +244,7 @@ std::size_t oneTransformRound(const Bytes& bytes)
 
 /// @brief ASan 自检：故意做一次堆越界写，验证插桩确实生效。
 ///
-/// 「ASan 没报错」有两种可能——代码干净，或者 ASan 根本没开。这个开关用来
+/// ASan 没报错有两种可能，代码干净，或者 ASan 根本没开。这个开关用来
 /// 排除后者：设了环境变量就必须报错，不报错说明构建配置有问题。
 /// 默认关闭，常规运行不触发。
 /// ```sh
@@ -282,7 +282,7 @@ int main(int argc, char** argv)
 
 #if !defined(_MSC_VER) || !defined(_DEBUG)
     // CRT 调试堆不可用（release / 非 MSVC）：改用全局分配计数。工作负载照跑，
-    // 因此在 ASan 构建下本程序同样有价值——ASan 盯越界/UAF，计数盯平衡。
+    // 因此在 ASan 构建下本程序同样有价值，ASan 盯越界/UAF，计数盯平衡。
     std::printf("NOTE: CRT debug heap needs MSVC + _DEBUG (xmake f -m debug);\n");
     std::printf("      falling back to new/delete balance counting.\n");
 

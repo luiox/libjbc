@@ -63,7 +63,7 @@ Result<void, LowerError> lowerMethod(ClassSession& s, MethodId method)
     std::vector<ca::u8> bytes = std::move(bytesR).unwrap();
 
     // JVMS 4.7.3：code_length 必须 > 0 且 ≤ 65535。在 lower 闸住而不是拖到
-    // writeClass 的 Unencodable——那里既无方法名也无实际大小，排查困难。
+    // writeClass 的 Unencodable，那里既无方法名也无实际大小，排查困难。
     // 早退路径（与 backing 一致时不进此门）天然安全：backing 字节来自
     // reader，已受同一上限约束。
     if (bytes.empty()) {
@@ -286,7 +286,7 @@ Result<void, LowerError> lowerMethod(ClassSession& s, MethodId method)
     out->maxStack  = cu.maxStack;
     out->maxLocals = cu.maxLocals;
     cu.dom.acceptLoweredLayout(raw);
-    // 记账：body 粒度以 lower 落盘点为准——code/异常表/maxes 任一
+    // 记账：body 粒度以 lower 落盘点为准，code/异常表/maxes 任一
     // 实改才记（copy-through 早退路径不进此处）。身份视图取符号池（只增不移）。
     {
         ChangeRecord body;
@@ -330,7 +330,7 @@ Result<void, LowerError> ClassSession::commitMethodMetadata(MethodId method)
     if (m.nameCp != nameCp || m.descCp != descCp || m.access != mu->access) {
         // 记账：元数据粒度只在实改时记；改写前身份从 backing CP
         // 原样解析（append-only 契约保证旧条目仍在），仅身份实变（改名/换
-        // 描述符）时携带——未改名（仅 access 变）保持空视图（契约）。
+        // 描述符）时携带，未改名（仅 access 变）保持空视图（契约）。
         ChangeRecord meta;
         meta.kind   = ChangeKind::MemberMetadata;
         meta.member = MemberKind::Method;
@@ -360,7 +360,7 @@ Result<void, LowerError> ClassSession::commitClassMetadata()
     const std::string_view thisName = u.symbols().str(u.thisClass);
     if (thisName.empty()) {
         // 空类名无法构成合法 classfile（reader 保证 thisClass 可解析出非空名）；
-        // 直到这里才可能为空，说明模型被越权改坏——拒绝提交而非写入坏引用。
+        // 直到这里才可能为空，说明模型被越权改坏，拒绝提交而非写入坏引用。
         return Err(LowerError::CpAppendFailed);
     }
     const std::string_view superName = u.symbols().str(u.superClass);
@@ -392,7 +392,7 @@ Result<void, LowerError> ClassSession::commitClassMetadata()
     }
 
     // 提交：intern 去重落位，再写回头字段。super 空名 = 无父类（Object），写 0。
-    // 记账：类级粒度只在实改时记——CP 只追加且 intern 去重，同一
+    // 记账：类级粒度只在实改时记，CP 只追加且 intern 去重，同一
     // 名字的索引不变，故头字段索引/旗标的前后相等 ⇔ 元数据未变。
     const ca::u16 oldAccess = cf.access;
     const ca::u16 oldMajor  = cf.major;

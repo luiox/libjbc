@@ -141,7 +141,7 @@ Result<void, LowerError> ClassSession::removeMethod(MethodId method)
     removed.member = MemberKind::Method;
     removed.name   = unit_.symbols().str(mu->name);
     removed.desc   = unit_.symbols().str(mu->desc);
-    // 物理面：摘除 method_info，后续成员的 backingIndex 统一平移——身份
+    // 物理面：摘除 method_info，后续成员的 backingIndex 统一平移，身份
     // 不动，物理位置本来就不是身份。
     backing_->methods.erase(backing_->methods.begin()
                             + static_cast<std::ptrdiff_t>(gone));
@@ -224,7 +224,7 @@ Result<void, LowerError> replayMethodBody(ClassSession& dstS, ClassSession& srcS
     // 标签映射：src slot → {src 句柄, dst 占位句柄}。前向分支的目标可能
     // 尚未重放，占位标签先创建（缺省锚在方法末尾），全部指令重放完成后
     // 统一改绑到映射后的锚点。占位在 append 期必然未锚定，append 的控制
-    // 目标校验会拒收——重放进入受控延后绑定构建态放行，收尾统一补验。
+    // 目标校验会拒收，重放进入受控延后绑定构建态放行，收尾统一补验。
     dstDom.beginDeferredTargets();
     std::unordered_map<ca::u32, std::pair<LabelId, LabelId>> labelMap;
     const auto labelFor = [&](LabelId srcLabel) -> Result<LabelId, LowerError> {
@@ -242,7 +242,7 @@ Result<void, LowerError> replayMethodBody(ClassSession& dstS, ClassSession& srcS
 
     std::unordered_map<ca::u32, InsnId> insnMap;   // src slot → dst 句柄
     // ldc 装载形态选择：索引 ≤ 0xFF 用 LDC，超界自动升格 LDC_W（与
-    // CodeEditor::loadConst 同一裁决——宽度陷阱在这里挡掉，不留给调用方）。
+    // CodeEditor::loadConst 同一裁决，宽度陷阱在这里挡掉，不留给调用方）。
     const auto loadConstFor = [](Insn& o, ca::u32 cpIdx) {
         o.op = cpIdx <= 0xFF ? core::Op::LDC : core::Op::LDC_W;
         o.cp = cpIdx;
@@ -261,7 +261,7 @@ Result<void, LowerError> replayMethodBody(ClassSession& dstS, ClassSession& srcS
 
         // CP 操作数三读：memberOf（invoke/字段访问族）→ classOf（类族）→
         // constOf（ldc 族）。门按携带 CP 操作数的族判定；携带族内指令三读
-        // 全 miss 才是池结构坏——显式失败，不按普通指令静默搬运（那会把
+        // 全 miss 才是池结构坏，显式失败，不按普通指令静默搬运（那会把
         // 坏池引用洗成 0 号槽）。
         if ((insnFamilyBit(in->op) & cpFamilyMask) != 0) {
             ClassSession::MemberSem ms;
@@ -358,7 +358,7 @@ Result<void, LowerError> replayMethodBody(ClassSession& dstS, ClassSession& srcS
         }
     }
 
-    // 收尾：退出受控延后绑定态，对全量存活指令补控制目标校验——统一改绑
+    // 收尾：退出受控延后绑定态，对全量存活指令补控制目标校验，统一改绑
     // 后仍悬垂的占位在此显式失败（fail-closed，不留给 lower）。
     if (dstDom.endDeferredTargets().is_err()) {
         return Err(LowerError::BadInstructions);

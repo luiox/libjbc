@@ -1,4 +1,4 @@
-// VolHierarchy.java — libjbc 语料：继承层次（resolver/merge 语料）+ 抽象类 + varargs + 字段遮蔽。
+// VolHierarchy.java: libjbc 语料：继承层次（resolver/merge 语料）+ 抽象类 + varargs + 字段遮蔽。
 package jbcx.corpus;
 
 public class VolHierarchy {
