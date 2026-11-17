@@ -560,6 +560,19 @@ private:
         if (d.is_err()) {
             return Err(failOf(CompactError::MalformedAttr, attrNameOf(slot)));
         }
+        // SourceDebugExtension（JVMS 4.7.11）闭包放行：属性体是纯字节串
+        // （调试器扩展信息），结构上不含任何 CP 引用——只标名字槽，体原
+        // 样透传（Raw 形 decode/encode 都不动载荷）。混淆器常植大型 junk
+        // 体（260705 语料 79 类实证，单体可达兆级），不放行就整类拒绝压
+        // 缩——引用普查与死成员删除全部失效。
+        if (attrNameOf(slot) == "SourceDebugExtension") {
+            ctx_ = attrNameOf(slot);
+            const Result<void, CompactFailure> rs = markCp(slot.nameCp);
+            if (rs.is_err()) {
+                return Err(rs.unwrap_err());
+            }
+            return Ok();
+        }
         ctx_ = attrNameOf(slot);
         const Result<void, CompactFailure> rn = markCp(slot.nameCp);
         if (rn.is_err()) {

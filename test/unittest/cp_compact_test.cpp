@@ -517,6 +517,57 @@ TEST(CpCompact, RawResidueRejectedWithAttrName)
     EXPECT_EQ(sess->changeSet().size(), 0u);
 }
 
+TEST(CpCompact, SourceDebugExtensionPassesThroughClosedSet)
+{
+    // SourceDebugExtension（JVMS 4.7.11）属性体是纯字节串（调试器扩展信
+    // 息），结构上不含 CP 引用：压缩闭包放行，junk 体不挡整类压缩（混淆
+    // 器常植兆级 junk 体，260705 语料 79 类实证）；体逐字节保真透传。
+    jbc::test::ClassBuilder cb;
+    const ca::u16 u1 = cb.utf8("p/T");
+    const ca::u16 u2 = cb.utf8("java/lang/Object");
+    const ca::u16 u4 = cb.utf8("<init>");
+    const ca::u16 u5 = cb.utf8("()V");
+    const ca::u16 c1 = cb.classRef(u1);
+    const ca::u16 c2 = cb.classRef(u2);
+    static_cast<void>(cb.integer(7));         // 死条目：闭包要真扫（非提前退出）
+    const ca::u16 uSDE = cb.utf8("SourceDebugExtension");
+    cb.setThis(c1).setSuper(c2);
+    cb.addMethod(0x0001, u4, u5, {});
+    const Bytes junk = {0x00, 0x01, 0x05, 0xCF, 0x00, 0x00, 0x00, 0x02, 0xFF, 0xEE};
+    cb.addClassAttr(uSDE, junk);
+    const Bytes bytes = cb.build();
+
+    auto sess = sessionOf(bytes);
+    ASSERT_NE(sess, nullptr);
+    const auto r = compactConstantPool(*sess);
+    ASSERT_TRUE(r.is_ok());
+
+    // 体逐字节保真（Raw 形透传，不建模不重排）。
+    ClassFile& cf = sess->backing();
+    AttrSlot* sde = cf.findClassAttr("SourceDebugExtension");
+    ASSERT_NE(sde, nullptr);
+    const auto d = cf.decodeAttr(*sde);
+    ASSERT_TRUE(d.is_ok());
+    ASSERT_EQ(d.unwrap()->kind(), AttrKind::Raw);
+    const auto& raw = static_cast<const RawAttr&>(*d.unwrap());
+    EXPECT_EQ(raw.bytes(), junk);
+
+    // 死条目真被扫掉（Integer(7) 无引用）：池收缩发生过。
+    const Bytes after = jbc::test::writeOk(cf);
+    auto reread = readClass(ByteView{after});
+    ASSERT_TRUE(reread.is_ok());
+    auto parsed = std::move(reread).unwrap();
+    ClassFile& cf2 = *parsed.file;
+    bool deadGone = true;
+    for (ca::u32 i = 1; i < cf2.cp.size(); ++i) {
+        if (cf2.cp.valid(i) && cf2.cp.at(i).tag == CpTag::Integer
+            && cf2.cp.at(i).ival == 7) {
+            deadGone = false;
+        }
+    }
+    EXPECT_TRUE(deadGone);
+}
+
 TEST(CpCompact, MalformedKnownRawRejectedWithAttrName)
 {
     // SourceFile 体只有 1 字节：五件是定长形状，畸形显式拒绝。
